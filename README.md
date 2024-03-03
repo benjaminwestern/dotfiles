@@ -31,6 +31,9 @@ chsh -s $(which fish)
 
 6. Install dotfiles
 ```bash
+if [ ! -d ~/.config ]; then
+    mkdir ~/.config # Create the config directory if it doesn't exist otherwise stow will absorb the directory into the dotfiles
+fi
 cd ~/dotfiles
 stow .
 ```
