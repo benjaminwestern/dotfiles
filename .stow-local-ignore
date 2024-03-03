@@ -1,0 +1,32 @@
+RCS
+.+,v
+
+CVS
+\.\#.+       # CVS conflict files / emacs lock files
+\.cvsignore
+
+\.svn
+_darcs
+\.hg
+
+DSTORE
+\.DS_Store
+
+\.git
+\.gitignore
+
+.+~          # emacs backup files
+\#.*\#       # emacs autosave files
+
+# Unstow Brew.env
+^/brew.env
+
+# Remove lock.json files from stow rollout
+\w+\.lock\.json
+
+^/README.*
+^/LICENSE.*
+^/COPYING
+
+^/scripts/*
+^/icons/*

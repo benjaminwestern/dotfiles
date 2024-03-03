@@ -1,0 +1,27 @@
+# https://github.com/dracula/alacritty/archive/master.zip
+import = [
+    "~/dotfiles/.config/alacritty/dracula.toml"
+]
+
+[font]
+size = 16
+
+[font.normal]
+family = "JetBrainsMono Nerd Font"
+
+[window]
+opacity = 0.97
+decorations = "Full"
+startup_mode = "Maximized"
+
+[window.padding]
+x = 7
+y = 0
+
+[env]
+SHELL = "/opt/homebrew/bin/fish"
+
+# open tmux in alacritty on startup
+[shell]
+program = "/opt/homebrew/bin/fish"
+args = ["--login", "-c", "/opt/homebrew/bin/tmux new-session -A -s main"]

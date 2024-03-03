@@ -1,0 +1,9 @@
+[user]
+	name = Benjamin Western
+	email = code@benjaminwestern.io
+[init]
+	defaultBranch = main
+[color]
+	ui = auto
+[push]
+	autoSetupRemote = true

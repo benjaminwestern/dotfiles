@@ -1,0 +1,71 @@
+**/.env
+
+# macos ignores 
+**/.DS_Store
+.AppleDouble
+.LSOverride
+
+# Icon must end with two \r
+Icon
+
+# Thumbnails
+._*
+
+# Files that might appear in the root of a volume
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Lock Files
+**/*-lock.json
+**/*.lock.json
+
+# Directories potentially created on remote AFP share
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# backup ignores
+**/*.bak
+**/*.gho
+**/*.ori
+**/*.orig
+**/*.tmp
+
+# archive ignores
+**/*.7z
+**/*.jar
+**/*.rar
+**/*.zip
+**/*.gz
+**/*.gzip
+**/*.tgz
+**/*.bzip
+**/*.bzip2
+**/*.bz2
+**/*.xz
+**/*.lzma
+**/*.cab
+**/*.xar
+
+# packing-only formats
+**/*.iso
+**/*.tar
+
+# package management formats
+**/*.dmg
+**/*.xpi
+**/*.gem
+**/*.egg
+**/*.deb
+**/*.rpm
+**/*.msi
+**/*.msm
+**/*.msp
+**/*.txz
