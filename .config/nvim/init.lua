@@ -2,11 +2,56 @@
 -- https://neovim.io/doc/user/lua-guide.html
 
 -- See `:help mapleader`
-vim.g.mapleader = ' '
-vim.g.maplocalleader = ' '
+vim.g.mapleader             = ' '
+vim.g.maplocalleader        = ' '
 vim.g.copilot_assume_mapped = true
+
+-- Vim Line numbers
+vim.opt.number              = true
+vim.opt.relativenumber      = true
+vim.opt.signcolumn          = "number"
+
+-- [[ Setting options ]]
+-- See `:help vim.o`
+
+-- Set highlight on search
+vim.o.hlsearch              = false
+
+-- Make line numbers default
+vim.wo.number               = true
+
+-- Enable mouse mode
+vim.o.mouse                 = 'a'
+
+-- Sync clipboard between OS and Neovim.
+-- See `:help 'clipboard'`
+vim.o.clipboard             = 'unnamedplus'
+
+-- Enable break indent
+vim.o.breakindent           = true
+
+-- Save undo history
+vim.o.undofile              = true
+
+-- Case-insensitive searching UNLESS \C or capital in search
+vim.o.ignorecase            = true
+vim.o.smartcase             = true
+
+-- Keep signcolumn on by default
+vim.wo.signcolumn           = 'yes'
+
+-- Decrease update time
+vim.o.updatetime            = 250
+vim.o.timeoutlen            = 300
+
+-- Set completeopt to have a better completion experience
+vim.o.completeopt           = 'menuone,noselect'
+
+-- Set better colors for the command line
+vim.o.termguicolors         = true
+
 -- `:help lazy.nvim.txt` for more info
-local lazypath = vim.fn.stdpath 'data' .. '/lazy/lazy.nvim'
+local lazypath              = vim.fn.stdpath 'data' .. '/lazy/lazy.nvim'
 if not vim.loop.fs_stat(lazypath) then
   vim.fn.system {
     'git',
@@ -206,51 +251,6 @@ require('lazy').setup({
 
   { import = 'plugins' },
 }, {})
-
--- [[ Setting options ]]
--- See `:help vim.o`
-
--- Set highlight on search
-vim.o.hlsearch      = false
-
--- Make line numbers default
-vim.wo.number       = true
-
--- Enable mouse mode
-vim.o.mouse         = 'a'
-
--- Sync clipboard between OS and Neovim.
--- See `:help 'clipboard'`
-vim.o.clipboard     = 'unnamedplus'
-
--- Enable break indent
-vim.o.breakindent   = true
-
--- Save undo history
-vim.o.undofile      = true
-
--- Case-insensitive searching UNLESS \C or capital in search
-vim.o.ignorecase    = true
-vim.o.smartcase     = true
-
--- Keep signcolumn on by default
-vim.wo.signcolumn   = 'yes'
-
--- Decrease update time
-vim.o.updatetime    = 250
-vim.o.timeoutlen    = 300
-
--- Set completeopt to have a better completion experience
-vim.o.completeopt   = 'menuone,noselect'
-
--- Set better colors for the command line
-vim.o.termguicolors = true
-
-
--- Vim Line numbers
-vim.opt.number = true
-vim.opt.relativenumber = true
-vim.opt.signcolumn = "number"
 
 -- [[ Basic Keymaps ]]
 
@@ -598,40 +598,3 @@ cmp.setup {
     { name = 'path' },
   },
 }
-
-local harpoon = require("harpoon")
-
-harpoon:setup({})
-
-vim.keymap.set("n", "<leader>.", function() harpoon:list():append() end)
-vim.keymap.set("n", "<leader>-", function() harpoon:list():remove() end)
-
-vim.keymap.set("n", "<C-h>", function() harpoon:list():select(1) end)
-vim.keymap.set("n", "<C-t>", function() harpoon:list():select(2) end)
-vim.keymap.set("n", "<C-n>", function() harpoon:list():select(3) end)
-vim.keymap.set("n", "<C-s>", function() harpoon:list():select(4) end)
-
--- Toggle previous & next buffers stored within Harpoon list
-vim.keymap.set("n", "<C-S-P>", function() harpoon:list():prev() end)
-vim.keymap.set("n", "<C-S-N>", function() harpoon:list():next() end)
-
--- basic telescope configuration
-local conf = require("telescope.config").values
-local function toggle_telescope(harpoon_files)
-  local file_paths = {}
-  for _, item in ipairs(harpoon_files.items) do
-    table.insert(file_paths, item.value)
-  end
-
-  require("telescope.pickers").new({}, {
-    prompt_title = "Harpoon",
-    finder = require("telescope.finders").new_table({
-      results = file_paths,
-    }),
-    previewer = conf.file_previewer({}),
-    sorter = conf.generic_sorter({}),
-  }):find()
-end
-
-vim.keymap.set("n", "<C-e>", function() toggle_telescope(harpoon:list()) end,
-  { desc = "Open harpoon window" })
