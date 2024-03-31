@@ -27,6 +27,7 @@ brew "fish"
 brew "fzf"
 brew "fisher"
 brew "jq"
+brew "yq"
 brew "zoxide" 
 brew "stow" # Required for dotfiles
 brew "mas" # Mac App Store CLI
@@ -43,26 +44,23 @@ cask "alacritty"
 cask "google-chrome"
 cask "obsidian"
 
-# Extra Casks
-if ENV['HOMEBREW_EXTRA_CASKS']
-	cask "google-drive" 
-	cask "docker"
-	cask "dbngin"
-	cask "tableplus"
-	cask "google-cloud-sdk"
-	cask "rode-central"
-	cask "rode-connect"
-	cask "logi-options-plus"
-end
+# Extra Apps
+cask "google-drive" 
+cask "docker"
+cask "dbngin"
+cask "tableplus"
+cask "google-cloud-sdk"
+cask "rode-central"
+cask "rode-connect"
+cask "logi-options-plus"
 
-# MAS Apps
-if ENV['HOMEBREW_MAS_APPS']
-	mas "Maccy", id: 1527619437
-	mas "Magnet", id: 441258766
-	mas "Wireguard", id: 1451685025
-	mas "Microsoft Remote Desktop", id: 1295203466
-	mas "DaisyDisk", id: 411643860
-	mas "Cyberduck", id: 409222199
-	mas "Final Cut Pro", id: 424389933
-	mas "TripMode", id: 1513400665
-end
+# AppStore Apps
+mas "Maccy", id: 1527619437
+mas "Magnet", id: 441258766
+mas "Wireguard", id: 1451685025
+mas "Microsoft Remote Desktop", id: 1295203466
+mas "DaisyDisk", id: 411643860
+mas "Cyberduck", id: 409222199
+mas "Final Cut Pro", id: 424389933
+mas "TripMode", id: 1513400665
+mas "Exporter", id: 1099120373
