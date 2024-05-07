@@ -2,7 +2,7 @@ if status is-interactive
     # Commands to run in interactive sessions can go here
 end
 
-export DOCKER_HOST=ssh://mac-mini
+# export DOCKER_HOST=ssh://mac-mini
 
 # Load zoxide
 zoxide init --cmd cd fish | source
