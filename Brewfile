@@ -22,7 +22,7 @@ brew "neofetch"
 brew "neovim"
 brew "pngpaste" # Required for neovim clipboard
 brew "ripgrep" # Required for fzf
-brew "tmux"
+brew "tmux" # zellij
 brew "fish"
 brew "fzf"
 brew "fisher"
@@ -32,6 +32,7 @@ brew "zoxide"
 brew "stow" # Required for dotfiles
 brew "mas" # Mac App Store CLI
 brew "deno" # Required for peek.nvim 
+brew "docker-compose"
 
 # Programming Languages
 brew "go"
