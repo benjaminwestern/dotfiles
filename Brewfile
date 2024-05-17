@@ -29,6 +29,7 @@ brew "fisher"
 brew "jq"
 brew "yq"
 brew "zoxide" 
+brew "luarocks" # Required for rest.nvim
 brew "stow" # Required for dotfiles
 brew "mas" # Mac App Store CLI
 brew "deno" # Required for peek.nvim 
@@ -43,7 +44,6 @@ brew "python"
 cask "font-jetbrains-mono-nerd-font"
 cask "alacritty"
 cask "google-chrome"
-cask "obsidian"
 
 # Extra Apps
 cask "google-drive" 
