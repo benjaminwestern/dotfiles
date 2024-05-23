@@ -16,6 +16,7 @@ brew "gitleaks"
 brew "htop"
 brew "curl"
 brew "tree"
+brew "tokei" # Information about your git repo
 brew "lazydocker"
 brew "lazygit"
 brew "neofetch"
@@ -30,6 +31,7 @@ brew "jq"
 brew "yq"
 brew "zoxide" 
 brew "luarocks" # Required for rest.nvim
+brew "fd" # Required for telescope select_env
 brew "stow" # Required for dotfiles
 brew "mas" # Mac App Store CLI
 brew "deno" # Required for peek.nvim 
