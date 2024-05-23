@@ -43,6 +43,9 @@ stow .
 softwareupdate --install-rosetta
 ```
 
+## Things to be added in future
+- [dadbod.nvim](https://github.com/tpope/vim-dadbod) - Databaes interaction tool in Neovim. 
+
 ## Installed Application
 ### Applications (Not available on the App Store or Homebrew)
 - [Duet Display](https://www.duetdisplay.com/) - Connect iPad as a second display
