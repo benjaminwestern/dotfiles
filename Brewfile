@@ -33,7 +33,6 @@ brew "zoxide"
 brew "luarocks" # Required for rest.nvim
 brew "fd" # Required for telescope select_env
 brew "stow" # Required for dotfiles
-brew "mas" # Mac App Store CLI
 brew "deno" # Required for peek.nvim 
 brew "docker-compose"
 
@@ -47,23 +46,45 @@ cask "font-jetbrains-mono-nerd-font"
 cask "alacritty"
 cask "google-chrome"
 
-# Extra Apps
+# Standard Apps
 cask "google-drive" 
-cask "docker"
-cask "dbngin"
-cask "tableplus"
 cask "google-cloud-sdk"
-cask "rode-central"
-cask "rode-connect"
-cask "logi-options-plus"
+cask "docker"
 
-# AppStore Apps
-mas "Maccy", id: 1527619437
-mas "Magnet", id: 441258766
-mas "Wireguard", id: 1451685025
-mas "Microsoft Remote Desktop", id: 1295203466
-mas "DaisyDisk", id: 411643860
-mas "Cyberduck", id: 409222199
-mas "Final Cut Pro", id: 424389933
-mas "TripMode", id: 1513400665
-mas "Exporter", id: 1099120373
+# Other Apps
+brew "youtube-dl"
+cask "ngrok"
+brew "ffmpeg"
+brew "cmake"
+brew "telnet"
+brew "sqlc"
+
+if ENV['HOMEBREW_HOME_APPS'] == "true"
+  # Home Apps
+  cask "dbngin"
+  cask "tableplus"
+  cask "rode-central"
+  cask "rode-connect"
+  cask "logi-options-plus"
+
+  # Mac App Store CLI
+  brew "mas" 
+
+  # Mac App Store Apps
+  mas "Maccy", id: 1527619437
+  mas "Magnet", id: 441258766
+  mas "Wireguard", id: 1451685025
+  mas "Microsoft Remote Desktop", id: 1295203466
+  mas "DaisyDisk", id: 411643860
+  mas "Cyberduck", id: 409222199
+  mas "Final Cut Pro", id: 424389933
+  mas "TripMode", id: 1513400665
+  mas "Exporter", id: 1099120373
+end
+
+if ENV['HOMEBREW_WORK_APPS'] == "true"
+  # Work Apps
+  cask "maccy"
+  cask "rectangle"
+  cask "slack"
+end
