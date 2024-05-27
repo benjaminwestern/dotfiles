@@ -61,6 +61,7 @@ brew "sqlc"
 
 if ENV['HOMEBREW_HOME_APPS'] == "true"
   # Home Apps
+  cask "discord"
   cask "dbngin"
   cask "tableplus"
   cask "rode-central"
