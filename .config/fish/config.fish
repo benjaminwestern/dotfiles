@@ -13,6 +13,8 @@ export EDITOR='nvim'
 # OS Aliases
 alias cls="clear"
 alias buu="brew update && brew upgrade && brew cleanup && brew autoremove"
+alias bb="cd ~ && brew bundle"
+alias bbh="cd ~ && export HOMEBREW_HOME_APPS=true && brew bundle"
 alias vim="nvim"
 alias vi="nvim"
 alias v="nvim"
@@ -39,3 +41,4 @@ alias unsetgsai="gcloud config unset auth/impersonate_service_account"
 
 source ~/.config/fish/functions/env_loader.fish
 source ~/.config/fish/functions/new_markdown.fish
+source ~/.config/fish/functions/replace_icon.fish
