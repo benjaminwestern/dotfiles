@@ -21,28 +21,32 @@ git clone
 4. Install Brew bundle
 ```bash
 cd ~/dotfiles
-export HOMEBREW_ACCEPT_EULA=Y && export HOMEBREW_HOME_APPS=true && /opt/homebrew/bin/brew bundle
-```
+# Add export HOMEBREW_HOME_APPS=true or export HOMEBREW_WORK_APPS=true to install those specified
+export HOMEBREW_ACCEPT_EULA=Y  && /opt/homebrew/bin/brew bundle ```
 
 5. Set up fish as the default shell
 ```bash
-sudo sh -c 'echo $(which fish) >> /etc/shells'
-chsh -s $(which fish)
+sudo sh -c 'echo /opt/homebrew/bin/fish >> /etc/shells'
+chsh -s /opt/homebrew/bin/fish
 ```
 
 6. Install dotfiles
-Step might not be required as installed google-cloud-sdk sets up the .config directory.
 ```bash
 if [ ! -d ~/.config ]; then
     mkdir ~/.config # Create the config directory if it doesn't exist otherwise stow will absorb the directory into the dotfiles
 fi
+
+if [ ! -d ~/.ssh ]; then
+    mkdir ~/.ssh # Create the config directory if it doesn't exist otherwise stow will absorb the directory into the dotfiles
+fi
+
 cd ~/dotfiles
 stow .
 ```
 
 7. Install rosetta for M1 Macs
 ```bash
-# Type A to agree
+# Need to type 'a' to install
 softwareupdate --install-rosetta
 ```
 
