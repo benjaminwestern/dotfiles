@@ -48,7 +48,6 @@ cask "alacritty"
 cask "google-chrome"
 
 # Standard Apps
-cask "google-drive" 
 cask "google-cloud-sdk"
 cask "docker"
 
@@ -62,6 +61,7 @@ brew "sqlc"
 
 if ENV['HOMEBREW_HOME_APPS'] == "true"
   # Home Apps
+  cask "google-drive" 
   cask "discord"
   cask "dbngin"
   cask "tableplus"
