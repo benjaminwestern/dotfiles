@@ -5,7 +5,6 @@ tap "homebrew/bundle"
 tap "homebrew/services"
 tap "warrensbox/tap"
 tap "microsoft/mssql-release" 
-tap "https://github.com/Microsoft/homebrew-mssql-release" # Might need this?
 
 # Tools
 brew "warrensbox/tap/tfswitch"
