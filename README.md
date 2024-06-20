@@ -31,6 +31,7 @@ chsh -s $(which fish)
 ```
 
 6. Install dotfiles
+Step might not be required as installed google-cloud-sdk sets up the .config directory.
 ```bash
 if [ ! -d ~/.config ]; then
     mkdir ~/.config # Create the config directory if it doesn't exist otherwise stow will absorb the directory into the dotfiles
@@ -41,6 +42,7 @@ stow .
 
 7. Install rosetta for M1 Macs
 ```bash
+# Type A to agree
 softwareupdate --install-rosetta
 ```
 
