@@ -20,7 +20,8 @@ git clone
 
 4. Install Brew bundle
 ```bash
-export HOMEBREW_ACCEPT_EULA=Y && export HOMEBREW_HOME_APPS=true && brew bundle
+cd ~/dotfiles
+export HOMEBREW_ACCEPT_EULA=Y && export HOMEBREW_HOME_APPS=true && /opt/homebrew/bin/brew bundle
 ```
 
 5. Set up fish as the default shell

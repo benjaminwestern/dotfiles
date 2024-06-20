@@ -1,10 +1,11 @@
 # Taps
 tap "hashicorp/tap"
 tap "homebrew/bundle"
-tap "homebrew/cask-fonts"
+# tap "homebrew/cask-fonts" DEPRICATED
 tap "homebrew/services"
 tap "warrensbox/tap"
 tap "microsoft/mssql-release" 
+tap "https://github.com/Microsoft/homebrew-mssql-release" # Might need this?
 
 # Tools
 brew "warrensbox/tap/tfswitch"
