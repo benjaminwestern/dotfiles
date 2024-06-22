@@ -28,6 +28,7 @@ alias egg="git add . && git commit --allow-empty -m ':sparkles: :rocket:' && git
 alias taa="terraform apply --auto-approve"
 alias tp="terraform fmt -recursive && terraform init && terraform plan"
 alias taap="terraform apply --target"
+alias tf="terraform"
 
 # Google Aliases
 alias gadc="gcloud auth application-default login"
