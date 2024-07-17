@@ -22,7 +22,8 @@ git clone
 ```bash
 cd ~/dotfiles
 # Add export HOMEBREW_HOME_APPS=true or export HOMEBREW_WORK_APPS=true to install those specified
-export HOMEBREW_ACCEPT_EULA=Y  && /opt/homebrew/bin/brew bundle ```
+export HOMEBREW_ACCEPT_EULA=Y  && /opt/homebrew/bin/brew bundle 
+```
 
 5. Set up fish as the default shell
 ```bash

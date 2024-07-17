@@ -1,0 +1,31 @@
+# Documentation
+# ghostty +show-config --default --docs | nvim
+
+# Theme
+# ghostty +list-themes
+theme = dracula
+
+# Fonts
+# ghostty +list-fonts
+font-family = "JetBrainsMono Nerd Font Mono"
+window-title-font-family = "JetBrainsMono Nerd Font Mono"
+font-size = 16
+
+# MacOS Settings
+macos-titlebar-style = tabs
+macos-titlebar-proxy-icon = hidden
+macos-option-as-alt = true
+
+# Window Settings
+background-opacity = 0.80
+background-blur-radius = 40
+
+# Keymaps
+keybind = global:cmd+grave_accent=toggle_quick_terminal
+keybind = shift+cmd+left=previous_tab
+keybind = shift+cmd+right=next_tab
+keybind = shift+cmd+,=move_tab:-1
+keybind = shift+cmd+.=move_tab:+1
+
+# Terminal Settings
+copy-on-select = true
