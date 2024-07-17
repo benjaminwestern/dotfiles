@@ -1,4 +1,4 @@
-# Taps
+#Taps
 tap "hashicorp/tap"
 tap "homebrew/bundle"
 # tap "homebrew/cask-fonts" DEPRICATED
@@ -45,6 +45,7 @@ brew "python"
 cask "font-jetbrains-mono-nerd-font"
 cask "alacritty"
 cask "google-chrome"
+cask "anaconda"
 
 # Standard Apps
 cask "google-cloud-sdk"
