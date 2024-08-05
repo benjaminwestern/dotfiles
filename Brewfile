@@ -1,7 +1,6 @@
 #Taps
 tap "hashicorp/tap"
 tap "homebrew/bundle"
-# tap "homebrew/cask-fonts" DEPRICATED
 tap "homebrew/services"
 tap "warrensbox/tap"
 tap "microsoft/mssql-release" 
@@ -12,6 +11,7 @@ brew "mssql-tools18"
 brew "msodbcsql18"
 brew "gh"
 brew "git"
+brew "gcc" # GNU compiler collection
 brew "gitleaks"
 brew "htop"
 brew "curl"
