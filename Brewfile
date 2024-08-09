@@ -35,6 +35,7 @@ brew "fd" # Required for telescope select_env
 brew "stow" # Required for dotfiles
 brew "deno" # Required for peek.nvim 
 brew "docker-compose"
+brew "tfverch/tfvc/tfvc" # Terraform Version checker for Modules, providers and resources
 
 # Programming Languages
 brew "go"
