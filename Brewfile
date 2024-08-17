@@ -3,6 +3,7 @@ tap "hashicorp/tap"
 tap "homebrew/bundle"
 tap "homebrew/services"
 tap "warrensbox/tap"
+tap "tfverch/tfvc"
 tap "microsoft/mssql-release" 
 
 # Tools
