@@ -46,12 +46,13 @@ brew "python"
 # Core Casks
 cask "font-jetbrains-mono-nerd-font"
 cask "alacritty"
-cask "google-chrome"
 cask "anaconda"
 
 # Standard Apps
 cask "google-cloud-sdk"
 cask "docker"
+cask "postman"
+cask "dbngin"
 
 # Other Apps
 brew "youtube-dl"
@@ -63,32 +64,27 @@ brew "sqlc"
 
 if ENV['HOMEBREW_HOME_APPS'] == "true"
   # Home Apps
-  cask "google-drive" 
-  cask "discord"
-  cask "dbngin"
   cask "tableplus"
+  cask "discord"
+  cask "obsidian"
   cask "rode-central"
   cask "rode-connect"
   cask "logi-options-plus"
+  cask "visual-studio-code"
 
   # Mac App Store CLI
   brew "mas" 
 
   # Mac App Store Apps
   mas "Maccy", id: 1527619437
-  mas "Magnet", id: 441258766
-  mas "Wireguard", id: 1451685025
-  mas "Microsoft Remote Desktop", id: 1295203466
   mas "DaisyDisk", id: 411643860
   mas "Cyberduck", id: 409222199
   mas "Final Cut Pro", id: 424389933
-  mas "TripMode", id: 1513400665
-  mas "Exporter", id: 1099120373
 end
 
 if ENV['HOMEBREW_WORK_APPS'] == "true"
   # Work Apps
   cask "maccy"
-  cask "rectangle"
+  cask "cyberduck"
   cask "slack"
 end
