@@ -7,7 +7,6 @@ tap "tfverch/tfvc"
 tap "microsoft/mssql-release" 
 
 # Tools
-brew "warrensbox/tap/tfswitch"
 brew "mssql-tools18"
 brew "msodbcsql18"
 brew "gh"
@@ -34,14 +33,20 @@ brew "zoxide"
 brew "luarocks" # Required for rest.nvim
 brew "fd" # Required for telescope select_env
 brew "stow" # Required for dotfiles
-brew "deno" # Required for peek.nvim 
 brew "docker-compose"
 brew "tfverch/tfvc/tfvc" # Terraform Version checker for Modules, providers and resources
+brew "terragrunt"
 
 # Programming Languages
 brew "go"
 brew "node"
+brew "deno" # Required for peek.nvim 
 brew "python"
+
+# Version Management
+brew "pyenv"
+brew "nvm"
+brew "warrensbox/tap/tfswitch"
 
 # Core Casks
 cask "font-jetbrains-mono-nerd-font"
@@ -52,11 +57,11 @@ cask "anaconda"
 cask "google-cloud-sdk"
 cask "docker"
 cask "postman"
+cask "obsidian"
 cask "dbngin"
 
 # Other Apps
 brew "youtube-dl"
-cask "ngrok"
 brew "ffmpeg"
 brew "cmake"
 brew "telnet"
@@ -66,7 +71,6 @@ if ENV['HOMEBREW_HOME_APPS'] == "true"
   # Home Apps
   cask "tableplus"
   cask "discord"
-  cask "obsidian"
   cask "rode-central"
   cask "rode-connect"
   cask "logi-options-plus"
@@ -78,13 +82,11 @@ if ENV['HOMEBREW_HOME_APPS'] == "true"
   # Mac App Store Apps
   mas "Maccy", id: 1527619437
   mas "DaisyDisk", id: 411643860
-  mas "Cyberduck", id: 409222199
   mas "Final Cut Pro", id: 424389933
 end
 
 if ENV['HOMEBREW_WORK_APPS'] == "true"
   # Work Apps
   cask "maccy"
-  cask "cyberduck"
   cask "slack"
 end
