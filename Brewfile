@@ -75,6 +75,7 @@ if ENV['HOMEBREW_HOME_APPS'] == "true"
   cask "rode-connect"
   cask "logi-options-plus"
   cask "visual-studio-code"
+  cask "whatsapp"
 
   # Mac App Store CLI
   brew "mas" 
