@@ -4,6 +4,15 @@ end
 
 # export DOCKER_HOST=ssh://mac-mini
 
+# Paths
+set -gx PATH $PATH /opt/homebrew/anaconda3/bin
+set -gx PATH $PATH /opt/homebrew/bin
+set -gx PATH $PATH /Users/benjaminwestern/.deno/bin
+set -gx PATH $PATH /Users/benjaminwestern/Go/bin
+set -gx PATH $PATH /opt/homebrew/opt/go/libexec/bin
+set -gx PATH $PATH /Users/benjaminwestern/bin
+set -gx PATH $PATH /Users/benjaminwestern/.cache/lm-studio/bin
+
 # Load zoxide
 zoxide init --cmd cd fish | source
 
@@ -51,15 +60,6 @@ alias unsetgsai="gcloud config unset auth/impersonate_service_account"
 source ~/.config/fish/functions/env_loader.fish
 source ~/.config/fish/functions/new_markdown.fish
 source ~/.config/fish/functions/replace_icon.fish
-
-# Paths
-set -gx PATH $PATH /opt/homebrew/anaconda3/bin
-set -gx PATH $PATH /opt/homebrew/bin
-set -gx PATH $PATH /Users/benjaminwestern/.deno/bin
-set -gx PATH $PATH /Users/benjaminwestern/Go/bin
-set -gx PATH $PATH /opt/homebrew/opt/go/libexec/bin
-set -gx PATH $PATH /Users/benjaminwestern/bin
-set -gx PATH $PATH /Users/benjaminwestern/.cache/lm-studio/bin
 
 # >>> conda initialize >>>
 # !! Contents within this block are managed by 'conda init' !!
