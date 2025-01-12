@@ -22,7 +22,6 @@ brew "tokei" # Information about your git repo
 brew "zoxide" # Smarter Change Directory (cd)
 brew "gh" # Github CLI
 brew "git" # Git CLI
-brew "gcc" # GNU compiler collection
 
 # TUI Tools
 brew "lazygit"
