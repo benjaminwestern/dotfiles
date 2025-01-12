@@ -1,4 +1,4 @@
-#Taps
+# Taps
 tap "hashicorp/tap"
 tap "homebrew/bundle"
 tap "homebrew/services"
@@ -25,7 +25,6 @@ brew "git" # Git CLI
 brew "gcc" # GNU compiler collection
 
 # TUI Tools
-brew "lazydocker"
 brew "lazygit"
 brew "htop"
 brew "neovim"
@@ -38,8 +37,8 @@ brew "fd" # Required for telescope select_env
 brew "pngpaste" # Required for neovim clipboard
 
 # Fish terminal
-brew "fish"
-brew "fisher"
+brew "fish" # Fish Shell
+brew "fisher" # Plugin manager for the Fish shell
 
 # Programming Languages
 brew "go"
