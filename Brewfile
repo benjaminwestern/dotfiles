@@ -5,6 +5,7 @@ tap "homebrew/services"
 tap "warrensbox/tap"
 tap "tfverch/tfvc"
 tap "microsoft/mssql-release" 
+tap "julien-cpsn/atac"
 
 # Database Drivers
 brew "mssql-tools18"
@@ -25,6 +26,7 @@ brew "git" # Git CLI
 
 # TUI Tools
 brew "lazygit"
+brew "atac" # Postman like TUI
 brew "htop"
 brew "neovim"
 
@@ -62,6 +64,7 @@ cask "dbngin"
 cask "maccy"
 cask "slack"
 cask "microsoft-teams"
+cask "background-music"
 
 if ENV['HOMEBREW_HOME_APPS'] == "true"
   brew "mas" # Mac store manager
