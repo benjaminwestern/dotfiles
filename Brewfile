@@ -64,7 +64,6 @@ cask "dbngin"
 cask "maccy"
 cask "slack"
 cask "microsoft-teams"
-cask "background-music"
 
 if ENV['HOMEBREW_HOME_APPS'] == "true"
   brew "mas" # Mac store manager
