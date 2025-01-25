@@ -481,12 +481,25 @@ require('mason-lspconfig').setup()
 
 -- Enable the following language s' to the map in question.
 local servers = {
+  -- Terraform
   terraformls = {},
+
+  -- SQL
+  sqls = {},
+
+  -- Go
   gopls = {},
+
+  -- Python
   pyright = {},
+
+  -- JavaScript/TypeScript
   ts_ls = {},
+
+  -- HTML
   html = { filetypes = { 'html', 'twig', 'hbs' } },
 
+  -- Lua
   lua_ls = {
     Lua = {
       workspace = { checkThirdParty = false },
