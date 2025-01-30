@@ -5,6 +5,7 @@ end
 # export DOCKER_HOST=ssh://mac-mini
 
 # Paths
+set -gx PATH $PATH /usr/local/bin
 set -gx PATH $PATH /opt/homebrew/anaconda3/bin
 set -gx PATH $PATH /opt/homebrew/bin
 set -gx PATH $PATH /Users/benjaminwestern/.deno/bin
