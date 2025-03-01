@@ -29,6 +29,7 @@ brew "lazygit"
 brew "atac" # Postman like TUI
 brew "htop"
 brew "neovim"
+brew "macchina" # System Information like neofetch
 
 # Neovim Setup
 brew "ripgrep" # Required for fzf
@@ -60,7 +61,6 @@ cask "google-chrome"
 cask "visual-studio-code"
 cask "docker"
 cask "obsidian"
-cask "dbngin"
 cask "maccy"
 cask "slack"
 cask "microsoft-teams"
@@ -71,6 +71,7 @@ if ENV['HOMEBREW_HOME_APPS'] == "true"
   # Home Apps
   cask "tableplus"
   cask "discord"
+  cask "dbngin"
 
   # Mac App Store Apps
   mas "Maccy", id: 1527619437

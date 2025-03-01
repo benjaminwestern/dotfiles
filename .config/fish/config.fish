@@ -5,6 +5,7 @@ end
 # export DOCKER_HOST=ssh://mac-mini
 
 # Paths
+set -gx PATH $PATH /usr/local/bin
 set -gx PATH $PATH /opt/homebrew/anaconda3/bin
 set -gx PATH $PATH /opt/homebrew/bin
 set -gx PATH $PATH /Users/benjaminwestern/.deno/bin
@@ -39,6 +40,7 @@ alias taa="terraform apply --auto-approve"
 alias tp="terraform fmt -recursive && terraform init && terraform plan"
 alias taap="terraform apply --target"
 alias tf="terraform"
+alias tfc="terraform console"
 
 # Dataform Aliases
 alias dfc="dataform compile"
@@ -51,8 +53,8 @@ alias dfi="dataform install"
 alias gadc="gcloud auth application-default login"
 alias gauth="gcloud auth login"
 alias gsqp="gcloud auth application-default set-quota-project "
-alias gssa="gcloud auth activate-service-account"
 alias gsgp="gcloud config set project "
+alias gssa="gcloud auth activate-service-account"
 alias unsetgsgp="gcloud config unset project"
 alias gsai="gcloud config set auth/impersonate_service_account " 
 alias unsetgsai="gcloud config unset auth/impersonate_service_account"
@@ -60,6 +62,7 @@ alias unsetgsai="gcloud config unset auth/impersonate_service_account"
 source ~/.config/fish/functions/env_loader.fish
 source ~/.config/fish/functions/new_markdown.fish
 source ~/.config/fish/functions/replace_icon.fish
+source ~/.config/fish/functions/gcloud.fish
 
 # >>> conda initialize >>>
 # !! Contents within this block are managed by 'conda init' !!

@@ -69,3 +69,6 @@ Temporary Items
 **/*.msm
 **/*.msp
 **/*.txz
+
+# ATAC API Information
+.config/nvim/atac
