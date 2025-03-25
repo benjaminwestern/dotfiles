@@ -5,6 +5,7 @@ end
 # export DOCKER_HOST=ssh://mac-mini
 
 # Paths
+set -gx PATH /opt/homebrew/opt/ruby/bin $PATH
 set -gx PATH $PATH /usr/local/bin
 set -gx PATH $PATH /opt/homebrew/anaconda3/bin
 set -gx PATH $PATH /opt/homebrew/bin
@@ -29,7 +30,8 @@ alias vim="nvim"
 alias vi="nvim"
 alias v="nvim"
 alias python=python3
-alias code="open -a Visual\ Studio\ Code.app"
+alias vc="open $1 -a \"Visual Studio Code\""
+alias cu="open $1 -a \"Cursor\""
 
 # Git Aliases
 alias banish_ds_store="find . -name .DS_Store -print0 | xargs -0 git rm -f --ignore-unmatch && echo .DS_Store >> .gitignore && git add .gitignore && git commit -m ':fire: .DS_Store banished!' && git push"
@@ -38,7 +40,8 @@ alias egg="git add . && git commit --allow-empty -m ':sparkles: :rocket:' && git
 # Terraform Aliases
 alias taa="terraform apply --auto-approve"
 alias tp="terraform fmt -recursive && terraform init && terraform plan"
-alias taap="terraform apply --target"
+alias tpt="terraform plan --target"
+alias taat="terraform apply --target"
 alias tf="terraform"
 alias tfc="terraform console"
 
@@ -76,3 +79,5 @@ else
     end
 end
 # <<< conda initialize <<<
+
+macchina

@@ -48,6 +48,7 @@ brew "node"
 brew "deno" # Required for peek.nvim 
 brew "python"
 brew "terraform", link: false
+cask "flutter"
 
 # Version Management
 brew "nvm"
@@ -60,8 +61,8 @@ cask "google-cloud-sdk"
 cask "google-chrome"
 cask "visual-studio-code"
 cask "docker"
-cask "obsidian"
 cask "maccy"
+cask "rectangle"
 cask "slack"
 cask "microsoft-teams"
 
