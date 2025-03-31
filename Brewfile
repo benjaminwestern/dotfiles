@@ -42,6 +42,10 @@ brew "pngpaste" # Required for neovim clipboard
 brew "fish" # Fish Shell
 brew "fisher" # Plugin manager for the Fish shell
 
+# Documentation Management
+brew "vale" # Linting for Markdown
+brew "pandoc" # Document Converter
+
 # Programming Languages
 brew "go"
 brew "node"
