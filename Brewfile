@@ -45,6 +45,7 @@ brew "fisher" # Plugin manager for the Fish shell
 # Documentation Management
 brew "vale" # Linting for Markdown
 brew "pandoc" # Document Converter
+brew "basictex" # Required for pandoc to export PDF
 
 # Programming Languages
 brew "go"
