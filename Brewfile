@@ -4,8 +4,7 @@ tap "homebrew/bundle"
 tap "homebrew/services"
 tap "warrensbox/tap"
 tap "tfverch/tfvc"
-tap "microsoft/mssql-release" 
-tap "julien-cpsn/atac"
+tap "microsoft/mssql-release"
 
 # Database Drivers
 brew "mssql-tools18"
@@ -26,7 +25,6 @@ brew "git" # Git CLI
 
 # TUI Tools
 brew "lazygit"
-brew "atac" # Postman like TUI
 brew "htop"
 brew "neovim"
 brew "macchina" # System Information like neofetch
@@ -53,7 +51,6 @@ brew "node"
 brew "deno" # Required for peek.nvim 
 brew "python"
 brew "terraform", link: false
-cask "flutter"
 
 # Version Management
 brew "nvm"
@@ -68,16 +65,20 @@ cask "visual-studio-code"
 cask "docker"
 cask "maccy"
 cask "rectangle"
-cask "slack"
-cask "microsoft-teams"
+cask "dbngin"
+cask "bruno"
+
+if ENV['HOMEBREW_WORK_APPS'] == "true"
+  # Work Apps
+  cask "slack"
+  cask "microsoft-teams"
+end
 
 if ENV['HOMEBREW_HOME_APPS'] == "true"
-  brew "mas" # Mac store manager
-
   # Home Apps
   cask "tableplus"
   cask "discord"
-  cask "dbngin"
+  brew "mas" # Mac store manager
 
   # Mac App Store Apps
   mas "Maccy", id: 1527619437
