@@ -20,6 +20,7 @@ brew "zoxide" # Smarter Change Directory (cd)
 brew "gh" # Github CLI
 brew "git" # Git CLI
 brew "pipx" # Python non-requirements.txt python packages
+brew "tmux"
 
 # TUI Tools
 brew "lazygit"

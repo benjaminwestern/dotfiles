@@ -1,9 +1,14 @@
 [settings]
-experimental=true
-trusted_config_paths = ["~/.config/mise/config.toml", "~/dotfiles/.config/mise/config.toml"]
+experimental = true
+trusted_config_paths = [
+    "~/.config/mise/config.toml",
+    "~/dotfiles/.config/mise/config.toml",
+]
+
+[env]
+# DOCKER_HOST = "ssh://mac-mini"
 
 [tools]
-
 go = "latest"
 node = "latest"
 deno = "latest"
@@ -14,15 +19,26 @@ dart = "latest"
 lua = "latest"
 terraform = "latest"
 
-"go:github.com/air-verse/air" = {version = "latest"}
-"go:github.com/GoogleCloudPlatform/cloud-sql-proxy/v2" = {version = "latest"}
-"go:github.com/swaggo/swag/cmd/swag" = {version = "latest"}
+"go:github.com/air-verse/air" = { version = "latest" } 
+"go:github.com/GoogleCloudPlatform/cloud-sql-proxy/v2" = { version = "latest" } 
+"go:github.com/swaggo/swag/cmd/swag" = { version = "latest" }
 
-"npm:@dataform/cli" = "latest"
+"npm:@dataform/cli" = "latest" 
 # "npm:renovate" = "latest"
 
-"pipx:sqlfluff/sqlfluff" = "latest"
+"pipx:sqlfluff/sqlfluff" = "latest" # used for Dataform Extension to lint SQLX files
 
+# Homebrew Tasks
+[tasks.bundle-update]
+description = "Runs Update, Upgrade, Cleanup and Autoremove for Brew"
+run = """
+brew update
+brew upgrade
+brew cleanup
+brew autoremove
+"""
+
+# Google Cloud Tasks
 [tasks.set-gcp-project]
 description = "Sets the active Google Cloud project and ADC quota project."
 usage = '''
@@ -30,6 +46,7 @@ arg "<project_id>" "The Google Cloud Project ID to set."
 '''
 run = "$HOME/.config/mise/scripts/set_gcp_project.sh {{arg(name='project_id')}}"
 
+# Git Tasks
 [tasks.pull-all-repos]
 description = "Uses Git to pull all changes for repositories listed in the $HOME/code directory"
 run = "$HOME/.config/mise/scripts/pull_github_status.sh"
@@ -37,3 +54,58 @@ run = "$HOME/.config/mise/scripts/pull_github_status.sh"
 [tasks.check-all-repos]
 description = "Uses Git to perform a status check for repositories listed in the $HOME/code directory"
 run = "$HOME/.config/mise/scripts/check_github_status.sh"
+
+[tasks.banish-ds-store]
+description = "Kills DS_Store from current directory and adds it to .gitignore"
+run = """
+find . -name .DS_Store -print0 | xargs -0 git rm -f --ignore-unmatch
+echo .DS_Store >> .gitignore
+git add .gitignore
+git commit -m ':fire: .DS_Store banished!'
+git push
+"""
+
+[tasks.empty-commit]
+description = "Pushes and empty commit for CI/CD testing"
+run = """
+git add -A
+git commit --allow-empty -m ':sparkles: :rocket:'
+git push
+"""
+
+# Terraform Tasks
+[tasks.terraform-init]
+description = "Runs Terraform fmt, init and validation"
+run = """
+terraform fmt -recursive
+terraform init
+terraform validate
+"""
+
+[tasks.terraform-auto-apply]
+depends = ["terraform-init"]
+description = "Runs Terraform Apply without approvals (plus pre-cursor checks)"
+run = """
+terraform apply --auto-approve
+"""
+
+[tasks.terraform-apply]
+depends = ["terraform-init"]
+description = "Runs Terraform Apply (plus pre-cursor checks)"
+run = """
+terraform apply
+"""
+
+[tasks.terraform-plan]
+depends = ["terraform-init"]
+description = "Runs Terraform plan (plus pre-cursor checks)"
+run = """
+terraform plan
+"""
+
+[tasks.terraform-console]
+depends = ["terraform-init"]
+description = "Runs Terraform console (plus pre-cursor checks)"
+run = """
+terraform console
+"""

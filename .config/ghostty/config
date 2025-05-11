@@ -12,6 +12,7 @@ window-title-font-family = "JetBrainsMono Nerd Font Mono"
 font-size = 16
 
 # MacOS Settings
+confirm-close-surface = false
 macos-titlebar-style = tabs
 macos-titlebar-proxy-icon = hidden
 macos-option-as-alt = true
@@ -22,10 +23,10 @@ background-blur-radius = 40
 
 # Keymaps
 keybind = global:cmd+grave_accent=toggle_quick_terminal
-keybind = shift+cmd+left=previous_tab
-keybind = shift+cmd+right=next_tab
-keybind = shift+cmd+,=move_tab:-1
-keybind = shift+cmd+.=move_tab:+1
+# keybind = shift+cmd+left=previous_tab
+# keybind = shift+cmd+right=next_tab
+# keybind = shift+cmd+,=move_tab:-1
+# keybind = shift+cmd+.=move_tab:+1
 
 # Terminal Settings
 copy-on-select = true
