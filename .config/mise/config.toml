@@ -1,0 +1,23 @@
+[settings]
+experimental=true
+trusted_config_paths = ["~/.config/mise/config.toml", "~/dotfiles/.config/mise/config.toml"]
+
+[tools]
+
+go = "latest"
+node = "latest"
+deno = "latest"
+bun = "latest"
+python = "latest"
+# ruby = "latest"
+dart = "latest"
+lua = "latest"
+terraform = "latest"
+
+"go:github.com/air-verse/air" = {version = "latest"}
+"go:github.com/GoogleCloudPlatform/cloud-sql-proxy/v2" = {version = "latest"}
+"go:github.com/swaggo/swag/cmd/swag" = {version = "latest"}
+
+"npm:@dataform/cli" = "latest"
+
+"pipx:sqlfluff/sqlfluff" = "latest"

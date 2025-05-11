@@ -2,8 +2,6 @@
 tap "hashicorp/tap"
 tap "homebrew/bundle"
 tap "homebrew/services"
-tap "warrensbox/tap"
-tap "tfverch/tfvc"
 tap "microsoft/mssql-release"
 
 # Database Drivers
@@ -17,15 +15,14 @@ brew "yq" # CLI YAML Processor
 brew "tree" # Print folder layout
 brew "curl" # Make HTTP requests from terminal
 brew "gitleaks" # Scan Git Commits for Secrets
-brew "tfverch/tfvc/tfvc" # Terraform Version checker for Modules, providers and resources
 brew "tokei" # Information about your git repo
 brew "zoxide" # Smarter Change Directory (cd)
 brew "gh" # Github CLI
 brew "git" # Git CLI
+brew "pipx" # Python non-requirements.txt python packages
 
 # TUI Tools
 brew "lazygit"
-brew "htop"
 brew "neovim"
 brew "macchina" # System Information like neofetch
 
@@ -40,44 +37,19 @@ brew "pngpaste" # Required for neovim clipboard
 brew "fish" # Fish Shell
 brew "fisher" # Plugin manager for the Fish shell
 
-# Documentation Management
-brew "vale" # Linting for Markdown
-brew "pandoc" # Document Converter
-cask "basictex" # Required for pandoc to export PDF
-
-# Programming Languages
-brew "go"
-brew "node"
-brew "deno" # Required for peek.nvim 
-brew "python"
-brew "terraform", link: false
-
-# Version Management
-brew "nvm"
-brew "warrensbox/tap/tfswitch"
-cask "anaconda"
-
 # Standard Apps
 cask "ghostty"
 cask "google-cloud-sdk"
 cask "google-chrome"
-cask "visual-studio-code"
 cask "docker"
 cask "maccy"
 cask "rectangle"
 cask "dbngin"
 cask "bruno"
 
-if ENV['HOMEBREW_WORK_APPS'] == "true"
-  # Work Apps
-  cask "slack"
-  cask "microsoft-teams"
-end
-
 if ENV['HOMEBREW_HOME_APPS'] == "true"
   # Home Apps
   cask "tableplus"
-  cask "discord"
   brew "mas" # Mac store manager
 
   # Mac App Store Apps

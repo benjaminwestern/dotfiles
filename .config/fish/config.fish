@@ -7,13 +7,7 @@ end
 # Paths
 set -gx PATH /opt/homebrew/opt/ruby/bin $PATH
 set -gx PATH $PATH /usr/local/bin
-set -gx PATH $PATH /opt/homebrew/anaconda3/bin
 set -gx PATH $PATH /opt/homebrew/bin
-set -gx PATH $PATH /Users/benjaminwestern/.deno/bin
-set -gx PATH $PATH /Users/benjaminwestern/Go/bin
-set -gx PATH $PATH /opt/homebrew/opt/go/libexec/bin
-set -gx PATH $PATH /Users/benjaminwestern/bin
-set -gx PATH $PATH /Users/benjaminwestern/.cache/lm-studio/bin
 
 # Load zoxide
 zoxide init --cmd cd fish | source
@@ -63,21 +57,4 @@ alias gsai="gcloud config set auth/impersonate_service_account "
 alias unsetgsai="gcloud config unset auth/impersonate_service_account"
 
 source ~/.config/fish/functions/env_loader.fish
-source ~/.config/fish/functions/new_markdown.fish
-source ~/.config/fish/functions/replace_icon.fish
 source ~/.config/fish/functions/gcloud.fish
-
-# >>> conda initialize >>>
-# !! Contents within this block are managed by 'conda init' !!
-if test -f /opt/homebrew/anaconda3/bin/conda
-    eval /opt/homebrew/anaconda3/bin/conda "shell.fish" "hook" $argv | source
-else
-    if test -f "/opt/homebrew/anaconda3/etc/fish/conf.d/conda.fish"
-        . "/opt/homebrew/anaconda3/etc/fish/conf.d/conda.fish"
-    else
-        set -x PATH "/opt/homebrew/anaconda3/bin" $PATH
-    end
-end
-# <<< conda initialize <<<
-
-macchina
