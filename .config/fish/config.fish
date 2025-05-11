@@ -18,8 +18,6 @@ export EDITOR='nvim'
 # OS Aliases
 alias cls="clear"
 alias buu="brew update && brew upgrade && brew cleanup && brew autoremove"
-alias bb="cd ~ && brew bundle"
-alias bbh="cd ~ && export HOMEBREW_HOME_APPS=true && brew bundle"
 alias vim="nvim"
 alias vi="nvim"
 alias v="nvim"
@@ -32,8 +30,9 @@ alias banish_ds_store="find . -name .DS_Store -print0 | xargs -0 git rm -f --ign
 alias egg="git add . && git commit --allow-empty -m ':sparkles: :rocket:' && git push"
 
 # Terraform Aliases
-alias taa="terraform apply --auto-approve"
-alias tp="terraform fmt -recursive && terraform init && terraform plan"
+alias ta="terraform fmt -recursive && terraform init && terraform validate && terraform apply"
+alias taa="terraform fmt -recursive && terraform init && terraform validate && terraform apply --auto-approve"
+alias tp="terraform fmt -recursive && terraform init && terraform validate && terraform plan"
 alias tpt="terraform plan --target"
 alias taat="terraform apply --target"
 alias tf="terraform"
@@ -56,5 +55,9 @@ alias unsetgsgp="gcloud config unset project"
 alias gsai="gcloud config set auth/impersonate_service_account " 
 alias unsetgsai="gcloud config unset auth/impersonate_service_account"
 
-source ~/.config/fish/functions/env_loader.fish
-source ~/.config/fish/functions/gcloud.fish
+# Mise Aliases
+alias gsp="mise run set-gcp-project"
+alias git-pull="mise run pull-all-repos"
+alias git-check="mise run check-all-repos"
+
+macchina

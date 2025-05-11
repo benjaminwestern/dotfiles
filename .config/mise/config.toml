@@ -9,7 +9,7 @@ node = "latest"
 deno = "latest"
 bun = "latest"
 python = "latest"
-# ruby = "latest"
+# ruby = "latest" <-- this bastard doesn't compile on my macbook... will figure it out later when I need it again...
 dart = "latest"
 lua = "latest"
 terraform = "latest"
@@ -19,5 +19,21 @@ terraform = "latest"
 "go:github.com/swaggo/swag/cmd/swag" = {version = "latest"}
 
 "npm:@dataform/cli" = "latest"
+# "npm:renovate" = "latest"
 
 "pipx:sqlfluff/sqlfluff" = "latest"
+
+[tasks.set-gcp-project]
+description = "Sets the active Google Cloud project and ADC quota project."
+usage = '''
+arg "<project_id>" "The Google Cloud Project ID to set."
+'''
+run = "$HOME/.config/mise/scripts/set_gcp_project.sh {{arg(name='project_id')}}"
+
+[tasks.pull-all-repos]
+description = "Uses Git to pull all changes for repositories listed in the $HOME/code directory"
+run = "$HOME/.config/mise/scripts/pull_github_status.sh"
+
+[tasks.check-all-repos]
+description = "Uses Git to perform a status check for repositories listed in the $HOME/code directory"
+run = "$HOME/.config/mise/scripts/check_github_status.sh"
