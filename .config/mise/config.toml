@@ -19,6 +19,10 @@ dart = "latest"
 lua = "latest"
 terraform = "latest"
 
+usage = "latest" # Required for CLI Completions for with mise
+
+gcloud = "latest" # mise plugins add gcloud https://github.com/mise-plugins/mise-gcloud.git 
+
 "go:github.com/air-verse/air" = { version = "latest" } 
 "go:github.com/GoogleCloudPlatform/cloud-sql-proxy/v2" = { version = "latest" } 
 "go:github.com/swaggo/swag/cmd/swag" = { version = "latest" }

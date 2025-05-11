@@ -40,7 +40,6 @@ brew "fisher" # Plugin manager for the Fish shell
 
 # Standard Apps
 cask "ghostty"
-cask "google-cloud-sdk"
 cask "google-chrome"
 cask "docker"
 cask "maccy"
