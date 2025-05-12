@@ -13,10 +13,10 @@ go = "latest"
 node = "latest"
 deno = "latest"
 bun = "latest"
-python = "latest"
+python = "3.12" # Leaving this as 3.12 instead of 3.13 as gsutil commands are pinned to 3.12 currently
 # ruby = "latest" <-- this bastard doesn't compile on my macbook... will figure it out later when I need it again...
 dart = "latest"
-lua = "latest"
+lua = "5.1" # Leaving this as 5.1 as Neovim requires 5.1 for now.
 terraform = "latest"
 
 usage = "latest" # Required for CLI Completions for with mise
@@ -61,6 +61,7 @@ run = "$HOME/.config/mise/scripts/check_github_status.sh"
 
 [tasks.banish-ds-store]
 description = "Kills DS_Store from current directory and adds it to .gitignore"
+dir = "{{cwd}}"
 run = """
 find . -name .DS_Store -print0 | xargs -0 git rm -f --ignore-unmatch
 echo .DS_Store >> .gitignore
@@ -71,6 +72,7 @@ git push
 
 [tasks.empty-commit]
 description = "Pushes and empty commit for CI/CD testing"
+dir = "{{cwd}}"
 run = """
 git add -A
 git commit --allow-empty -m ':sparkles: :rocket:'
@@ -80,6 +82,7 @@ git push
 # Terraform Tasks
 [tasks.terraform-init]
 description = "Runs Terraform fmt, init and validation"
+dir = "{{cwd}}"
 run = """
 terraform fmt -recursive
 terraform init
@@ -88,6 +91,7 @@ terraform validate
 
 [tasks.terraform-auto-apply]
 depends = ["terraform-init"]
+dir = "{{cwd}}"
 description = "Runs Terraform Apply without approvals (plus pre-cursor checks)"
 run = """
 terraform apply --auto-approve
@@ -95,6 +99,7 @@ terraform apply --auto-approve
 
 [tasks.terraform-apply]
 depends = ["terraform-init"]
+dir = "{{cwd}}"
 description = "Runs Terraform Apply (plus pre-cursor checks)"
 run = """
 terraform apply
@@ -102,6 +107,7 @@ terraform apply
 
 [tasks.terraform-plan]
 depends = ["terraform-init"]
+dir = "{{cwd}}"
 description = "Runs Terraform plan (plus pre-cursor checks)"
 run = """
 terraform plan
@@ -109,6 +115,7 @@ terraform plan
 
 [tasks.terraform-console]
 depends = ["terraform-init"]
+dir = "{{cwd}}"
 description = "Runs Terraform console (plus pre-cursor checks)"
 run = """
 terraform console
