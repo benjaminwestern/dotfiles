@@ -5,8 +5,8 @@ if status is-interactive
 end
 
 # Paths
-set -gx PATH $PATH /usr/local/bin
-set -gx PATH $PATH /opt/homebrew/bin
+# set -gx PATH $PATH /opt/homebrew/bin
+# set -gx PATH $PATH /opt/homebrew/sbin
 
 # Initialise mise
 ~/.local/bin/mise activate fish | source
