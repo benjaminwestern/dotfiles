@@ -39,19 +39,12 @@ tokei = "latest" # Code Counter based on language
 zoxide = "latest" # Smart CD Tool
 
 # Neovim Tools
-# neovim = "latest"
 fzf = "latest" # Fuzzy Finder
 fd = "latest" # File Searcher
 ripgrep = "latest" # Search Tool using regex
+# neovim = "latest"
 # tree-sitter = "latest" # File Tree Sitter
 # luajit = "latest" # Lua JIT Compiler
-
-# ollama = "latest"
-# aws-cli = "latest"
-# yt-dl = "latest"
-# skaffold = "latest"
-# helm = "latest"
-
 
 "go:github.com/air-verse/air" = { version = "latest" } 
 "go:github.com/GoogleCloudPlatform/cloud-sql-proxy/v2" = { version = "latest" } 

@@ -29,9 +29,15 @@ cask "rectangle"
 cask "dbngin"
 cask "bruno"
 
+if ENV['HOMEBREW_WORK_APPS'] == "true"
+  cask "microsoft-edge"
+  cask "microsoft-teams"
+  cask "visual-studio-code"
+end
+
 if ENV['HOMEBREW_HOME_APPS'] == "true"
-  # Home Apps
   cask "tableplus"
+  cask "google-drive"
   brew "mas" # Mac store manager
 
   # Mac App Store Apps
