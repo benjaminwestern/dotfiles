@@ -16,6 +16,7 @@ bun = "latest"
 python = "3.12" # Leaving this as 3.12 instead of 3.13 as gsutil commands are pinned to 3.12 currently
 # ruby = "latest" <-- this bastard doesn't compile on my macbook... will figure it out later when I need it again...
 dart = "latest"
+flutter = "latest"
 lua = "5.1" # Leaving this as 5.1 as Neovim requires 5.1 for now.
 terraform = "latest"
 
