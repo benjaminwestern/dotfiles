@@ -1,7 +1,4 @@
 # Taps
-tap "hashicorp/tap"
-tap "homebrew/bundle"
-tap "homebrew/services"
 tap "microsoft/mssql-release"
 
 # Database Drivers
@@ -10,33 +7,18 @@ brew "msodbcsql18"
 
 # CLI Tools
 brew "stow" # Required for dotfiles, creates symlinks to important config
-brew "jq" # CLI JSON Processor
-brew "yq" # CLI YAML Processor
 brew "tree" # Print folder layout
-brew "curl" # Make HTTP requests from terminal
-brew "gitleaks" # Scan Git Commits for Secrets
-brew "tokei" # Information about your git repo
-brew "zoxide" # Smarter Change Directory (cd)
-brew "gh" # Github CLI
-brew "git" # Git CLI
-brew "pipx" # Python non-requirements.txt python packages
-brew "tmux"
-
-# TUI Tools
-brew "lazygit"
-brew "neovim"
+brew "tmux" # Terminal multiplexer
+brew "tpm" # Tmux plugin manager
+brew "fish" # Fish Shell
+brew "fisher" # Plugin manager for the Fish shell
+brew "neovim" # Neovim text editor
 brew "macchina" # System Information like neofetch
 
 # Neovim Setup
-brew "ripgrep" # Required for fzf
-brew "fzf" # A command-line fuzzy finder
 brew "luarocks" # Required for rest.nvim
-brew "fd" # Required for telescope select_env
+brew "wget" # Required for neovim mason.nvim
 brew "pngpaste" # Required for neovim clipboard
-
-# Fish terminal
-brew "fish" # Fish Shell
-brew "fisher" # Plugin manager for the Fish shell
 
 # Standard Apps
 cask "ghostty"

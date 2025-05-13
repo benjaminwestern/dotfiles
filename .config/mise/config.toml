@@ -9,6 +9,7 @@ trusted_config_paths = [
 # DOCKER_HOST = "ssh://mac-mini"
 
 [tools]
+# Languages
 go = "latest"
 node = "latest"
 deno = "latest"
@@ -20,9 +21,37 @@ flutter = "latest"
 lua = "5.1" # Leaving this as 5.1 as Neovim requires 5.1 for now.
 terraform = "latest"
 
+# Mise Tools
 usage = "latest" # Required for CLI Completions for with mise
+pipx = "latest" # Python package manager - required for mise backend
 
+# TUI
+lazygit = "latest"
+lazydocker = "latest"
+
+# CLI Tools
 gcloud = "latest" # mise plugins add gcloud https://github.com/mise-plugins/mise-gcloud.git 
+yq = "latest" # YAML processor
+jq = "latest" # JSON processor
+gh = "latest" # Github CLI
+gitleaks = "latest" # Security Scanner for Git Repositories
+tokei = "latest" # Code Counter based on language
+zoxide = "latest" # Smart CD Tool
+
+# Neovim Tools
+# neovim = "latest"
+fzf = "latest" # Fuzzy Finder
+fd = "latest" # File Searcher
+ripgrep = "latest" # Search Tool using regex
+# tree-sitter = "latest" # File Tree Sitter
+# luajit = "latest" # Lua JIT Compiler
+
+# ollama = "latest"
+# aws-cli = "latest"
+# yt-dl = "latest"
+# skaffold = "latest"
+# helm = "latest"
+
 
 "go:github.com/air-verse/air" = { version = "latest" } 
 "go:github.com/GoogleCloudPlatform/cloud-sql-proxy/v2" = { version = "latest" } 
