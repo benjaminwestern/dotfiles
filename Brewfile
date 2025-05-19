@@ -1,10 +1,3 @@
-# Taps
-tap "microsoft/mssql-release"
-
-# Database Drivers
-brew "mssql-tools18"
-brew "msodbcsql18"
-
 # CLI Tools
 brew "stow" # Required for dotfiles, creates symlinks to important config
 brew "tree" # Print folder layout
@@ -36,6 +29,13 @@ if ENV['HOMEBREW_WORK_APPS'] == "true"
 end
 
 if ENV['HOMEBREW_HOME_APPS'] == "true"
+  # Taps
+  tap "microsoft/mssql-release"
+
+  # Database Drivers
+  brew "mssql-tools18"
+  brew "msodbcsql18"
+
   cask "tableplus"
   cask "google-drive"
   brew "mas" # Mac store manager
