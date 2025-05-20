@@ -1,6 +1,8 @@
 if status is-interactive
     if not set -q TMUX
-        exec /opt/homebrew/bin/tmux new-session -As main
+        if test $TERM_PROGRAM != "vscode"
+            exec /opt/homebrew/bin/tmux new-session -As main
+        end
     end
 end
 
