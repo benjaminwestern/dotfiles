@@ -1,3 +1,5 @@
+# curl https://mise.jdx.dev/mise-latest-macos-arm64 -o $HOME/.local/bin/mis
+
 [settings]
 experimental = true
 trusted_config_paths = [
