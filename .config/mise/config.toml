@@ -1,4 +1,4 @@
-# curl https://mise.jdx.dev/mise-latest-macos-arm64 -o $HOME/.local/bin/mis
+# curl https://mise.jdx.dev/mise-latest-macos-arm64 -o $HOME/.local/bin/mise
 
 [settings]
 experimental = true
@@ -8,7 +8,7 @@ trusted_config_paths = [
 ]
 
 [env]
-# DOCKER_HOST = "ssh://mac-mini"
+_.file = "~/.config/mise/.env"
 
 [tools]
 # Languages
@@ -22,6 +22,7 @@ dart = "latest"
 flutter = "latest"
 lua = "5.1" # Leaving this as 5.1 as Neovim requires 5.1 for now.
 terraform = "latest"
+pnpm = "latest" # Node Package Manager
 
 # Mise Tools
 usage = "latest" # Required for CLI Completions for with mise
@@ -51,6 +52,8 @@ ripgrep = "latest" # Search Tool using regex
 "go:github.com/air-verse/air" = { version = "latest" } 
 "go:github.com/GoogleCloudPlatform/cloud-sql-proxy/v2" = { version = "latest" } 
 "go:github.com/swaggo/swag/cmd/swag" = { version = "latest" }
+"go:github.com/charmbracelet/freeze" = { version = "latest" }
+"go:github.com/charmbracelet/vhs" = { version = "latest" }
 
 "npm:@dataform/cli" = "latest" 
 # "npm:renovate" = "latest"
