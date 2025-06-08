@@ -9,5 +9,3 @@
 [user]
 	name = Benjamin Western
 	email = code@benjaminwestern.io
-[http]
-	sslcainfo = /Users/benjaminwestern/ca_certs/cacert.pem
