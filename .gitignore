@@ -70,5 +70,5 @@ Temporary Items
 **/*.msp
 **/*.txz
 
-# ATAC API Information
-.config/nvim/atac
+.vscode
+**/.vscode

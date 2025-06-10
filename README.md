@@ -8,19 +8,21 @@ The neovim components of this repository are heavily taken from [Kickstart.nvim]
 xcode-select --install
 ```
 
-2. Install homebrew
+2. Install homebrew & Mise
 ```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
+
+curl https://mise.run | sh
 ```
 
 3. Clone this repository
 ```bash
-git clone
+git clone https://github.com/benjaminwestern/dotfiles ~/.dotfiles
 ```
 
 4. Install Brew bundle
 ```bash
-cd ~/dotfiles
+cd ~/.dotfiles
 # Add export HOMEBREW_HOME_APPS=true or export HOMEBREW_WORK_APPS=true to install those specified
 export HOMEBREW_ACCEPT_EULA=Y  && /opt/homebrew/bin/brew bundle 
 ```
@@ -42,8 +44,13 @@ if [ ! -d ~/.ssh ]; then
     mkdir ~/.ssh # Create the config directory if it doesn't exist otherwise stow will absorb the directory into the dotfiles
 fi
 
-cd ~/dotfiles
-stow .
+# Install Mise Tools
+cd ~/.dotfiles/Config/mise/.config/mise/
+mise trust
+mise install
+
+cd ~/.dotfiles
+tuckr add \*
 ```
 
 7. Install rosetta for M1 Macs
@@ -57,17 +64,11 @@ softwareupdate --install-rosetta
 
 ## Installed Application
 ### Applications (Not available on the App Store or Homebrew)
-- [Duet Display](https://www.duetdisplay.com/) - Connect iPad as a second display
 - [Parallels Desktop](https://www.parallels.com/) - Virtual Machine
-- [Microsoft Office](https://www.microsoft.com/en-us/microsoft-365/) - Office Suite
 
 ## Other Alternative Applications
 - [Maccy](https://maccy.app/) - Clipboard Manager - `brew install maccy`
-- [Rectangle](https://rectangleapp.com/) - Window Manager - `brew install rectangle`
-- [BeeKeeper Studio](https://www.beekeeperstudio.io/) - SQL Client - `brew install beekeeper-studio`
 - [Visual Studio Code](https://code.visualstudio.com/) - Code Editor - `brew install visual-studio-code`
-- [GitHub Desktop](https://desktop.github.com/) - Git Client - `brew install github`
-- [Postman](https://www.postman.com/) - API Client - `brew install postman`
 
 ## Reference Links
 - [GNU Stow](https://www.gnu.org/software/stow/) (Dotfile Manager)
@@ -77,14 +78,3 @@ softwareupdate --install-rosetta
 - [Git](https://git-scm.com/) (Version Control)
 - [Vim](https://www.vim.org/) (Text Editor)
 - [Neovim](https://neovim.io/) (Text Editor)
-
-## Stow Ignored Directories
-- .git
-- .gitignore
-- scripts
-- icons
-- lock files for brew and lazy
-- README.md
-- LICENSE
-
-To add more directories to ignore, add them to the `.stow-local-ignore` file.

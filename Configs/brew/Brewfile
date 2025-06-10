@@ -1,5 +1,4 @@
 # CLI Tools
-brew "stow" # Required for dotfiles, creates symlinks to important config
 brew "tree" # Print folder layout
 brew "tmux" # Terminal multiplexer
 brew "tpm" # Tmux plugin manager
@@ -7,6 +6,7 @@ brew "fish" # Fish Shell
 brew "fisher" # Plugin manager for the Fish shell
 brew "neovim" # Neovim text editor
 brew "macchina" # System Information like neofetch
+brew "ffmpeg" # Video and audio processing
 
 # Neovim Setup
 brew "luarocks" # Required for rest.nvim
@@ -14,18 +14,23 @@ brew "wget" # Required for neovim mason.nvim
 brew "pngpaste" # Required for neovim clipboard
 
 # Standard Apps
-cask "ghostty"
-cask "google-chrome"
-cask "docker"
-cask "maccy"
-cask "rectangle"
-cask "dbngin"
-cask "bruno"
+cask "ghostty" # Terminal Emulator
+cask "google-chrome" # Web Browser
+cask "docker" # Containerisation Platform
+cask "maccy" # Clipboard Manager
+cask "dbngin" # Database GUI
+cask "bruno" # API Client
+cask "visual-studio-code" # Code Editor
+
+# Window Management
+tap "nikitabobko/tap" # Tap for aerospace
+tap "FelixKratz/formulae" # Tap for borders
+cask "aerospace" # Window Manager
+brew "felixkratz/formulae/borders" # Window Highlighting
 
 if ENV['HOMEBREW_WORK_APPS'] == "true"
   cask "microsoft-edge"
   cask "microsoft-teams"
-  cask "visual-studio-code"
 end
 
 if ENV['HOMEBREW_HOME_APPS'] == "true"
@@ -41,7 +46,6 @@ if ENV['HOMEBREW_HOME_APPS'] == "true"
   brew "mas" # Mac store manager
 
   # Mac App Store Apps
-  mas "Maccy", id: 1527619437
   mas "DaisyDisk", id: 411643860
   mas "Final Cut Pro", id: 424389933
 end
