@@ -50,11 +50,16 @@ ripgrep = "latest" # Search Tool using regex
 # tree-sitter = "latest" # File Tree Sitter
 # luajit = "latest" # Lua JIT Compiler
 
-"go:github.com/air-verse/air" = { version = "latest" } 
 "go:github.com/GoogleCloudPlatform/cloud-sql-proxy/v2" = { version = "latest" } 
+
+"go:github.com/air-verse/air" = { version = "latest" } 
 "go:github.com/swaggo/swag/cmd/swag" = { version = "latest" }
+"go:github.com/sqlc-dev/sqlc/cmd/sqlc" = { version = "latest" }
+
 "go:github.com/charmbracelet/freeze" = { version = "latest" }
 "go:github.com/charmbracelet/vhs" = { version = "latest" }
+
+"go:github.com/gohugoio/hugo" = { version = "latest" }
 
 "npm:@dataform/cli" = "latest" 
 # "npm:renovate" = "latest"
