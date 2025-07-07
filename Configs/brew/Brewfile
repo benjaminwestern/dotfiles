@@ -20,7 +20,6 @@ cask "google-chrome" # Web Browser
 cask "docker" # Containerisation Platform
 cask "maccy" # Clipboard Manager
 cask "dbngin" # Database GUI
-cask "bruno" # API Client
 cask "visual-studio-code" # Code Editor
 
 # Window Management

@@ -59,9 +59,11 @@ ripgrep = "latest" # Search Tool using regex
 "go:github.com/charmbracelet/freeze" = { version = "latest" }
 "go:github.com/charmbracelet/vhs" = { version = "latest" }
 
-"go:github.com/gohugoio/hugo" = { version = "latest" }
+# "go:github.com/gohugoio/hugo" = { version = "latest" } -- Need Extended -- CGO_ENABLED=1 go install -tags extended github.com/gohugoio/hugo@latest
 
 "npm:@dataform/cli" = "latest" 
+"npm:@google/gemini-cli" = "latest"
+"npm:opencode-ai" = "latest"
 # "npm:renovate" = "latest"
 
 "pipx:sqlfluff/sqlfluff" = "latest" # used for Dataform Extension to lint SQLX files
