@@ -53,6 +53,8 @@ ripgrep = "latest" # Search Tool using regex
 "go:github.com/GoogleCloudPlatform/cloud-sql-proxy/v2" = { version = "latest" } 
 
 "go:github.com/air-verse/air" = { version = "latest" } 
+"go:github.com/golangci/golangci-lint/v2/cmd/golangci-lint" = { version = "latest" }
+"go:mvdan.cc/gofumpt" = { version = "latest" }
 "go:github.com/swaggo/swag/cmd/swag" = { version = "latest" }
 "go:github.com/sqlc-dev/sqlc/cmd/sqlc" = { version = "latest" }
 
