@@ -58,6 +58,7 @@ ripgrep = "latest" # Search Tool using regex
 "go:github.com/swaggo/swag/cmd/swag" = { version = "latest" }
 "go:github.com/sqlc-dev/sqlc/cmd/sqlc" = { version = "latest" }
 
+"go:github.com/charmbracelet/glow" = { version = "latest" }
 "go:github.com/charmbracelet/freeze" = { version = "latest" }
 "go:github.com/charmbracelet/vhs" = { version = "latest" }
 
