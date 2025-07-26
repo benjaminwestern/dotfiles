@@ -6,13 +6,21 @@ brew "fish" # Fish Shell
 brew "fisher" # Plugin manager for the Fish shell
 brew "neovim" # Neovim text editor
 brew "macchina" # System Information like neofetch
-brew "ffmpeg" # Video and audio processing
 brew "graphviz" # Required for Flamegraph etc using pprof
 
 # Neovim Setup
 brew "luarocks" # Required for rest.nvim
 brew "wget" # Required for neovim mason.nvim
 brew "pngpaste" # Required for neovim clipboard
+
+# Yazi Dependencies
+brew "ffmpeg" # Video and audio processing
+brew "sevenzip" # 7-Zip is a file archiver with a high compression ratio
+brew "poppler" # PDF rendering library
+brew "resvg" # SVG rendering tool and library
+brew "imagemagick" # Tools and libraries to manipulate images in many formats
+cask "font-symbols-only-nerd-font" # Symbols Nerd Font
+brew "yazi" # Terminal file manager written in Rust, based on async I/O
 
 # Standard Apps
 cask "ghostty" # Terminal Emulator
