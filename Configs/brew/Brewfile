@@ -12,6 +12,7 @@ brew "graphviz" # Required for Flamegraph etc using pprof
 brew "luarocks" # Required for rest.nvim
 brew "wget" # Required for neovim mason.nvim
 brew "pngpaste" # Required for neovim clipboard
+brew "coreutils"
 
 # Yazi Dependencies
 brew "ffmpeg" # Video and audio processing
