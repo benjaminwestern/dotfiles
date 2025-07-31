@@ -22,7 +22,7 @@ background-opacity = 0.90
 background-blur-radius = 40
 
 # Keymaps
-keybind = global:cmd+grave_accent=toggle_quick_terminal
+# keybind = global:cmd+grave_accent=toggle_quick_terminal
 # keybind = shift+cmd+left=previous_tab
 # keybind = shift+cmd+right=next_tab
 # keybind = shift+cmd+,=move_tab:-1

@@ -2,8 +2,8 @@
 -- https://neovim.io/doc/user/lua-guide.html
 
 -- Disable netrw
-vim.g.loaded_netrw          = 1
-vim.g.loaded_netrwPlugin    = 1
+-- vim.g.loaded_netrw          = 1
+-- vim.g.loaded_netrwPlugin    = 1
 
 -- See `:help mapleader`
 vim.g.mapleader             = ' '
@@ -122,9 +122,9 @@ vim.keymap.set('n', '<leader>e', vim.diagnostic.open_float, { desc = 'Open float
 vim.keymap.set('n', '<leader>q', vim.diagnostic.setloclist, { desc = 'Open diagnostics list' })
 
 -- Replace :Ex with Yazi
-vim.api.nvim_create_user_command('Ex', function()
-  vim.cmd('Yazi')
-end, { desc = 'Open Yazi file manager' })
+-- vim.api.nvim_create_user_command('Ex', function()
+--   vim.cmd('Yazi')
+-- end, { desc = 'Open Yazi file manager' })
 
 -- [[ Highlight on yank ]]
 -- See `:help vim.highlight.on_yank()`

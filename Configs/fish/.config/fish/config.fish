@@ -1,3 +1,7 @@
+# Disable fish greeting
+set fish_greeting ""
+
+# Tmux auto-launch (commented out for raw terminal usage)
 if status is-interactive
     if not set -q TMUX
         if test $TERM_PROGRAM != "vscode"
@@ -26,7 +30,6 @@ alias vi="nvim"
 alias v="nvim"
 alias python=python3
 alias vc="open $1 -a \"Visual Studio Code\""
-alias cu="open $1 -a \"Cursor\""
 
 # Terraform Aliases
 alias tf="terraform"
@@ -63,4 +66,4 @@ alias taa="mise run terraform-auto-apply"
 alias ta="mise run terraform-apply"
 alias tp="mise run terraform-plan"
 
-macchina
+# macchina

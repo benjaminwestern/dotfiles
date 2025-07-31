@@ -23,8 +23,8 @@ return {
     },
   },
   opts = {
-    -- Replace netrw with yazi
-    open_for_directories = true,
+    -- Don't replace netrw with yazi
+    open_for_directories = false,
     keymaps = {
       show_help = "<f1>",
       copy_relative_path_to_selected_files = nil,
