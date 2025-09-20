@@ -2,14 +2,14 @@
 set fish_greeting ""
 
 # Tmux auto-launch (commented out for raw terminal usage)
-if status is-interactive
-    if not set -q TMUX
-        if test $TERM_PROGRAM != "vscode"
-            exec /opt/homebrew/bin/tmux new-session -As main
-        end
-    end
-end
-
+# if status is-interactive
+#     if not set -q TMUX
+#         if test $TERM_PROGRAM != "vscode"
+#             exec /opt/homebrew/bin/tmux new-session -As main
+#         end
+#     end
+# end
+#
 # Paths
 # set -gx PATH $PATH /opt/homebrew/bin
 # set -gx PATH $PATH /opt/homebrew/sbin

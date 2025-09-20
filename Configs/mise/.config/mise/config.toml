@@ -13,42 +13,6 @@ _.file = "~/.config/mise/.env"
 [tools]
 # Languages
 go = "latest"
-node = "latest"
-deno = "latest"
-bun = "latest"
-rust = "latest"
-python = "3.12" # Leaving this as 3.12 instead of 3.13 as gsutil commands are pinned to 3.12 currently
-# ruby = "latest" <-- this bastard doesn't compile on my macbook... will figure it out later when I need it again...
-dart = "latest"
-flutter = "latest"
-lua = "5.1" # Leaving this as 5.1 as Neovim requires 5.1 for now.
-terraform = "latest"
-pnpm = "latest" # Node Package Manager
-
-# Mise Tools
-usage = "latest" # Required for CLI Completions for with mise
-pipx = "latest" # Python package manager - required for mise backend
-
-# TUI
-lazygit = "latest"
-lazydocker = "latest"
-
-# CLI Tools
-gcloud = "latest" # mise plugins add gcloud https://github.com/mise-plugins/mise-gcloud.git 
-yq = "latest" # YAML processor
-jq = "latest" # JSON processor
-gh = "latest" # Github CLI
-gitleaks = "latest" # Security Scanner for Git Repositories
-tokei = "latest" # Code Counter based on language
-zoxide = "latest" # Smart CD Tool
-
-# Neovim Tools
-fzf = "latest" # Fuzzy Finder
-fd = "latest" # File Searcher
-ripgrep = "latest" # Search Tool using regex
-# neovim = "latest"
-# tree-sitter = "latest" # File Tree Sitter
-# luajit = "latest" # Lua JIT Compiler
 
 "go:github.com/GoogleCloudPlatform/cloud-sql-proxy/v2" = { version = "latest" } 
 
@@ -62,16 +26,57 @@ ripgrep = "latest" # Search Tool using regex
 "go:github.com/charmbracelet/freeze" = { version = "latest" }
 "go:github.com/charmbracelet/vhs" = { version = "latest" }
 
-# "go:github.com/gohugoio/hugo" = { version = "latest" } -- Need Extended -- CGO_ENABLED=1 go install -tags extended github.com/gohugoio/hugo@latest
+# JS/TS... Do I REALLY need all of these?
+node = "latest"
+deno = "latest"
+bun = "latest"
+pnpm = "latest" # Node Package Manager
 
 "npm:@dataform/cli" = "latest" 
 "npm:@google/gemini-cli" = "latest"
 "npm:opencode-ai" = "latest"
 # "npm:renovate" = "latest"
 
+python = "3.12" # Leaving this as 3.12 instead of 3.13 as gsutil commands are pinned to 3.12 currently
+uv = "latest"
+pipx = "latest" # Python package manager - required for mise backend
 "pipx:sqlfluff/sqlfluff" = "latest" # used for Dataform Extension to lint SQLX files
 
+lua = "5.1" # Leaving this as 5.1 as Neovim requires 5.1 for now.
+
+rust = "latest"
 "cargo:tuckr" = "latest"
+
+terraform = "latest"
+
+# dart = "latest"
+# flutter = "latest" <-- not required for me anymore
+# ruby = "latest" <-- this bastard doesn't compile on my macbook... will figure it out later when I need it again...
+# jujutsu = "latest" # Git alternative <-- Maybe later... 
+
+# Mise Tools
+usage = "latest" # Required for CLI Completions for with mise
+
+lazygit = "latest"
+# lazydocker = "latest" <-- Docker CLI OP, this adds complexity to my workflow
+
+# CLI Tools
+gcloud = "latest" # mise plugins add gcloud https://github.com/mise-plugins/mise-gcloud.git 
+yq = "latest" # YAML processor
+jq = "latest" # JSON processor
+gh = "latest" # Github CLI
+gitleaks = "latest" # Security Scanner for Git Repositories
+tokei = "latest" # Code Counter based on language
+zoxide = "latest" # Smart CD Tool
+skaffold = "latest" # building tool for container services
+
+# Neovim Tools
+fzf = "latest" # Fuzzy Finder
+fd = "latest" # File Searcher
+ripgrep = "latest" # Search Tool using regex
+# neovim = "latest"
+# tree-sitter = "latest" # File Tree Sitter
+# luajit = "latest" # Lua JIT Compiler
 
 # Homebrew Tasks
 [tasks.bundle-update]
