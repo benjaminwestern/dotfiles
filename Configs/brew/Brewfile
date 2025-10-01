@@ -22,6 +22,7 @@ brew "resvg" # SVG rendering tool and library
 brew "imagemagick" # Tools and libraries to manipulate images in many formats
 cask "font-symbols-only-nerd-font" # Symbols Nerd Font
 brew "yazi" # Terminal file manager written in Rust, based on async I/O
+brew "tlrc" # TLDR for common terminal commands
 
 # Standard Apps
 cask "ghostty" # Terminal Emulator
