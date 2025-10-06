@@ -7,6 +7,7 @@ brew "fisher" # Plugin manager for the Fish shell
 brew "neovim" # Neovim text editor
 brew "macchina" # System Information like neofetch
 brew "graphviz" # Required for Flamegraph etc using pprof
+brew "terraform-mcp-server" # Official Terraform MCP Server
 
 # Neovim Setup
 brew "luarocks" # Required for rest.nvim
