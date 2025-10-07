@@ -8,6 +8,7 @@ brew "neovim" # Neovim text editor
 brew "macchina" # System Information like neofetch
 brew "graphviz" # Required for Flamegraph etc using pprof
 brew "terraform-mcp-server" # Official Terraform MCP Server
+brew "mcp-toolbox" # Official GenAI Toolbox for Databases from Google
 
 # Neovim Setup
 brew "luarocks" # Required for rest.nvim
