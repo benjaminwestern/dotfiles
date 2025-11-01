@@ -33,8 +33,10 @@ bun = "latest"
 pnpm = "latest" # Node Package Manager
 
 "npm:@dataform/cli" = "latest" 
-"npm:@google/gemini-cli" = "latest"
+# "npm:@google/gemini-cli" = "latest"
+"npm:@google/gemini-cli" = "nightly"
 "npm:opencode-ai" = "latest"
+"npm:@sourcegraph/amp" = "latest"
 # "npm:renovate" = "latest"
 
 python = "3.12" # Leaving this as 3.12 instead of 3.13 as gsutil commands are pinned to 3.12 currently
