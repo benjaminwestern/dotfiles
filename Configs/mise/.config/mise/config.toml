@@ -68,7 +68,7 @@ yq = "latest" # YAML processor
 jq = "latest" # JSON processor
 gh = "latest" # Github CLI
 gitleaks = "latest" # Security Scanner for Git Repositories
-tokei = "latest" # Code Counter based on language
+# tokei = "latest" # Code Counter based on language
 zoxide = "latest" # Smart CD Tool
 skaffold = "latest" # building tool for container services
 
