@@ -3,7 +3,7 @@
 
 # Theme
 # ghostty +list-themes
-theme = dracula
+theme = Dracula
 
 # Fonts
 # ghostty +list-fonts
@@ -23,10 +23,11 @@ background-blur-radius = 40
 
 # Keymaps
 # keybind = global:cmd+grave_accent=toggle_quick_terminal
+keybind = ctrl+t=new_tab
 keybind = shift+left=previous_tab
 keybind = shift+right=next_tab
-keybind = cmd+shift+left=move_tab:-1
-keybind = cmd+shift+right=move_tab:1
+keybind = ctrl+shift+left=move_tab:-1
+keybind = ctrl+shift+right=move_tab:1
 
 # Terminal Settings
 copy-on-select = true
