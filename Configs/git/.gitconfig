@@ -9,3 +9,5 @@
 [user]
 	name = Benjamin Western
 	email = code@benjaminwestern.io
+[url "git@github.com:"]
+	insteadOf = https://github.com
