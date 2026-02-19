@@ -72,3 +72,8 @@ Temporary Items
 
 .vscode
 **/.vscode
+
+# SSH Keys - managed locally, not in git
+Configs/ssh/.ssh/*.pk
+Configs/ssh/.ssh/*.pub
+Configs/ssh/.ssh/id_*
