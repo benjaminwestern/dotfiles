@@ -22,6 +22,8 @@ go = "latest"
 "go:github.com/swaggo/swag/cmd/swag" = { version = "latest" }
 "go:github.com/sqlc-dev/sqlc/cmd/sqlc" = { version = "latest" }
 
+"go:oss.terrastruct.com/d2" = { version = "latest"}
+
 "go:github.com/charmbracelet/glow" = { version = "latest" }
 "go:github.com/charmbracelet/freeze" = { version = "latest" }
 "go:github.com/charmbracelet/vhs" = { version = "latest" }
@@ -76,6 +78,7 @@ skaffold = "latest" # building tool for container services
 fzf = "latest" # Fuzzy Finder
 fd = "latest" # File Searcher
 ripgrep = "latest" # Search Tool using regex
+pitchfork = "latest"
 # neovim = "latest"
 # tree-sitter = "latest" # File Tree Sitter
 # luajit = "latest" # Lua JIT Compiler
