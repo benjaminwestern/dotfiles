@@ -1,7 +1,5 @@
 # Assign input parameters to variables or use default values
 SCRIPT_COMPUTER_NAME="${1:-macbook-pro}"
-SCRIPT_USER_NAME="${2:-Benjamin Western}"
-SCRIPT_USER_EMAIL="${3:-code@benjaminwestern.io}"
 
 # Update hostname:
 sudo scutil --set HostName $SCRIPT_COMPUTER_NAME
@@ -68,12 +66,4 @@ defaults write com.apple.finder WarnOnEmptyTrash -bool false
 
 # Take screenshots as png:
 # Available Types: png, jpg, tiff, bmp, gif, pdf, or none
-defaults write com.apple.screencapture type png 
-
-# Setup Git Config
-git config --global user.name $SCRIPT_USER_NAME 
-git config --global user.email $SCRIPT_USER_EMAIL 
-git config --global init.defaultBranch main # Set default branch to main
-git config --global color.ui auto # Enable color in terminal
-git config --global push.autoSetupRemote true # Enable auto push with switched branches
-git config --global pull.rebase false # Disable auto rebase on pull
+defaults write com.apple.screencapture type png

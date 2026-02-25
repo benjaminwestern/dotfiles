@@ -1,4 +1,7 @@
 # CLI Tools
+brew "git" # Version control system
+brew "bash" # Bourne Again Shell
+brew "tuckr" # Symlink management for dotfiles
 brew "tree" # Print folder layout
 brew "tmux" # Terminal multiplexer
 brew "tpm" # Tmux plugin manager
@@ -9,6 +12,28 @@ brew "macchina" # System Information like neofetch
 brew "graphviz" # Required for Flamegraph etc using pprof
 brew "terraform-mcp-server" # Official Terraform MCP Server
 brew "mcp-toolbox" # Official GenAI Toolbox for Databases from Google
+brew "lazygit" # Terminal UI for git commands
+
+# Core Shell Utilities (moved from mise to break circular dependency)
+brew "jq" # JSON processor
+brew "yq" # YAML processor
+brew "gh" # GitHub CLI
+brew "gitleaks" # Security scanner for git repositories
+brew "zoxide" # Smart cd command
+brew "fzf" # Fuzzy finder
+brew "fd" # File searcher
+brew "ripgrep" # Search tool using regex
+
+# Additional CLI tools from current install
+brew "make" # Build automation tool
+brew "htop" # Interactive process viewer
+brew "nmap" # Network discovery and security auditing
+brew "gum" # Tool for glamorous shell scripts
+brew "tokei" # Code counter based on language
+brew "duckdb" # In-process SQL OLAP database
+brew "mysql-client" # MySQL client
+brew "youplot" # Command line plotting tool
+brew "yt-dlp" # YouTube video downloader
 
 # Neovim Setup
 brew "luarocks" # Required for rest.nvim

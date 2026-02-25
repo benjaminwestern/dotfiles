@@ -9,6 +9,8 @@ trusted_config_paths = [
 
 [env]
 _.file = "~/.config/mise/.env"
+OPENCODE_ENABLE_EXPERIMENTAL_MODELS = "true"
+EDITOR = "nvim"
 
 [tools]
 # Languages
@@ -35,11 +37,9 @@ bun = "latest"
 pnpm = "latest" # Node Package Manager
 
 "npm:@dataform/cli" = "latest" 
-# "npm:@google/gemini-cli" = "latest"
 "npm:@google/gemini-cli" = "nightly"
 "npm:opencode-ai" = "latest"
 "npm:@sourcegraph/amp" = "latest"
-# "npm:renovate" = "latest"
 
 python = "3.12" # Leaving this as 3.12 instead of 3.13 as gsutil commands are pinned to 3.12 currently
 uv = "latest"
@@ -49,39 +49,21 @@ pipx = "latest" # Python package manager - required for mise backend
 lua = "5.1" # Leaving this as 5.1 as Neovim requires 5.1 for now.
 
 rust = "latest"
-"cargo:tuckr" = "latest"
 
 terraform = "latest"
 
-# dart = "latest"
-# flutter = "latest" <-- not required for me anymore
-# ruby = "latest" <-- this bastard doesn't compile on my macbook... will figure it out later when I need it again...
-# jujutsu = "latest" # Git alternative <-- Maybe later... 
-
-# Mise Tools
+# JDX Tools
+pitchfork = "latest"
+hk = "latest"
+communique = "latest"
 usage = "latest"
 
-lazygit = "latest"
-# lazydocker = "latest" <-- Docker CLI OP, this adds complexity to my workflow
+# HK Requirements
+pkl = "latest"
 
 # CLI Tools
-gcloud = "latest" # mise plugins add gcloud https://github.com/mise-plugins/mise-gcloud.git 
-yq = "latest" # YAML processor
-jq = "latest" # JSON processor
-gh = "latest" # Github CLI
-gitleaks = "latest" # Security Scanner for Git Repositories
-# tokei = "latest" # Code Counter based on language
-zoxide = "latest" # Smart CD Tool
 skaffold = "latest" # building tool for container services
-
-# Neovim Tools
-fzf = "latest" # Fuzzy Finder
-fd = "latest" # File Searcher
-ripgrep = "latest" # Search Tool using regex
-pitchfork = "latest"
-# neovim = "latest"
-# tree-sitter = "latest" # File Tree Sitter
-# luajit = "latest" # Lua JIT Compiler
+gcloud = "latest"
 
 # Homebrew Tasks
 [tasks.bundle-update]
@@ -171,3 +153,46 @@ description = "Runs Terraform console (plus pre-cursor checks)"
 run = """
 terraform console
 """
+
+# Shell Aliases - migrated from fish config
+[shell_alias]
+# OS Aliases
+cls = "clear"
+vim = "nvim"
+vi = "nvim"
+v = "nvim"
+python = "python3"
+vc = "open $1 -a 'Visual Studio Code'"
+
+# Terraform Aliases
+tf = "terraform"
+
+# Dataform Aliases
+dfc = "dataform compile"
+dfr = "dataform run"
+dft = "dataform test"
+dff = "dataform format"
+dfi = "dataform install"
+
+# Google Cloud Aliases
+gadc = "gcloud auth application-default login"
+gauth = "gcloud auth login"
+gsqp = "gcloud auth application-default set-quota-project"
+gsgp = "gcloud config set project"
+gssa = "gcloud auth activate-service-account"
+unsetgsgp = "gcloud config unset project"
+gsai = "gcloud config set auth/impersonate_service_account"
+unsetgsai = "gcloud config unset auth/impersonate_service_account"
+
+# Mise Task Aliases
+buu = "mise run bundle-update"
+gsp = "mise run set-gcp-project"
+git-pull = "mise run pull-all-repos"
+git-check = "mise run check-all-repos"
+banish = "mise run banish-ds-store"
+git-empty = "mise run empty-commit"
+ti = "mise run terraform-init"
+tc = "mise run terraform-console"
+taa = "mise run terraform-auto-apply"
+ta = "mise run terraform-apply"
+tp = "mise run terraform-plan"
