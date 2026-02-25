@@ -8,7 +8,7 @@ set -euo pipefail
 
 # === Configuration ===
 SCRIPT_COMPUTER_NAME="${1:-macbook-pro}"
-DOTFILES_REPO="https://github.com/benjaminwestern/.dotfiles"
+DOTFILES_REPO="https://github.com/benjaminwestern/dotfiles"
 DOTFILES_DIR="$HOME/.dotfiles"
 
 # === Helper Functions ===
@@ -70,7 +70,7 @@ fi
 display_message "Step 4: Converting git remote to SSH"
 cd "$DOTFILES_DIR"
 if git remote -v | grep -q "https://github.com"; then
-  git remote set-url origin "git@github.com:benjaminwestern/.dotfiles.git"
+  git remote set-url origin "git@github.com:benjaminwestern/dotfiles.git"
   display_message "Git remote converted to SSH"
 else
   display_message "Git remote already using SSH or not HTTPS"

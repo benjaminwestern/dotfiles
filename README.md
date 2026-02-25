@@ -57,7 +57,7 @@ wget -qO- https://raw.githubusercontent.com/benjaminwestern/.dotfiles/main/boots
 
 **Clone first, then run (recommended for security):**
 ```bash
-git clone https://github.com/benjaminwestern/.dotfiles ~/.dotfiles
+git clone https://github.com/benjaminwestern/dotfiles ~/.dotfiles
 # Inspect the code: cat ~/.dotfiles/bootstrap.sh
 ~/.dotfiles/bootstrap.sh [computer-name]
 ```
@@ -90,11 +90,11 @@ xcode-select --install
 eval "$(/opt/homebrew/bin/brew shellenv)"
 
 # 3. Clone dotfiles
-git clone https://github.com/benjaminwestern/.dotfiles ~/.dotfiles
+git clone https://github.com/benjaminwestern/dotfiles ~/.dotfiles
 cd ~/.dotfiles
 
 # 4. Convert git remote to SSH (for pushing updates)
-git remote set-url origin git@github.com:benjaminwestern/.dotfiles.git
+git remote set-url origin git@github.com:benjaminwestern/dotfiles.git
 
 # 5. Install all Homebrew packages
 brew bundle
@@ -281,11 +281,11 @@ brew install git fish
 ### Step 2: Get Dotfiles
 ```bash
 # Clone repository
-git clone https://github.com/benjaminwestern/.dotfiles ~/.dotfiles
+git clone https://github.com/benjaminwestern/dotfiles ~/.dotfiles
 cd ~/.dotfiles
 
 # Convert to SSH (for pushing updates later)
-git remote set-url origin git@github.com:benjaminwestern/.dotfiles.git
+git remote set-url origin git@github.com:benjaminwestern/dotfiles.git
 ```
 
 ### Step 3: Install Core Stack

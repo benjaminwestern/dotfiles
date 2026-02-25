@@ -113,9 +113,9 @@ brew install git fish
 
 ### 2. Get Dotfiles
 ```bash
-git clone https://github.com/benjaminwestern/.dotfiles ~/.dotfiles
+git clone https://github.com/benjaminwestern/dotfiles ~/.dotfiles
 cd ~/.dotfiles
-git remote set-url origin git@github.com:benjaminwestern/.dotfiles.git
+git remote set-url origin git@github.com:benjaminwestern/dotfiles.git
 ```
 
 ### 3. Install Core Tools
