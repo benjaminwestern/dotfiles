@@ -1,0 +1,55 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-gemini-auth"],
+  "model": "google/gemini-3-flash-preview",
+  "share": "disabled",
+  "provider": {
+    "mlx": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "MLX (local)",
+      "options": {
+        "baseURL": "http://localhost:8080/v1"
+      },
+      "models": {
+        "google/gemma-3-1b-it": {
+          "name": "Gemma 3 1B Instruct"
+        }
+      }
+    }
+  },
+  "tools": {
+    "bash": true,
+    "edit": true,
+    "write": true,
+    "read": true,
+    "grep": true,
+    "glob": true,
+    "list": true,
+    "patch": true,
+    "todowrite": true,
+    "todoread": true,
+    "webfetch": true
+  },
+  "permission": {
+    "edit": "allow",
+    "bash": "allow",
+    "webfetch": "allow"
+  },
+  "mcp": {
+    "chrome-dev-tools": {
+      "type": "local",
+      "command": ["bunx", "-y", "chrome-devtools-mcp@latest"],
+      "enabled": false
+    },
+    "firebase": {
+      "type": "local",
+      "command": ["bunx", "-y", "firebase-tools@latest", "experimental:mcp"],
+      "enabled": false
+    },
+    "terraform": {
+      "type": "local",
+      "command": ["terraform-mcp-server"],
+      "enabled": true
+    }
+  }
+}
