@@ -55,6 +55,7 @@ terraform = "latest"
 # JDX Tools
 pitchfork = "latest"
 hk = "latest"
+fnox = "latest"
 communique = "latest"
 usage = "latest"
 
