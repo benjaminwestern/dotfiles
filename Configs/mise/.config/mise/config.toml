@@ -13,7 +13,6 @@ OPENCODE_ENABLE_EXPERIMENTAL_MODELS = "true"
 EDITOR = "nvim"
 
 [tools]
-# Languages
 go = "latest"
 
 "go:github.com/GoogleCloudPlatform/cloud-sql-proxy/v2" = { version = "latest" } 
@@ -41,7 +40,7 @@ pnpm = "latest" # Node Package Manager
 "npm:opencode-ai" = "latest"
 "npm:@sourcegraph/amp" = "latest"
 
-python = "3.12" # Leaving this as 3.12 instead of 3.13 as gsutil commands are pinned to 3.12 currently
+python = "latest"
 uv = "latest"
 pipx = "latest" # Python package manager - required for mise backend
 "pipx:sqlfluff/sqlfluff" = "latest" # used for Dataform Extension to lint SQLX files
@@ -164,6 +163,7 @@ vi = "nvim"
 v = "nvim"
 python = "python3"
 vc = "open $1 -a 'Visual Studio Code'"
+opencode-a = "opencode attach http://localhost:4096 --dir ./"
 
 # Terraform Aliases
 tf = "terraform"

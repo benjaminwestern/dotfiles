@@ -1,0 +1,27 @@
+[daemons.opencode-server]
+# Start the opencode server (headless mode)
+run = "opencode serve"
+
+# Start automatically on system boot
+boot_start = true
+
+# Auto-start and auto-stop with shell hook
+# This means the daemon will start when entering a directory with pitchfork installed
+# and stop when leaving it
+auto = ["start", "stop"]
+
+# Retry configuration: retry 3 times on failure
+retry = 3
+
+# Ready check: wait 3 seconds before considering ready
+ready_delay = 3
+
+# Wait for the server to be ready by checking if it's listening on the default port
+ready_port = 4096
+
+# Hooks
+[daemons.opencode-server.hooks]
+# Optional: Send a notification when the server is ready
+on_ready = "echo 'OpenCode server is ready on port 4096'"
+# Optional: Log when the server fails after all retries
+on_fail = "echo 'OpenCode server failed to start'"
