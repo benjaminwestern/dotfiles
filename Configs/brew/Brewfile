@@ -30,6 +30,7 @@ brew "htop" # Interactive process viewer
 brew "nmap" # Network discovery and security auditing
 brew "gum" # Tool for glamorous shell scripts
 brew "tokei" # Code counter based on language
+brew "caddy" # Proxy CLI tool
 brew "duckdb" # In-process SQL OLAP database
 brew "mysql-client" # MySQL client
 brew "youplot" # Command line plotting tool
@@ -54,7 +55,7 @@ brew "tlrc" # TLDR for common terminal commands
 # Standard Apps
 cask "ghostty" # Terminal Emulator
 cask "google-chrome" # Web Browser
-cask "docker" # Containerisation Platform
+cask "docker-desktop" # Containerisation Platform
 cask "maccy" # Clipboard Manager
 cask "dbngin" # Database GUI
 cask "visual-studio-code" # Code Editor

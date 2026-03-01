@@ -19,9 +19,20 @@ ready_delay = 3
 # Wait for the server to be ready by checking if it's listening on the default port
 ready_port = 4096
 
+# Caddy reverse proxy for OpenCode server
+[daemons.caddy-proxy]
+run = "caddy run --config /Users/benjaminwestern/.config/pitchfork/Caddyfile"
+boot_start = true
+auto = ["start", "stop"]
+retry = 3
+ready_delay = 2
+
 # Hooks
 [daemons.opencode-server.hooks]
 # Optional: Send a notification when the server is ready
 on_ready = "echo 'OpenCode server is ready on port 4096'"
 # Optional: Log when the server fails after all retries
 on_fail = "echo 'OpenCode server failed to start'"
+
+[daemons.caddy-proxy.hooks]
+on_ready = "echo 'Caddy reverse proxy is running on 0.0.0.0:80 -> localhost:4096'"
