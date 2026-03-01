@@ -39,6 +39,7 @@ pnpm = "latest" # Node Package Manager
 "npm:@google/gemini-cli" = "nightly"
 "npm:opencode-ai" = "latest"
 "npm:@sourcegraph/amp" = "latest"
+"npm:@playwright/cli" = "latest"
 
 python = "latest"
 uv = "latest"
