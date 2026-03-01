@@ -277,7 +277,9 @@ For detailed information on specific topics, load the relevant reference:
 6. **Apply consistent styling** - Use the professional color palette
 7. **Use vars for reusable values** - Define colors, names in vars section
 8. **Leverage globs for global changes** - Apply styles to multiple shapes at once
-9. **Quote labels with special characters** - Always wrap labels containing slashes, spaces, SQL, or URLs in double quotes: `BackendAPI -> Database: "SELECT * FROM users WHERE id = ?"`
+9. **Quote labels with special characters** - Always wrap labels containing slashes, spaces, SQL, URLs, or `%` in double quotes: `BackendAPI -> Database: "SELECT * FROM users WHERE id = ?"`
+10. **Classes and labels are separate** - Use `Node: {class: myclass; label: text}` syntax with semicolon separator
+11. **Groups wrap connections, not define them** - Use `group name: { actor -> actor: message }` for grouping sequences
 
 ## Debugging
 
@@ -287,10 +289,14 @@ If D2 compilation fails:
 2. **Ensure no trailing colons without values**
 3. **Verify all shapes are properly closed**
 4. **Block strings must be terminated** - Closing `|` on its own line
-5. **Use double quotes for special characters** - `$`, `#`, etc.
+5. **Use double quotes for special characters** - `$`, `#`, `%`, etc.
 6. **Check glob filter syntax** - Use `&` for filters, `!&` for inverse
-7. **Quote connection labels with special characters** - Labels containing `/`, `?`, `=`, SQL keywords (SELECT, FROM, WHERE), or paths MUST be quoted:
+7. **Quote connection labels with special characters** - Labels containing `/`, `?`, `=`, `%`, SQL keywords (SELECT, FROM, WHERE), or paths MUST be quoted:
    - ❌ `BackendAPI -> Database: GET /api/users?id=123`
    - ✅ `BackendAPI -> Database: "GET /api/users?id=123"`
    - ❌ `BackendAPI -> Database: SELECT * FROM users`
    - ✅ `BackendAPI -> Database: "SELECT * FROM users"`
+   - ❌ `Backend -> DB: Sample 50% of data`
+   - ✅ `Backend -> DB: "Sample 50% of data"`
+8. **Cannot create edge inside edge** - In sequence diagrams with `group`, define the connections inside the group, don't nest groups within connection labels
+9. **Invalid text beginning unquoted key** - When using semicolons in labels (e.g., `AGN-01; Router`), the parser may fail - use separate label field or quotes

@@ -307,3 +307,65 @@ posts: {
 
 users.id -> posts.user_id: {style.stroke: "#00205C"}
 ```
+
+## Example 10: Multi-Agent System with Groups and Error Handling
+
+Complete example showing proper group syntax, classes with labels, and quoted special characters:
+
+```d2
+shape: sequence_diagram
+
+direction: right
+
+classes: {
+  user: {
+    shape: person
+    style.fill: "#66CAD8"
+    style.stroke: "#2A2A33"
+  }
+  agent: {
+    style.fill: "#9FA7D0"
+    style.stroke: "#2A2A33"
+  }
+  external: {
+    shape: cloud
+    style.fill: "#00A7E1"
+    style.stroke: "#2A2A33"
+  }
+}
+
+User: {class: user}
+Router: {class: agent; label: AGN-01 Router}
+Intent: {class: agent; label: AGN-02 Intent}
+Writer: {class: agent; label: AGN-03 Writer}
+Executor: {class: agent; label: AGN-04 Executor}
+BigQuery: {class: external; label: BigQuery MCP}
+
+User -> Router: Natural language query
+Router -> Router: Classify intent
+Router -> Intent: Route to Intent Agent
+
+Intent -> BigQuery: "SELECT * FROM tables"
+BigQuery --> Intent: Schema metadata
+
+Intent -> Writer: Contextualized intent
+Writer -> Writer: Generate SQL with "TABLESAMPLE 1%"
+Writer -> Executor: SQL query and context
+
+Executor -> BigQuery: Execute dry-run
+BigQuery --> Executor: Estimated bytes
+
+group Validation Fails {
+  Executor -> Writer: Return errors
+  Writer -> Executor: Regenerated SQL
+}
+
+group Expensive Query {
+  Executor -> User: Request confirmation
+  User --> Executor: Approve
+}
+
+Executor -> BigQuery: Execute query
+BigQuery --> Executor: Results and metadata
+Executor --> User: Natural language response
+```

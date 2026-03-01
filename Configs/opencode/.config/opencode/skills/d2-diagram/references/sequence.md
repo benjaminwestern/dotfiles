@@ -48,6 +48,8 @@ bob.span: {
 
 ## Groups (Fragments)
 
+Groups organize related messages in sequence diagrams. **Important**: Groups wrap connections, they don't define them.
+
 ```d2
 shape: sequence_diagram
 
@@ -63,6 +65,46 @@ group shower thoughts: {
   alice -> bob: what did you have for lunch?
   bob -> alice: that's personal
 }
+```
+
+**Common mistake**: Don't try to put connection definitions with labels inside braces on the same line:
+```d2
+# ❌ WRONG - cannot create edge inside edge
+alice -> bob: message {
+  style.stroke: red
+}
+
+# ✅ CORRECT - group wraps the connections
+group error flow: {
+  alice -> bob: message
+}
+```
+
+## Classes with Labels
+
+When applying classes and custom labels, use the `{class: name; label: text}` syntax with semicolon separator:
+
+```d2
+shape: sequence_diagram
+
+classes: {
+  agent: {
+    style.fill: "#9FA7D0"
+  }
+  external: {
+    shape: cloud
+    style.fill: "#00A7E1"
+  }
+}
+
+# Apply class and custom label
+AGN01: {class: agent; label: AGN-01 Router}
+AGN02: {class: agent; label: AGN-02 Intent}
+BigQuery: {class: external; label: BigQuery MCP}
+
+User -> AGN01: Send request
+AGN01 -> AGN02: Route to agent
+AGN02 -> BigQuery: Execute query
 ```
 
 ## Notes
@@ -174,3 +216,23 @@ Database --> Backend: User data
 Backend --> Frontend: Auth token
 Frontend --> User: Login success
 ```
+
+## Quoting Labels with Special Characters
+
+Always quote labels containing special characters like `%`, SQL keywords, URLs, or paths:
+
+```d2
+shape: sequence_diagram
+
+Backend -> Database: "SELECT * FROM users WHERE pct = 50%"
+API -> Service: "POST /api/v1/users?id=123&active=true"
+Service -> Cache: "Sample 1% of data"
+```
+
+**Characters requiring quotes:**
+- `%` (percent sign)
+- SQL keywords: `SELECT`, `FROM`, `WHERE`, `INSERT`, etc.
+- URL characters: `/`, `?`, `&`, `=`
+- Braces: `{`, `}`
+- Semicolons: `;`
+- Hash: `#`
