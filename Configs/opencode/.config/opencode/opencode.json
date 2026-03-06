@@ -50,6 +50,14 @@
       "type": "local",
       "command": ["terraform-mcp-server"],
       "enabled": true
+    },
+    "google-developer-knowledge": {
+      "type": "remote",
+      "url": "https://developerknowledge.googleapis.com/mcp",
+      "enabled": false,
+      "headers": {
+        "X-Goog-Api-Key": "{env:GOOGLE_MCP_DEV_SERVER_API_KEY}"
+      }
     }
   }
 }

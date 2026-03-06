@@ -10,6 +10,7 @@ trusted_config_paths = [
 [env]
 _.file = "~/.config/mise/.env"
 OPENCODE_ENABLE_EXPERIMENTAL_MODELS = "true"
+PITCHFORK_WEB_PORT=19876
 EDITOR = "nvim"
 
 [tools]
@@ -40,6 +41,7 @@ pnpm = "latest" # Node Package Manager
 "npm:opencode-ai" = "latest"
 "npm:@sourcegraph/amp" = "latest"
 "npm:@playwright/cli" = "latest"
+"npm:@googleworkspace/cli" = "latest"
 
 python = "latest"
 uv = "latest"
