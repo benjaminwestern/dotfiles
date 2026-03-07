@@ -1,6 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-gemini-auth"],
+  "plugin": ["opencode-gemini-auth", "file:///Users/benjaminwestern/.config/opencode/plugins/mise.ts"],
   "model": "google/gemini-3-flash-preview",
   "share": "disabled",
   "provider": {
@@ -52,6 +52,7 @@
       "enabled": true
     },
     "google-developer-knowledge": {
+      /* https://developers.google.com/knowledge/mcp#gemini-code-assist */
       "type": "remote",
       "url": "https://developerknowledge.googleapis.com/mcp",
       "enabled": false,
