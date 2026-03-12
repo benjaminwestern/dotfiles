@@ -42,6 +42,7 @@ pnpm = "latest" # Node Package Manager
 "npm:@sourcegraph/amp" = "latest"
 "npm:@playwright/cli" = "latest"
 "npm:@googleworkspace/cli" = "latest"
+"npm:@openai/codex" = "latest"
 
 python = "latest"
 uv = "latest"

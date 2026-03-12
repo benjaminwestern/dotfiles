@@ -36,17 +36,34 @@
     "webfetch": "allow"
   },
   "mcp": {
+    "atlassian": {
+      /*https://github.com/sooperset/mcp-atlassian*/
+      "type": "local",
+      "command": ["uvx", "mcp-atlassian"],
+      "enabled": true,
+      "environment": {
+        "JIRA_URL": "{env:ATLASSIAN_JIRA_URL}",
+        "JIRA_USERNAME": "{env:ATLASSIAN_USERNAME}",
+        "JIRA_API_TOKEN": "{env:ATLASSIAN_API_TOKEN}",
+        "CONFLUENCE_URL": "{env:ATLASSIAN_CONFLUENCE_URL}",
+        "CONFLUENCE_USERNAME": "{env:ATLASSIAN_USERNAME}",
+        "CONFLUENCE_API_TOKEN": "{env:ATLASSIAN_API_TOKEN}"
+      }
+    },
     "chrome-dev-tools": {
+      /*https://github.com/ChromeDevTools/chrome-devtools-mcp*/
       "type": "local",
       "command": ["bunx", "-y", "chrome-devtools-mcp@latest"],
       "enabled": false
     },
     "firebase": {
+      /*https://firebase.google.com/docs/ai-assistance/mcp-server*/
       "type": "local",
       "command": ["bunx", "-y", "firebase-tools@latest", "experimental:mcp"],
       "enabled": false
     },
     "terraform": {
+      /*https://github.com/hashicorp/terraform-mcp-server*/
       "type": "local",
       "command": ["terraform-mcp-server"],
       "enabled": true
@@ -55,10 +72,10 @@
       /* https://developers.google.com/knowledge/mcp#gemini-code-assist */
       "type": "remote",
       "url": "https://developerknowledge.googleapis.com/mcp",
-      "enabled": false,
       "headers": {
         "X-Goog-Api-Key": "{env:GOOGLE_MCP_DEV_SERVER_API_KEY}"
-      }
+      },
+      "enabled": true
     }
   }
 }
