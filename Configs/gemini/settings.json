@@ -1,0 +1,62 @@
+{
+  "general": {
+    "preferredEditor": "neovim",
+    "previewFeatures": true,
+    "enableNotifications": true,
+    "sessionRetention": {
+      "enabled": false
+    }
+  },
+  "security": {
+    "auth": {
+      "selectedType": "oauth-personal"
+    },
+    "enablePermanentToolApproval": true,
+    "autoAddToPolicyByDefault": true
+  },
+  "ui": {
+    "theme": "Dracula",
+    "showModelInfoInChat": true,
+    "inlineThinkingMode": "full",
+    "showStatusInTitle": true,
+    "hideTips": true,
+    "showHomeDirectoryWarning": false,
+    "footer": {
+      "hideContextPercentage": false
+    },
+    "showMemoryUsage": true,
+    "showCitations": true,
+    "loadingPhrases": "all",
+    "errorVerbosity": "full"
+  },
+  "tools": {
+    "enableToolOutputTruncation": false,
+    "shell": {
+      "showColor": true
+    }
+  },
+  "experimental": {
+    "gemmaModelRouter": {},
+    "modelSteering": true,
+    "directWebFetch": true,
+    "topicUpdateNarration": true
+  },
+  "model": {
+    "name": "auto-gemini-3",
+    "compressionThreshold": 0.7
+  },
+  "billing": {
+    "overageStrategy": "ask"
+  },
+  "mcpServers": {
+    "terraform": {
+      "command": "terraform-mcp-server"
+    },
+    "google-developer-knowledge": {
+      "url": "https://developerknowledge.googleapis.com/mcp",
+      "headers": {
+        "X-Goog-Api-Key": "$GOOGLE_MCP_DEV_SERVER_API_KEY"
+      }
+    }
+  }
+}
