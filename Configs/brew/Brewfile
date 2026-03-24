@@ -23,6 +23,7 @@ brew "zoxide" # Smart cd command
 brew "fzf" # Fuzzy finder
 brew "fd" # File searcher
 brew "ripgrep" # Search tool using regex
+brew "worktrunk"
 
 # Additional CLI tools from current install
 brew "make" # Build automation tool
