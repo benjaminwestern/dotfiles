@@ -10,9 +10,14 @@ brew "fisher" # Plugin manager for the Fish shell
 brew "neovim" # Neovim text editor
 brew "macchina" # System Information like neofetch
 brew "graphviz" # Required for Flamegraph etc using pprof
+brew "lazygit" # Terminal UI for git commands
+
+# AI Tools
 brew "terraform-mcp-server" # Official Terraform MCP Server
 brew "mcp-toolbox" # Official GenAI Toolbox for Databases from Google
-brew "lazygit" # Terminal UI for git commands
+brew "gemini-cli"
+cask "claude-code"
+cask "codex"
 
 # Core Shell Utilities (moved from mise to break circular dependency)
 brew "jq" # JSON processor
@@ -49,23 +54,30 @@ brew "sevenzip" # 7-Zip is a file archiver with a high compression ratio
 brew "poppler" # PDF rendering library
 brew "resvg" # SVG rendering tool and library
 brew "imagemagick" # Tools and libraries to manipulate images in many formats
-cask "font-symbols-only-nerd-font" # Symbols Nerd Font
 brew "yazi" # Terminal file manager written in Rust, based on async I/O
 brew "tlrc" # TLDR for common terminal commands
 
-# Standard Apps
-cask "ghostty" # Terminal Emulator
-cask "google-chrome" # Web Browser
-cask "docker-desktop" # Containerisation Platform
-cask "maccy" # Clipboard Manager
-cask "dbngin" # Database GUI
-cask "visual-studio-code" # Code Editor
+# GUI applications — gated on HOMEBREW_GUI env var
+# Set HOMEBREW_GUI=true to install desktop apps, window manager, and fonts
+# Omit for headless/server setups
+if ENV['HOMEBREW_GUI']
+  # Fonts
+  cask "font-symbols-only-nerd-font" # Symbols Nerd Font
 
-# Window Management
-tap "nikitabobko/tap" # Tap for aerospace
-tap "FelixKratz/formulae" # Tap for borders
-cask "aerospace" # Window Manager
-brew "felixkratz/formulae/borders" # Window Highlighting
+  # Standard Apps
+  cask "ghostty" # Terminal Emulator
+  cask "google-chrome" # Web Browser
+  cask "docker-desktop" # Containerisation Platform
+  cask "maccy" # Clipboard Manager
+  cask "dbngin" # Database GUI
+  cask "visual-studio-code" # Code Editor
+
+  # Window Management
+  tap "nikitabobko/tap" # Tap for aerospace
+  tap "FelixKratz/formulae" # Tap for borders
+  cask "aerospace" # Window Manager
+  brew "felixkratz/formulae/borders" # Window Highlighting
+end
 
 if ENV['HOMEBREW_WORK_APPS'] == "true"
   cask "microsoft-edge"

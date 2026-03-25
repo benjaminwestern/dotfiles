@@ -1,0 +1,4 @@
+worktree-path = "~/code/worktrees/{{ repo }}/{{ branch | sanitize }}"
+
+[post-start]
+copy = "wt step copy-ignored"
