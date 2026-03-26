@@ -11,10 +11,24 @@ set fish_greeting ""
 # end
 #
 
+# Add ~/.local/bin to PATH
+if test -d "$HOME/.local/bin"
+    fish_add_path "$HOME/.local/bin"
+end
+
 # Initialise mise
-~/.local/bin/mise activate fish | source
+if command -v mise >/dev/null 2>&1
+  mise activate fish | source
+end
+
+# Initialise worktrunk
+if command -v wt >/dev/null 2>&1
+  command wt config shell init fish | source
+end
 
 # Load zoxide
-zoxide init --cmd cd fish | source
+if command -v zoxide &> /dev/null
+  zoxide init --cmd cd fish | source
+end
 
 # macchina

@@ -2,3 +2,7 @@ worktree-path = "~/code/worktrees/{{ repo }}/{{ branch | sanitize }}"
 
 [post-start]
 copy = "wt step copy-ignored"
+mise = "if [ -f mise.toml ]; then mise trust && mise up; fi"
+
+[post-switch]
+mise = "if [ -f mise.toml ]; then mise up; fi"

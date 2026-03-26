@@ -4,4 +4,4 @@ SETUVAR __fish_initialized:4300
 SETUVAR _fisher_dracula_2F_fish_files:\x7e/\x2econfig/fish/themes/Dracula\x20Official\x2etheme\x1e\x7e/\x2econfig/fish/conf\x2ed/dracula\x2efish
 SETUVAR _fisher_plugins:dracula/fish
 SETUVAR _fisher_upgraded_to_4_4:\x1d
-SETUVAR fish_user_paths:/opt/homebrew/bin\x1e/opt/homebrew/sbin\x1e/Applications/Ghostty\x2eapp/Contents/MacOS
+SETUVAR fish_user_paths:/Users/benjaminwestern/\x2elocal/bin\x1e/opt/homebrew/bin\x1e/opt/homebrew/sbin\x1e/Applications/Ghostty\x2eapp/Contents/MacOS
