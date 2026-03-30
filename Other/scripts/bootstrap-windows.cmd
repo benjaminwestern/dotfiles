@@ -13,6 +13,10 @@ if /I "%~1"=="foundation" (
   set "MODE=audit"
   set "TARGET=%SCRIPT_DIR%audit-windows.ps1"
   shift
+) else if /I "%~1"=="resign" (
+  set "MODE=resign"
+  set "TARGET=%SCRIPT_DIR%resign-windows.ps1"
+  shift
 ) else if /I "%~1"=="personal" (
   set "MODE=personal"
   set "TARGET=%SCRIPT_DIR%personal-bootstrap-windows.ps1"

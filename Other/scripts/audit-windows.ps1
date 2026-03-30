@@ -425,17 +425,36 @@ function Invoke-AuditSigning {
   } else {
     $null
   }
+  $profileState = if ($profileSignature) { $profileSignature.Status.ToString() } else { 'profile missing' }
+  $policyContext = $EffectivePolicy.ToString()
+  $scoopDetail = "$($scoopAudit.total) total, $($scoopAudit.unsigned_count) unsigned"
+  $miseDetail = "$($miseAudit.total) total, $($miseAudit.unsigned_count) unsigned"
+  $dotfilesDetail = "$($dotfilesAudit.total) total, $($dotfilesAudit.unsigned_count) unsigned"
+  if (-not $RequiresSigning) {
+    if ($scoopAudit.unsigned_count -gt 0) { $scoopDetail += " (informational under $policyContext)" }
+    if ($miseAudit.unsigned_count -gt 0) { $miseDetail += " (informational under $policyContext)" }
+    if ($dotfilesAudit.unsigned_count -gt 0) { $dotfilesDetail += " (informational under $policyContext)" }
+  }
+  $profileDisplay = switch ($profileState) {
+    'NotSigned' {
+      if ($RequiresSigning) {
+        'NotSigned'
+      } else {
+        "NotSigned (informational under $policyContext)"
+      }
+    }
+    default { $profileState }
+  }
 
   Write-AuditLine 'Effective policy:' $EffectivePolicy.ToString()
   Write-AuditLine 'Signing required:' $(if ($RequiresSigning) { 'yes' } else { 'no' })
   Write-AuditLine 'Local signing cert:' $(if ($cert) { "present (expires $($cert.NotAfter.ToString('yyyy-MM-dd')))" } else { 'absent' })
-  Write-AuditLine 'Scoop .ps1 files:' "$($scoopAudit.total) total, $($scoopAudit.unsigned_count) unsigned"
-  Write-AuditLine 'mise .ps1 files:' "$($miseAudit.total) total, $($miseAudit.unsigned_count) unsigned"
-  Write-AuditLine 'Dotfiles .ps1 files:' "$($dotfilesAudit.total) total, $($dotfilesAudit.unsigned_count) unsigned"
-  Write-AuditLine 'Profile signature:' $(if ($profileSignature) { $profileSignature.Status.ToString() } else { 'profile missing' })
+  Write-AuditLine 'Scoop .ps1 files:' $scoopDetail
+  Write-AuditLine 'mise .ps1 files:' $miseDetail
+  Write-AuditLine 'Dotfiles .ps1 files:' $dotfilesDetail
+  Write-AuditLine 'Profile signature:' $profileDisplay
 
   if ($RequiresSigning) {
-    $profileState = if ($profileSignature) { $profileSignature.Status.ToString() } else { 'profile missing' }
     $overall = if ($scoopAudit.unsigned_count -eq 0 -and $miseAudit.unsigned_count -eq 0 -and $dotfilesAudit.unsigned_count -eq 0 -and $profileState -eq 'Valid') {
       'all signable Scoop, mise, dotfiles scripts, and pwsh profile are signed'
     } else {
@@ -443,17 +462,11 @@ function Invoke-AuditSigning {
     }
     Write-AuditLine 'Overall:' $overall
   } else {
-    $profileState = if ($profileSignature) { $profileSignature.Status.ToString() } else { 'profile missing' }
     $unsignedCounts = $scoopAudit.unsigned_count + $miseAudit.unsigned_count + $dotfilesAudit.unsigned_count
-    $profilePhrase = switch ($profileState) {
-      'Valid' { 'pwsh profile is signed' }
-      'NotSigned' { 'pwsh profile remains unsigned' }
-      default { "pwsh profile status is $profileState" }
-    }
-    if ($unsignedCounts -eq 0) {
-      Write-AuditLine 'Overall:' "all signable Scoop, mise, and dotfiles scripts are signed; $profilePhrase"
+    if ($unsignedCounts -eq 0 -and $profileState -eq 'Valid') {
+      Write-AuditLine 'Overall:' "signing is optional under $policyContext; all signable scripts and the pwsh profile are signed"
     } else {
-      Write-AuditLine 'Overall:' "$unsignedCounts unsigned Scoop/mise/dotfiles script(s) found; $profilePhrase"
+      Write-AuditLine 'Overall:' "signing is optional under $policyContext; unsigned script counts and pwsh profile status are reported for visibility only"
     }
   }
 }
