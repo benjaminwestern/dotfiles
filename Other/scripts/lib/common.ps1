@@ -33,6 +33,7 @@ $global:STATE_FILE_PATH = Join-Path $HOME '.config\dotfiles\state.env'
 # -- Status symbols -----------------------------------------------------------
 # Unicode glyphs used by the Write-Status* functions.
 $global:STATUS_SYM_PASS = [char]0x2713   # check mark
+$global:STATUS_SYM_FIX  = '!'            # remediation marker
 $global:STATUS_SYM_FAIL = [char]0x2717   # ballot x
 $global:STATUS_SYM_SKIP = [char]0x25CB   # white circle
 
@@ -205,7 +206,7 @@ function global:Write-StatusFix {
   )
   $global:_STATUS_FIXED++
   $actionPart = if ($Action) { "-- $Action" } else { '' }
-  $line = "  $STATUS_SYM_FAIL {0,-45} {1}" -f $Description, $actionPart
+  $line = "  $STATUS_SYM_FIX {0,-45} {1}" -f $Description, $actionPart
   Write-Host $line -ForegroundColor Yellow
 }
 
@@ -564,7 +565,8 @@ function global:Resolve-AllFlags {
     [string]$CliShell   = '',
     [string]$CliProfile = '',
     [hashtable]$EnableFlags  = @{},
-    [hashtable]$DisableFlags = @{}
+    [hashtable]$DisableFlags = @{},
+    $ZscalerDetection = $null
   )
 
   # Read current state file
@@ -586,12 +588,22 @@ function global:Resolve-AllFlags {
   if ($DisableFlags.ContainsKey('MISE_TOOLS')) { $cliMiseTools = 'false' }
 
   # Resolve feature flags
-  $global:RESOLVED_ZSCALER = Resolve-Setting `
-    -CliVal $cliZscaler `
-    -EnvVal ($env:ENABLE_ZSCALER) `
-    -StateVal ($state['ENABLE_ZSCALER']) `
-    -ProfileDefault (Get-ProfileDefault -Profile_ $global:RESOLVED_PROFILE -FlagKey 'ENABLE_ZSCALER') `
-    -HardDefault 'false'
+  if ($null -ne $ZscalerDetection) {
+    $global:RESOLVED_ZSCALER = Resolve-ZscalerSetting `
+      -CliVal $cliZscaler `
+      -EnvVal ($env:ENABLE_ZSCALER) `
+      -StateVal ($state['ENABLE_ZSCALER']) `
+      -ProfileDefault (Get-ProfileDefault -Profile_ $global:RESOLVED_PROFILE -FlagKey 'ENABLE_ZSCALER') `
+      -HardDefault 'false' `
+      -Detection $ZscalerDetection
+  } else {
+    $global:RESOLVED_ZSCALER = Resolve-Setting `
+      -CliVal $cliZscaler `
+      -EnvVal ($env:ENABLE_ZSCALER) `
+      -StateVal ($state['ENABLE_ZSCALER']) `
+      -ProfileDefault (Get-ProfileDefault -Profile_ $global:RESOLVED_PROFILE -FlagKey 'ENABLE_ZSCALER') `
+      -HardDefault 'false'
+  }
 
   $global:RESOLVED_MISE_TOOLS = Resolve-Setting `
     -CliVal $cliMiseTools `
@@ -621,7 +633,296 @@ function global:Export-BrewEnvVars {
 
 
 # =============================================================================
-# SECTION 7: MANAGED BLOCK WRITER
+# SECTION 7: WINDOWS HELPERS
+# =============================================================================
+
+function global:Get-WindowsTerminalSettingsPath {
+  $candidates = @(
+    (Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json'),
+    (Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState\settings.json'),
+    (Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal\settings.json')
+  )
+
+  foreach ($candidate in $candidates) {
+    if ($candidate -and (Test-Path $candidate)) {
+      return $candidate
+    }
+  }
+
+  return $null
+}
+
+function global:Get-WindowsTerminalSettingsObject {
+  $settingsPath = Get-WindowsTerminalSettingsPath
+  if (-not $settingsPath) { return $null }
+
+  try {
+    $raw = Get-Content $settingsPath -Raw -ErrorAction Stop
+    if (-not $raw.Trim()) {
+      return $null
+    }
+    return ($raw | ConvertFrom-Json)
+  } catch {
+    return $null
+  }
+}
+
+function global:Get-WindowsTerminalProfileByGuid {
+  param(
+    [Parameter(Mandatory)]$SettingsObject,
+    [Parameter(Mandatory)][string]$Guid
+  )
+
+  $profiles = @()
+  if ($SettingsObject.profiles -and $SettingsObject.profiles.list) {
+    $profiles = @($SettingsObject.profiles.list)
+  }
+
+  foreach ($profile in $profiles) {
+    if ($profile.guid -and [string]::Equals($profile.guid, $Guid, [System.StringComparison]::OrdinalIgnoreCase)) {
+      return $profile
+    }
+  }
+
+  return $null
+}
+
+function global:Get-WindowsTerminalPwshProfile {
+  param([Parameter(Mandatory)]$SettingsObject)
+
+  $profiles = @()
+  if ($SettingsObject.profiles -and $SettingsObject.profiles.list) {
+    $profiles = @($SettingsObject.profiles.list)
+  }
+
+  foreach ($profile in $profiles) {
+    if ($profile.source -eq 'Windows.Terminal.PowershellCore') {
+      return $profile
+    }
+  }
+
+  foreach ($profile in $profiles) {
+    $commandLine = ''
+    if ($profile.PSObject.Properties.Name -contains 'commandline') {
+      $commandLine = $profile.commandline
+    } elseif ($profile.PSObject.Properties.Name -contains 'commandLine') {
+      $commandLine = $profile.commandLine
+    }
+
+    if ($commandLine -and $commandLine -match '(^|[\\/])pwsh(\.exe)?(\s|$)') {
+      return $profile
+    }
+  }
+
+  return $null
+}
+
+function global:Get-MiseDoctorJson {
+  if (-not (Test-CommandExists 'mise')) {
+    return $null
+  }
+
+  try {
+    $raw = mise doctor --json 2>$null
+    if (-not $raw) { return $null }
+    return ($raw | ConvertFrom-Json)
+  } catch {
+    return $null
+  }
+}
+
+function global:Get-InteractivePwshMiseDoctorJson {
+  if (-not (Test-CommandExists 'pwsh')) {
+    return $null
+  }
+
+  try {
+    $raw = pwsh -NoLogo -Command 'mise doctor --json' 2>$null
+    if (-not $raw) { return $null }
+    return ($raw | ConvertFrom-Json)
+  } catch {
+    return $null
+  }
+}
+
+function global:Remove-MiseInstallPathsFromSessionPath {
+  if (-not $env:PATH) { return }
+
+  $segments = @()
+  foreach ($segment in ($env:PATH -split ';')) {
+    if (-not $segment) { continue }
+
+    $normalized = $segment -replace '/', '\'
+    if ($normalized -match '(?i)\\AppData\\Local\\mise\\installs\\') {
+      continue
+    }
+
+    $segments += $segment
+  }
+
+  $env:PATH = ($segments -join ';')
+}
+
+function global:Get-ZscalerDetection {
+  $result = [pscustomobject]@{
+    detected             = $false
+    detection_sources    = @()
+    live_tls_checked     = $false
+    live_tls_detected    = $false
+    live_tls_host        = ''
+    live_tls_subject     = ''
+    live_tls_issuer      = ''
+    store_detected       = $false
+    store_cert_count     = 0
+    store_certs          = @()
+  }
+
+  $hosts = @(
+    'example.com',
+    'httpbin.org',
+    'www.python.org',
+    'www.cloudflare.com',
+    'api.ipify.org',
+    'github.com',
+    'www.google.com',
+    'www.microsoft.com'
+  )
+
+  foreach ($hostName in $hosts) {
+    $result.live_tls_checked = $true
+    $tcpClient = $null
+    $sslStream = $null
+
+    try {
+      $tcpClient = [System.Net.Sockets.TcpClient]::new()
+      $tcpClient.Connect($hostName, 443)
+      $sslStream = [System.Net.Security.SslStream]::new($tcpClient.GetStream(), $false, { $true })
+      $sslStream.AuthenticateAsClient($hostName)
+
+      if ($sslStream.RemoteCertificate) {
+        $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($sslStream.RemoteCertificate)
+        $subject = [string]$certificate.Subject
+        $issuer = [string]$certificate.Issuer
+
+        if ($subject -match 'Zscaler' -or $issuer -match 'Zscaler') {
+          $result.live_tls_detected = $true
+          $result.live_tls_host = $hostName
+          $result.live_tls_subject = $subject
+          $result.live_tls_issuer = $issuer
+          break
+        }
+      }
+    } catch {
+      continue
+    } finally {
+      if ($sslStream) { $sslStream.Dispose() }
+      if ($tcpClient) { $tcpClient.Dispose() }
+    }
+  }
+
+  $storePaths = @(
+    'Cert:\CurrentUser\Root',
+    'Cert:\LocalMachine\Root',
+    'Cert:\CurrentUser\CA',
+    'Cert:\LocalMachine\CA'
+  )
+
+  $storeCerts = @()
+  foreach ($storePath in $storePaths) {
+    try {
+      $matches = Get-ChildItem $storePath -ErrorAction Stop |
+        Where-Object { $_.Subject -match 'Zscaler' -or $_.Issuer -match 'Zscaler' }
+      foreach ($match in $matches) {
+        $storeCerts += [pscustomobject]@{
+          store      = $storePath
+          subject    = [string]$match.Subject
+          issuer     = [string]$match.Issuer
+          thumbprint = [string]$match.Thumbprint
+          not_after  = $match.NotAfter.ToString('yyyy-MM-dd')
+        }
+      }
+    } catch {
+      continue
+    }
+  }
+
+  $result.store_certs = $storeCerts
+  $result.store_cert_count = $storeCerts.Count
+  $result.store_detected = $storeCerts.Count -gt 0
+
+  $sources = @()
+  if ($result.live_tls_detected) { $sources += 'live_tls' }
+  if ($result.store_detected) { $sources += 'cert_store' }
+
+  $result.detection_sources = $sources
+  $result.detected = $sources.Count -gt 0
+  return $result
+}
+
+function global:Resolve-ZscalerSetting {
+  param(
+    [string]$CliVal = '',
+    [string]$EnvVal = '',
+    [string]$StateVal = '',
+    [string]$ProfileDefault = '',
+    [string]$HardDefault = 'false',
+    $Detection = $null
+  )
+
+  $liveTlsDetected = [bool]($Detection -and $Detection.live_tls_detected)
+  $anyDetected = [bool]($Detection -and $Detection.detected)
+
+  $resolveValue = {
+    param(
+      [string]$Value,
+      [string]$SourceName
+    )
+
+    if (-not $Value) { return $null }
+
+    switch ($Value) {
+      'true' { return 'true' }
+      'false' {
+        if ($SourceName -in @('state', 'profile', 'default') -and $liveTlsDetected) {
+          return 'true'
+        }
+        return 'false'
+      }
+      'auto' {
+        if ($anyDetected) {
+          return 'true'
+        }
+        return 'false'
+      }
+      default {
+        return $Value
+      }
+    }
+  }
+
+  foreach ($candidate in @(
+    @{ Value = $CliVal; Source = 'cli' },
+    @{ Value = $EnvVal; Source = 'env' },
+    @{ Value = $StateVal; Source = 'state' },
+    @{ Value = $ProfileDefault; Source = 'profile' },
+    @{ Value = $HardDefault; Source = 'default' }
+  )) {
+    $resolved = & $resolveValue $candidate.Value $candidate.Source
+    if ($resolved) {
+      return $resolved
+    }
+  }
+
+  if ($liveTlsDetected) {
+    return 'true'
+  }
+
+  return 'false'
+}
+
+
+# =============================================================================
+# SECTION 8: MANAGED BLOCK WRITER
 # =============================================================================
 
 function global:Write-ManagedBlock {

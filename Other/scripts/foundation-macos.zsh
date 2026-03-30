@@ -509,9 +509,19 @@ node = "latest"
 bun = "latest"
 python = "latest"
 uv = "latest"
+zig = "latest"
 terraform = "latest"
 gcloud = "latest"
 usage = "latest"
+pkl = "latest"
+hk = "latest"
+fnox = "latest"
+"go:oss.terrastruct.com/d2" = { version = "latest" }
+"go:github.com/charmbracelet/glow" = { version = "latest" }
+"go:github.com/charmbracelet/freeze" = { version = "latest" }
+"go:github.com/charmbracelet/vhs" = { version = "latest" }
+"npm:opencode-ai" = "latest"
+"npm:@playwright/cli" = "latest"
 # <<< foundation-seed <<<
 EOF
 }
