@@ -45,7 +45,11 @@ $FoundationPackages = @(
 )
 
 $EffectiveExecutionPolicy = Get-ExecutionPolicy
-$RequiresSigning = $EffectiveExecutionPolicy -eq 'AllSigned'
+$RequiresSigning = @(
+  (Get-ExecutionPolicy -Scope CurrentUser),
+  (Get-ExecutionPolicy -Scope Process),
+  $EffectiveExecutionPolicy
+) -contains 'AllSigned'
 
 $MiseConfigDir  = Join-Path $HOME '.config\mise'
 $MiseConfigPath = Join-Path $MiseConfigDir 'config.toml'
@@ -310,10 +314,27 @@ function Get-BaseCaBundlePath {
     $opensslRoot = Split-Path -Parent $opensslBinDir
     $candidates += @(
       (Join-Path $opensslRoot 'cert.pem'),
+      (Join-Path $opensslRoot 'cacert.pem'),
+      (Join-Path $opensslRoot 'ssl\cert.pem'),
+      (Join-Path $opensslRoot 'certs\ca-bundle.crt'),
+      (Join-Path $opensslRoot 'certs\ca-certificates.crt'),
       (Join-Path $opensslBinDir 'curl-ca-bundle.crt'),
+      (Join-Path $opensslBinDir 'cacert.pem'),
+      (Join-Path $opensslBinDir 'cert.pem'),
       (Join-Path $HOME 'scoop\apps\openssl\current\cert.pem'),
-      (Join-Path $HOME 'scoop\apps\openssl\current\bin\curl-ca-bundle.crt')
+      (Join-Path $HOME 'scoop\apps\openssl\current\bin\curl-ca-bundle.crt'),
+      (Join-Path $HOME 'scoop\apps\openssl\current\bin\cacert.pem')
     )
+
+    $opensslDirOutput = openssl version -d 2>$null
+    if ($opensslDirOutput -match '"([^"]+)"') {
+      $opensslDir = $matches[1]
+      $candidates += @(
+        (Join-Path $opensslDir 'cert.pem'),
+        (Join-Path $opensslDir 'certs\ca-certificates.crt'),
+        (Join-Path $opensslDir 'certs\ca-bundle.crt')
+      )
+    }
   }
 
   foreach ($candidate in $candidates) {
@@ -613,17 +634,31 @@ function Ensure-CurrentPwshActivation {
 
   Remove-MiseInstallPathsFromSessionPath
   (& mise activate pwsh --shims) | Out-String | Invoke-Expression
-  (& zoxide init powershell) | Out-String | Invoke-Expression
+  $zoxideActivated = $false
+  if (Test-CommandExists 'zoxide') {
+    (& zoxide init powershell) | Out-String | Invoke-Expression
+    $zoxideActivated = $true
+  }
 
   $doctor = Get-MiseDoctorJson
-  if ($doctor) {
-    Write-StatusPass 'Current pwsh activation' -Detail 'mise doctor returned JSON'
-  } else {
+  if (-not $doctor) {
     Write-StatusFail 'Current pwsh activation' -Detail 'mise doctor --json failed after activation'
   }
+
+  if ($env:MISE_SHELL -and $env:MISE_SHELL -ne 'pwsh') {
+    Write-StatusFail 'Current pwsh activation' -Detail "MISE_SHELL was '$($env:MISE_SHELL)'"
+  }
+
+  $detail = if ($zoxideActivated) {
+    'mise doctor returned JSON; MISE_SHELL resolved; zoxide activated'
+  } else {
+    'mise doctor returned JSON; MISE_SHELL resolved'
+  }
+  Write-StatusPass 'Current pwsh activation' -Detail $detail
 }
 
 function Ensure-WindowsTerminalPwshDefault {
+  $deterministicPwshGuid = '{e267f5ba-0552-4202-9426-d4f81d00e17f}'
   $settingsPath = Get-WindowsTerminalSettingsPath
   if (-not $settingsPath) {
     Write-StatusSkip 'Windows Terminal default profile' -Reason 'settings.json not found'
@@ -643,17 +678,33 @@ function Ensure-WindowsTerminalPwshDefault {
     $settings.profiles.list = @()
   }
 
+  $pwshCommand = (Get-Command pwsh -ErrorAction SilentlyContinue | Select-Object -First 1).Source
+  if (-not $pwshCommand) {
+    $pwshCommand = 'pwsh.exe'
+  }
+
   $pwshProfile = Get-WindowsTerminalPwshProfile -SettingsObject $settings
+  if (-not $pwshProfile) {
+    $pwshProfile = Get-WindowsTerminalProfileByGuid -SettingsObject $settings -Guid $deterministicPwshGuid
+  }
   $createdProfile = $false
   if (-not $pwshProfile) {
     $pwshProfile = [pscustomobject]@{
-      guid        = ([guid]::NewGuid()).ToString('B')
+      guid        = $deterministicPwshGuid
       name        = 'PowerShell 7'
-      commandline = 'pwsh.exe'
+      commandLine = "`"$pwshCommand`""
       hidden      = $false
     }
     $settings.profiles.list = @($settings.profiles.list) + $pwshProfile
     $createdProfile = $true
+  } else {
+    if ($pwshProfile.PSObject.Properties.Name -contains 'commandLine') {
+      $pwshProfile.commandLine = "`"$pwshCommand`""
+    } elseif ($pwshProfile.PSObject.Properties.Name -contains 'commandline') {
+      $pwshProfile.commandline = "`"$pwshCommand`""
+    } else {
+      $pwshProfile | Add-Member -NotePropertyName commandLine -NotePropertyValue "`"$pwshCommand`""
+    }
   }
 
   $alreadyDefault = $settings.defaultProfile -and

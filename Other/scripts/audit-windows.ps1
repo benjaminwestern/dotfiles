@@ -397,6 +397,8 @@ function Invoke-AuditConfigs {
 
   if (Test-Path $MiseEnvPath) {
     Write-AuditLine 'Mise .env:' $MiseEnvPath
+    $miseEnvContent = Get-Content $MiseEnvPath -Raw -ErrorAction SilentlyContinue
+    Write-AuditLine 'Mise .env Zscaler block:' $(if ($miseEnvContent -and $miseEnvContent.Contains($ZSCALER_ENV_BEGIN)) { 'present' } else { 'absent' })
   } else {
     Write-AuditLine 'Mise .env:' 'absent'
   }
@@ -445,10 +447,15 @@ function Invoke-AuditSigning {
   } else {
     $profileState = if ($profileSignature) { $profileSignature.Status.ToString() } else { 'profile missing' }
     $unsignedCounts = $scoopAudit.unsigned_count + $miseAudit.unsigned_count + $dotfilesAudit.unsigned_count
+    $profilePhrase = switch ($profileState) {
+      'Valid' { 'pwsh profile is signed' }
+      'NotSigned' { 'pwsh profile remains unsigned' }
+      default { "pwsh profile status is $profileState" }
+    }
     if ($unsignedCounts -eq 0) {
-      Write-AuditLine 'Overall:' "all signable Scoop, mise, and dotfiles scripts are signed; pwsh profile remains $profileState"
+      Write-AuditLine 'Overall:' "all signable Scoop, mise, and dotfiles scripts are signed; $profilePhrase"
     } else {
-      Write-AuditLine 'Overall:' "$unsignedCounts unsigned Scoop/mise/dotfiles script(s) found; pwsh profile remains $profileState"
+      Write-AuditLine 'Overall:' "$unsignedCounts unsigned Scoop/mise/dotfiles script(s) found; $profilePhrase"
     }
   }
 }
@@ -527,8 +534,9 @@ function Invoke-PopulateState {
   Set-StateValue -Key 'ENABLE_ZSCALER' -Value $zscalerValue
   Write-AuditLine 'ENABLE_ZSCALER:' $zscalerValue
 
-  Set-StateValue -Key 'ENABLE_MISE_TOOLS' -Value 'true'
-  Write-AuditLine 'ENABLE_MISE_TOOLS:' 'true'
+  $miseToolsValue = if (Test-CommandExists 'mise') { 'true' } else { 'false' }
+  Set-StateValue -Key 'ENABLE_MISE_TOOLS' -Value $miseToolsValue
+  Write-AuditLine 'ENABLE_MISE_TOOLS:' $miseToolsValue
 
   Write-AuditLine 'State file:' $STATE_FILE_PATH
 }

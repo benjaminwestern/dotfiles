@@ -77,5 +77,7 @@ function global:Sign-Profile {
   $cert = Get-LocalCodeSigningCert
   if (-not $cert) { return }
   if (-not (Test-Path $PROFILE)) { return }
+  $profileFile = Get-Item $PROFILE -ErrorAction SilentlyContinue
+  if (-not $profileFile -or $profileFile.Length -lt 4) { return }
   Set-AuthenticodeSignature -FilePath $PROFILE -Certificate $cert | Out-Null
 }

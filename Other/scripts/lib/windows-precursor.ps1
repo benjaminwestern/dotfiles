@@ -82,6 +82,10 @@ function global:Sign-PrecursorScripts {
 function global:Install-PrecursorScoop {
   if (Test-PrecursorCommandExists 'scoop') {
     Update-PrecursorPath
+    $extrasBucket = Join-Path $HOME 'scoop\buckets\extras'
+    if (-not (Test-Path $extrasBucket)) {
+      scoop bucket add extras 2>$null
+    }
     return
   }
 
@@ -110,6 +114,11 @@ function global:Install-PrecursorScoop {
   & $installerPath -RunAsAdmin:$false
   Update-PrecursorPath
 
+  $extrasBucket = Join-Path $HOME 'scoop\buckets\extras'
+  if (-not (Test-Path $extrasBucket)) {
+    scoop bucket add extras 2>$null
+  }
+
   $cert = Get-PrecursorCodeSigningCert
   if ($cert) {
     Get-ChildItem (Join-Path $HOME 'scoop') -Recurse -Filter *.ps1 -ErrorAction SilentlyContinue |
@@ -128,6 +137,10 @@ function global:Install-PrecursorPwsh {
 
   if (-not (Test-PrecursorCommandExists 'scoop')) {
     Install-PrecursorScoop
+  }
+
+  if (-not (Test-PrecursorCommandExists 'scoop')) {
+    throw 'Scoop was not available after precursor bootstrap.'
   }
 
   scoop install pwsh 2>$null

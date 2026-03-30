@@ -673,8 +673,13 @@ function global:Get-WindowsTerminalProfileByGuid {
     [Parameter(Mandatory)][string]$Guid
   )
 
+  if (-not $SettingsObject) { return $null }
+  if (-not ($SettingsObject.PSObject.Properties.Name -contains 'profiles')) { return $null }
+  if (-not $SettingsObject.profiles) { return $null }
+  if (-not ($SettingsObject.profiles.PSObject.Properties.Name -contains 'list')) { return $null }
+
   $profiles = @()
-  if ($SettingsObject.profiles -and $SettingsObject.profiles.list) {
+  if ($SettingsObject.profiles.list) {
     $profiles = @($SettingsObject.profiles.list)
   }
 
@@ -690,8 +695,13 @@ function global:Get-WindowsTerminalProfileByGuid {
 function global:Get-WindowsTerminalPwshProfile {
   param([Parameter(Mandatory)]$SettingsObject)
 
+  if (-not $SettingsObject) { return $null }
+  if (-not ($SettingsObject.PSObject.Properties.Name -contains 'profiles')) { return $null }
+  if (-not $SettingsObject.profiles) { return $null }
+  if (-not ($SettingsObject.profiles.PSObject.Properties.Name -contains 'list')) { return $null }
+
   $profiles = @()
-  if ($SettingsObject.profiles -and $SettingsObject.profiles.list) {
+  if ($SettingsObject.profiles.list) {
     $profiles = @($SettingsObject.profiles.list)
   }
 
