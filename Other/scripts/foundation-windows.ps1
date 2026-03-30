@@ -94,26 +94,6 @@ function Ensure-ScoopBucket {
   }
 }
 
-function Get-MiseInstallMethod {
-  if (Test-CommandExists 'scoop') {
-    $scoopMise = scoop list mise 2>$null
-    if ($scoopMise -match '(^|\s)mise(\s|$)') {
-      return 'scoop'
-    }
-  }
-
-  foreach ($candidate in @(
-    (Join-Path $HOME '.local\bin\mise.exe'),
-    (Join-Path $HOME 'AppData\Local\mise\bin\mise.exe')
-  )) {
-    if (Test-Path $candidate) {
-      return 'shell installer'
-    }
-  }
-
-  return 'unknown'
-}
-
 function Get-SignableScriptStatus {
   param([Parameter(Mandatory)][string]$RootPath)
 
@@ -217,8 +197,7 @@ function Ensure-FoundationPackages {
   $total = $FoundationPackages.Count
 
   foreach ($package in $FoundationPackages) {
-    $installed = scoop list $package 2>$null
-    if ($installed -match ("(^|\s)" + [regex]::Escape($package) + "(\s|$)")) {
+    if (Test-ScoopPackageInstalled -Name $package) {
       $present++
       continue
     }

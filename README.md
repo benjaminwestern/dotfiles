@@ -78,64 +78,63 @@ installed.
 
 ```bash
 # Work machine with fish shell
-bootstrap.sh setup --shell fish --profile work --personal
+install.sh setup --shell fish --profile work --personal
 
 # Home machine with zsh
-bootstrap.sh setup --shell zsh --profile home --personal
+install.sh setup --shell zsh --profile home --personal
 
 # Minimal server (no GUI, no defaults)
-bootstrap.sh setup --shell zsh --profile minimal --non-interactive
+install.sh setup --shell zsh --profile minimal --non-interactive
 
 # Dry run — see what would happen without changing anything
-bootstrap.sh setup --dry-run --shell fish --profile work --personal
+install.sh setup --dry-run --shell fish --profile work --personal
 ```
 
 **Remote one-liner (macOS):**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/benjaminwestern/.dotfiles/main/bootstrap.sh | bash
+curl -fsSL https://raw.githubusercontent.com/benjaminwestern/dotfiles/main/install.sh | bash
 ```
 
 **Clone first, then run (recommended for security):**
 
 ```bash
 git clone https://github.com/benjaminwestern/dotfiles ~/.dotfiles
-# Inspect the code: cat ~/.dotfiles/bootstrap.sh
-~/.dotfiles/bootstrap.sh setup --shell fish --profile work --personal
+# Inspect the code: cat ~/.dotfiles/install.sh
+~/.dotfiles/install.sh setup --shell fish --profile work --personal
 ```
 
-**Windows (PowerShell):**
+**Windows (Command Prompt or PowerShell):**
 
 ```powershell
-# Clone
+# Remote one-liner
+curl.exe -fsSL -o "$env:TEMP\install.cmd" "https://raw.githubusercontent.com/benjaminwestern/dotfiles/main/install.cmd"
+& "$env:TEMP\install.cmd" setup --personal
+
+# Clone first, then run
 git clone https://github.com/benjaminwestern/dotfiles $HOME\.dotfiles
+& "$HOME\.dotfiles\install.cmd" setup --personal
 
 # Audit current machine state and populate the state file
-.\Other\scripts\audit-windows.ps1 -PopulateState
-
-# Dry-run the foundation
-.\Other\scripts\foundation-windows.ps1 -Mode setup -DryRun
-
-# Run for real
-.\Other\scripts\foundation-windows.ps1 -Mode setup -Personal
+& "$HOME\.dotfiles\install.cmd" audit --populate-state
 ```
 
 **Other modes:**
 
 ```bash
 # Ensure current state is healthy, repair drift
-./bootstrap.sh ensure --personal
+./install.sh ensure --personal
 
 # Update all package managers and tools
-./bootstrap.sh update
+./install.sh update
 
 # Personal layer only (foundation must be healthy)
-./bootstrap.sh personal --non-interactive --shell zsh
+./install.sh personal --non-interactive --shell zsh
 
 # Audit current machine state (read-only, no changes)
-./bootstrap.sh audit
-./bootstrap.sh audit --section tools
-./bootstrap.sh audit --json
+./install.sh audit
+./install.sh audit --section tools
+./install.sh audit --json
 ```
 
 ### How the Bootstrap Runs
@@ -212,14 +211,16 @@ mise up
 
 ```mermaid
 flowchart TD
-    A["bootstrap.sh"] -->|macOS| B["foundation-macos.zsh"]
-    A -->|Windows| C["foundation-windows.ps1"]
+    A["install.sh"] -->|macOS| B["foundation-macos.zsh"]
+    J["install.cmd"] -->|Windows| K["bootstrap-windows.cmd"]
+    K --> C["foundation-windows.ps1"]
+    K --> I["audit-windows.ps1"]
+    K --> G["personal-bootstrap-windows.ps1"]
 
     B --> D["lib/common.zsh"]
     C --> E["lib/common.ps1"]
 
     B -->|"--personal"| F["personal-bootstrap-macos.zsh"]
-    C -->|"-Personal"| G["personal-bootstrap-windows.ps1"]
 
     F --> D
     G --> E
@@ -284,7 +285,8 @@ full feature flag catalogue and device profile presets.
 
 ```
 .dotfiles/
-├── bootstrap.sh                       # Cross-platform entrypoint with flag parsing
+├── install.sh                         # macOS/Unix public entrypoint
+├── install.cmd                        # Windows public entrypoint
 ├── Configs/                           # Dotfile groups (see Configs/README.md)
 │   ├── aerospace/                     #   Window manager config
 │   ├── bash/                          #   Bash config (.bashrc, .bash_profile, .hushlogin)
@@ -311,6 +313,7 @@ full feature flag catalogue and device profile presets.
 │       ├── foundation-macos.zsh       #   macOS foundation bootstrap
 │       ├── personal-bootstrap-macos.zsh #  macOS personal layer
 │       ├── audit-macos.zsh            #   Read-only machine state audit
+│       ├── bootstrap-windows.cmd      #   Windows repo-local bootstrap entrypoint
 │       ├── foundation-windows.ps1     #   Windows foundation bootstrap
 │       ├── personal-bootstrap-windows.ps1 # Windows personal layer
 │       ├── audit-windows.ps1          #   Windows state audit (with -PopulateState)
@@ -457,7 +460,7 @@ tuckr status
 ### Bootstrap fails mid-way
 
 The bootstrap script is idempotent — you can safely re-run it. It checks for
-existing installations and skips completed steps. Use `./bootstrap.sh ensure`
+existing installations and skips completed steps. Use `./install.sh ensure`
 to repair a partially completed setup.
 
 ### Windows signing drift after updates

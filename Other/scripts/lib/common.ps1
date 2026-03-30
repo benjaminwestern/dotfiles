@@ -137,6 +137,68 @@ function global:Test-CommandExists {
   [bool](Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
+function global:Test-ScoopPackageInstalled {
+  <#
+  .SYNOPSIS
+      Check whether a Scoop package is installed.
+  .DESCRIPTION
+      Uses Scoop's installation layout first instead of parsing `scoop list`
+      output, which can vary across hosts and produce false negatives.
+  .NOTES
+      Checks: Scoop app directory and optional `scoop prefix`.
+      Gates: None
+      Side effects: None
+      Idempotency: Pure query.
+  #>
+  param([Parameter(Mandatory)][string]$Name)
+
+  $appsRoot = Join-Path $HOME 'scoop\apps'
+  $currentPath = Join-Path (Join-Path $appsRoot $Name) 'current'
+  if (Test-Path $currentPath) {
+    return $true
+  }
+
+  if (-not (Test-CommandExists 'scoop')) {
+    return $false
+  }
+
+  try {
+    $prefix = scoop prefix $Name 2>$null | Select-Object -First 1
+    return -not [string]::IsNullOrWhiteSpace([string]$prefix)
+  } catch {
+    return $false
+  }
+}
+
+function global:Get-MiseInstallMethod {
+  <#
+  .SYNOPSIS
+      Determine how `mise` was installed on the current machine.
+  .DESCRIPTION
+      Prefers Scoop installation-state detection, then falls back to the shell
+      installer locations used by the Windows bootstrap.
+  .NOTES
+      Checks: Scoop install state and known mise executable paths.
+      Gates: None
+      Side effects: None
+      Idempotency: Pure query.
+  #>
+  if (Test-ScoopPackageInstalled -Name 'mise') {
+    return 'scoop'
+  }
+
+  foreach ($candidate in @(
+    (Join-Path $HOME '.local\bin\mise.exe'),
+    (Join-Path $HOME 'AppData\Local\mise\bin\mise.exe')
+  )) {
+    if (Test-Path $candidate) {
+      return 'shell installer'
+    }
+  }
+
+  return 'unknown'
+}
+
 function global:Write-Fatal {
   <#
   .SYNOPSIS

@@ -9,15 +9,17 @@ layer that applies repository-specific dotfiles and preferences.
 
 ```mermaid
 flowchart TD
-    A["bootstrap.sh<br/>(cross-platform entrypoint)"] -->|macOS| B["foundation-macos.zsh"]
-    A -->|Windows| C["foundation-windows.ps1"]
+    A["install.sh<br/>(macOS/Unix public entrypoint)"] -->|macOS| B["foundation-macos.zsh"]
+    J["install.cmd<br/>(Windows public entrypoint)"] -->|Windows| K["bootstrap-windows.cmd"]
+    K --> C["foundation-windows.ps1"]
+    K --> I["audit-windows.ps1"]
+    K --> G["personal-bootstrap-windows.ps1"]
 
     B --> D["lib/common.zsh"]
     C --> E["lib/common.ps1"]
     C --> S["windows-signing-helpers.ps1"]
 
     B -->|"--personal"| F["personal-bootstrap-macos.zsh"]
-    C -->|"-Personal"| G["personal-bootstrap-windows.ps1"]
 
     F --> D
     G --> E
@@ -50,35 +52,37 @@ flowchart TD
 
 ## 📜 Script Catalogue
 
-### `bootstrap.sh` (Cross-Platform Entrypoint)
+### `install.sh` and `install.cmd` (public entrypoints)
 
-**Location:** Repository root (`~/.dotfiles/bootstrap.sh`)
+**Location:** Repository root (`~/.dotfiles/install.sh`, `~/.dotfiles/install.cmd`)
 
-Cross-platform entrypoint with full flag parsing. Detects the operating system
-and delegates to the appropriate platform-specific foundation script. Supports
-`setup`, `ensure`, `update`, `personal`, and `audit` modes along with feature
-flags for shell choice, device profile, and personal layer enablement.
+Public entrypoints for the bootstrap system. `install.sh` is the macOS/Unix
+entrypoint and `install.cmd` is the Windows entrypoint. Both resolve or clone
+the repo if needed, then delegate to the repo-local platform bootstrap flow.
+They support `setup`, `ensure`, `update`, `personal`, and `audit` modes along
+with feature flags for shell choice, device profile, and personal layer
+enablement.
 
 **Usage:**
 
 ```bash
 # Work machine with fish shell
-./bootstrap.sh setup --shell fish --profile work --personal
+./install.sh setup --shell fish --profile work --personal
 
 # Home machine with zsh
-./bootstrap.sh setup --shell zsh --profile home --personal
+./install.sh setup --shell zsh --profile home --personal
 
 # Minimal server (no GUI, no defaults)
-./bootstrap.sh setup --shell zsh --profile minimal --non-interactive
+./install.sh setup --shell zsh --profile minimal --non-interactive
 
 # Ensure current state is healthy
-./bootstrap.sh ensure --personal
+./install.sh ensure --personal
 
 # Update all tools
-./bootstrap.sh update
+./install.sh update
 
 # Personal layer only
-./bootstrap.sh personal --non-interactive --shell zsh
+./install.sh personal --non-interactive --shell zsh
 ```
 
 **Flags:**
@@ -99,7 +103,7 @@ flags for shell choice, device profile, and personal layer enablement.
 
 ```bash
 # See exactly what would happen without touching the system
-./bootstrap.sh setup --dry-run --shell fish --profile work --personal
+./install.sh setup --dry-run --shell fish --profile work --personal
 ```
 
 ---
@@ -219,10 +223,10 @@ verify everything landed correctly, or any time to diagnose drift.
 # Machine-readable JSON output
 ./audit-macos.zsh --json
 
-# Via bootstrap entrypoint
-./bootstrap.sh audit
-./bootstrap.sh audit --section configs
-./bootstrap.sh audit --json
+# Via install.sh
+./install.sh audit
+./install.sh audit --section configs
+./install.sh audit --json
 ```
 
 This script never installs, writes, or modifies anything.
@@ -493,10 +497,11 @@ On Windows, pass `-DryRun` to the foundation or personal scripts:
 .\Other\scripts\personal-bootstrap-windows.ps1 -DryRun
 ```
 
-Or via `bootstrap.sh` which threads the flag into the suggested command:
+Or via `install.cmd`, which threads the flag into the repo-local Windows
+bootstrap:
 
-```bash
-./bootstrap.sh setup --dry-run   # Shows: pwsh -File ... -DryRun
+```powershell
+.\install.cmd setup --dry-run
 ```
 
 The Windows dry-run uses `Invoke-OrDry` (parallel to `run_or_dry()`) and
@@ -636,5 +641,5 @@ tuckr status
 | Old Tool | Replacement | Reason |
 |----------|-------------|---------|
 | **Stow** | Tuckr | Better conflict detection, Rust-based |
-| **setup-osx.sh** | bootstrap.sh | Unified cross-platform entry |
+| **setup-osx.sh** | install.sh | Unified macOS public entry |
 | **macos-bootstrap.sh** | foundation-macos.zsh + personal-bootstrap-macos.zsh | Two-layer architecture with feature flags |

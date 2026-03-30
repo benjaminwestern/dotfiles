@@ -33,7 +33,7 @@ $ErrorActionPreference = 'Stop'
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $ScriptDir 'lib\common.ps1')
 
-# Honour both the -DryRun switch and the DRY_RUN env var (set by bootstrap.sh).
+# Honour both the -DryRun switch and the DRY_RUN env var (set by install.cmd).
 if ($DryRun -or $env:DRY_RUN -eq '1') { $global:DRY_RUN = $true }
 
 $DotfilesDir = if ($env:DOTFILES_DIR) { $env:DOTFILES_DIR } else { Join-Path $HOME '.dotfiles' }

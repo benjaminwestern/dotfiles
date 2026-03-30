@@ -7,7 +7,7 @@
 # integration, mise language runtime seeding, and optional Zscaler TLS trust.
 #
 # Can be invoked in two ways:
-#   1. Via bootstrap.sh (env vars pre-populated from CLI parsing)
+#   1. Via install.sh (repo resolved and env vars pre-populated from CLI parsing)
 #   2. Directly: ./foundation-macos.zsh setup --shell fish --profile work
 #
 # Architecture:
@@ -52,12 +52,12 @@ ZSCALER_CHAIN_PATH="$CERTS_DIR/zscaler_chain.pem"
 GOLDEN_BUNDLE_PATH="$CERTS_DIR/golden_pem.pem"
 
 # -- Bootstrap root -----------------------------------------------------------
-# When called directly (not via bootstrap.sh), BOOTSTRAP_ROOT defaults to the
+# When called directly (not via install.sh), BOOTSTRAP_ROOT defaults to the
 # dotfiles repository root (two levels above this script).
 BOOTSTRAP_ROOT="${BOOTSTRAP_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 
 # -- MODE env var -------------------------------------------------------------
-# May be pre-set by bootstrap.sh or the caller's environment.
+# May be pre-set by install.sh or the caller's environment.
 MODE="${MODE:-}"
 
 
@@ -67,8 +67,8 @@ MODE="${MODE:-}"
 
 # parse_foundation_args -- Parse CLI arguments for direct invocation
 #
-# What: Accepts the same flags as bootstrap.sh so the foundation script can be
-#       run standalone without the entrypoint wrapper.
+# What: Accepts the same flags as install.sh so the foundation script can be
+#       run standalone without the public loader.
 # Why:  Enables direct execution for testing, CI, or users who prefer to skip
 #       the entrypoint.
 # Checks: Validates mode is not set twice; required values have arguments.
@@ -94,7 +94,7 @@ typeset -g CLI_ENABLE_MISE_TOOLS=""
 typeset -g CLI_ENABLE_SHELL_DEFAULT=""
 
 parse_foundation_args() {
-  # If bootstrap.sh already parsed, these env vars will be set. Use them as
+  # If install.sh already parsed, these env vars will be set. Use them as
   # starting values so CLI flags here can override.
   CLI_SHELL="${PREFERRED_SHELL:-}"
   CLI_PROFILE="${DEVICE_PROFILE:-}"
@@ -1135,7 +1135,7 @@ main() {
 
   # Phase 2: Parse args and set up UI
   # This handles direct invocation (args on command line) and delegated
-  # invocation (env vars from bootstrap.sh).
+  # invocation (env vars from install.sh).
   parse_foundation_args "$@"
   setup_gum_theme
 

@@ -6,6 +6,11 @@ is a machine that can install packages, activate shell tooling, resolve runtime
 shims, trust corporate TLS interception when present, and be safely maintained
 later by the same bootstrap flow.
 
+The public macOS entrypoint is `install.sh`. It resolves or clones the repo,
+then hands off to the repo-local macOS foundation bootstrap in
+`Other/scripts/foundation-macos.zsh`. That mirrors the Windows flow, where
+`install.cmd` hands off to `Other/scripts/bootstrap-windows.cmd`.
+
 The approach is deliberately conservative for customer environments. It avoids
 personal dotfiles, keeps Fish in the personal layer, and treats the foundation
 bootstrap as a reusable base rather than a full workstation customisation.
@@ -29,6 +34,12 @@ Use this document in order. The high-level flow is:
 
 If you are behind Zscaler, do not skip the trust phase. `mise install`, npm,
 and Python package operations can fail until the CA bundle is in place.
+
+For a standard bootstrap run, use the public entrypoint:
+
+```bash
+./install.sh setup --shell zsh --profile work
+```
 
 ## What this bootstrap delivers
 

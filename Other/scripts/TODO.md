@@ -6,7 +6,8 @@ is done and what remains.
 
 ## Completed
 
-- Cross-platform entrypoint (`bootstrap.sh`) with full flag parsing for modes
+- Public entrypoints (`install.sh` and `install.cmd`) with full flag parsing for
+  modes
   (`setup`, `ensure`, `update`, `personal`), shell choice, device profiles, and
   personal layer enablement
 - macOS foundation (`foundation-macos.zsh`) with feature flags, gum-driven
@@ -34,7 +35,7 @@ is done and what remains.
   output uses "would ..." phrasing, pre-flight and validation still run normally
 - Standalone macOS audit script (`audit-macos.zsh`) with section filtering
   (`--section tools|shell|configs|personal`) and JSON output (`--json`); also
-  accessible via `bootstrap.sh audit`
+  accessible via `install.sh audit`
 - Tested dry-run and audit on a live macOS machine — both run cleanly with
   correct pass/fix/skip/fail status output
 - Windows audit script (`audit-windows.ps1`) with section filtering
@@ -55,7 +56,7 @@ is done and what remains.
   and `Test-DryRun` in `lib/common.ps1`, all destructive operations in
   `foundation-windows.ps1` and `personal-bootstrap-windows.ps1` gated, status
   output uses "would ..." phrasing, `Write-ManagedBlock` dry-run aware,
-  `bootstrap.sh` threads `-DryRun` into the suggested Windows command
+  `install.cmd` threads `-DryRun` into the repo-local Windows bootstrap
 - Windows audit state population (`-PopulateState` on `audit-windows.ps1`) —
   discovers machine state (shell, profile, Zscaler, mise) and writes to
   `~/.config/dotfiles/state.env` so bootstrap can use detected values as

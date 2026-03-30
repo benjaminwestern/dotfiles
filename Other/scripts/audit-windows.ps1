@@ -73,24 +73,23 @@ function Get-PropertyValue {
   return $null
 }
 
-function Get-MiseInstallMethod {
-  if (Test-CommandExists 'scoop') {
-    $scoopMise = scoop list mise 2>$null
-    if ($scoopMise -match '(^|\s)mise(\s|$)') {
-      return 'scoop'
-    }
+function Get-MiseShellName {
+  param($Doctor)
+
+  $doctorShell = Get-PropertyValue -Object $Doctor -Names @('shell', 'mise_shell')
+  if (-not $doctorShell) {
+    return $null
   }
 
-  foreach ($candidate in @(
-    (Join-Path $HOME '.local\bin\mise.exe'),
-    (Join-Path $HOME 'AppData\Local\mise\bin\mise.exe')
-  )) {
-    if (Test-Path $candidate) {
-      return 'shell installer'
-    }
+  if ($doctorShell -is [string]) {
+    return $doctorShell
   }
 
-  return 'unknown'
+  if ($doctorShell.PSObject.Properties.Name -contains 'name' -and $doctorShell.name) {
+    return [string]$doctorShell.name
+  }
+
+  return [string]$doctorShell
 }
 
 function Get-SignableScriptAudit {
@@ -169,9 +168,9 @@ function Get-MiseAuditState {
       $state.mise_activated = [bool]$doctorActivated
     }
 
-    $doctorShell = Get-PropertyValue -Object $doctor -Names @('shell', 'mise_shell')
+    $doctorShell = Get-MiseShellName -Doctor $doctor
     if ($doctorShell) {
-      $state.mise_shell = [string]$doctorShell
+      $state.mise_shell = $doctorShell
     }
 
     $doctorShims = Get-PropertyValue -Object $doctor -Names @('shims_on_path', 'mise_shims_on_path')
@@ -280,8 +279,7 @@ function Invoke-AuditTools {
   if (Test-CommandExists 'scoop') {
     $missing = @()
     foreach ($package in $FoundationPackages) {
-      $installed = scoop list $package 2>$null
-      if ($installed -notmatch ("(^|\s)" + [regex]::Escape($package) + "(\s|$)")) {
+      if (-not (Test-ScoopPackageInstalled -Name $package)) {
         $missing += $package
       }
     }
@@ -602,8 +600,7 @@ function Invoke-AuditJson {
 
   if (Test-CommandExists 'scoop') {
     foreach ($package in $FoundationPackages) {
-      $installed = scoop list $package 2>$null
-      $result.tools.foundation_packages[$package] = [bool]($installed -match ("(^|\s)" + [regex]::Escape($package) + "(\s|$)"))
+      $result.tools.foundation_packages[$package] = Test-ScoopPackageInstalled -Name $package
     }
   }
 
