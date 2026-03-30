@@ -1,61 +1,76 @@
 # macOS foundation bootstrap
 
-This runbook gets a bare macOS machine to a stable engineering foundation using
-Homebrew, `mise`, `zsh`, and Google Chrome-driven Zscaler detection. The result
-is a machine that can install packages, activate shell tooling, resolve runtime
-shims, trust corporate TLS interception when present, and be safely maintained
-later by the same bootstrap flow.
+This runbook describes the current macOS bootstrap architecture as it exists in
+this repository. It covers the public loader, the repo-local foundation script,
+the shell and `mise` activation model, Zscaler trust handling, and the
+relationship between the foundation and personal layers.
 
-The public macOS entrypoint is `install.sh`. It resolves or clones the repo,
-then hands off to the repo-local macOS foundation bootstrap in
-`Other/scripts/foundation-macos.zsh`. That mirrors the Windows flow, where
-`install.cmd` hands off to `Other/scripts/bootstrap-windows.cmd`.
-
-The approach is deliberately conservative for customer environments. It avoids
-personal dotfiles, keeps Fish in the personal layer, and treats the foundation
-bootstrap as a reusable base rather than a full workstation customisation.
-
-It assumes:
-- macOS with Terminal or another shell-capable terminal emulator
-- `zsh` is the foundation shell target
-- the target is a reusable foundation, not personal dotfiles yet
+The goal is a repeatable macOS foundation that can be shared across machines,
+re-run safely, and extended later by the personal bootstrap.
 
 ## Quick start
 
-Use this document in order. The high-level flow is:
-
-1. Install Homebrew.
-2. Install the minimum foundation packages.
-3. Create or repair the managed `zsh` profile block.
-4. Create the seed `mise` configuration.
-5. Detect active Zscaler trust in Chrome and repair TLS trust before full
-   `mise` reconciliation.
-6. Install and validate the full foundation toolset.
-
-If you are behind Zscaler, do not skip the trust phase. `mise install`, npm,
-and Python package operations can fail until the CA bundle is in place.
-
-For a standard bootstrap run, use the public entrypoint:
+Use the public loader for normal setup, ensure, update, and audit runs. It
+reuses `~/.dotfiles` when present, clones it when missing, and can run once
+from a temporary GitHub archive when `git` is unavailable.
 
 ```bash
-./install.sh setup --shell zsh --profile work
+# Remote bootstrap
+curl -fsSL https://raw.githubusercontent.com/benjaminwestern/dotfiles/main/install.sh \
+  | bash -s -- setup --shell fish --profile work --personal
+
+# Local checkout bootstrap
+git clone https://github.com/benjaminwestern/dotfiles ~/.dotfiles
+~/.dotfiles/install.sh setup --shell fish --profile work --personal
+
+# Minimal or repair flows
+~/.dotfiles/install.sh setup --shell zsh --profile minimal --non-interactive
+~/.dotfiles/install.sh ensure --personal
+~/.dotfiles/install.sh update
+~/.dotfiles/install.sh audit --json
 ```
 
-## What this bootstrap delivers
+The public loader is the supported entrypoint. Direct invocation of
+`foundation-macos.zsh` is available for local testing and advanced recovery, but
+it does not replace the convenience of `install.sh`.
 
-By the end of the runbook, the machine should have:
-- Homebrew installed and healthy
-- a managed `zsh` bootstrap block for `brew`, `mise`, and `zoxide`
-- `mise` installed, activated, and able to resolve foundation runtimes
-- a reusable CA bundle for npm, Python, Git, curl, and related tools when
-  Zscaler is active
-- practical validation proving the machine is usable, not just partially
-  installed
+## Entry points
 
-## Foundation package list
+The macOS bootstrap uses a simpler two-layer shape than the Windows path.
 
-Install with Homebrew:
-- `gum`
+- `install.sh` is the public loader. It resolves the working checkout, parses
+  the public flags, and delegates into the repo-local macOS scripts.
+- `Other/scripts/foundation-macos.zsh` is the repo-local macOS foundation
+  orchestrator. It owns Homebrew, the baseline package set, `mise`, managed
+  shell activation, Zscaler trust, `mise` tool installation, and validation.
+- `Other/scripts/personal-bootstrap-macos.zsh` is the repo-specific personal
+  layer. It owns the full Brewfile reconciliation, Tuckr symlinking, shell
+  default changes, macOS defaults, and Rosetta.
+- `Other/scripts/audit-macos.zsh` is the read-only machine audit.
+
+Unlike the Windows path, macOS does not need a CMD wrapper or a PowerShell
+precursor bridge. The public loader can call the repo-local `zsh` scripts
+directly.
+
+## Foundation behaviour
+
+The macOS foundation runs in a fixed order:
+
+1. Ensure Homebrew exists.
+2. Activate Homebrew in the current shell.
+3. Ensure the macOS foundation package set is present.
+4. Ensure `mise` is installed, preferring Homebrew and falling back to the
+   first-party shell installer.
+5. Write or repair the managed shell activation block.
+6. Activate the current shell session.
+7. Create or update the managed `mise` seed config.
+8. Detect Zscaler via TLS probe and repair trust if required.
+9. Run `mise install` when `ENABLE_MISE_TOOLS=true`.
+10. Validate the resulting foundation.
+11. Optionally hand off to the personal layer when `--personal` is set.
+
+The macOS foundation package list is:
+
 - `git`
 - `gh`
 - `jq`
@@ -65,318 +80,136 @@ Install with Homebrew:
 - `ripgrep`
 - `zoxide`
 - `lazygit`
-- `mise`
 - `openssl`
+- `gum`
 
-Optional macOS foundation packages:
-- `neovim`
-- `gnupg`
+`mise` is managed separately because it can be installed by Homebrew or by the
+first-party shell installer.
 
-## Phase 1: install Homebrew
+## Shell behaviour
 
-If Homebrew is missing, install it:
+The macOS foundation supports both `zsh` and `fish` as the managed interactive
+shell targets. The chosen value comes from `--shell`, the environment, the
+state file, the selected profile, or the interactive prompt flow.
 
-```zsh
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+The foundation writes or repairs a managed activation block for the resolved
+shell:
+
+- `zsh` receives a managed block in `~/.zshrc`.
+- `fish` receives a managed block in the appropriate `conf.d` file.
+
+That managed block activates Homebrew, `mise`, and `zoxide` in new shells. The
+foundation does not change the account's default login shell. Default-shell
+changes belong to the personal layer and remain gated by
+`ENABLE_SHELL_DEFAULT`.
+
+## Mise behaviour
+
+The macOS foundation creates or updates a managed `mise` seed block in
+`~/.config/mise/config.toml`. The current seed includes:
+
+- `go`
+- `node`
+- `bun`
+- `python`
+- `uv`
+- `zig`
+- `terraform`
+- `gcloud`
+- `usage`
+- `pkl`
+- `hk`
+- `fnox`
+- `go:oss.terrastruct.com/d2`
+- `go:github.com/charmbracelet/glow`
+- `go:github.com/charmbracelet/freeze`
+- `go:github.com/charmbracelet/vhs`
+- `npm:opencode-ai`
+- `npm:@playwright/cli`
+
+When `ENABLE_MISE_TOOLS=true`, the foundation runs `mise install` after the
+seed config and Zscaler trust are in place.
+
+## Zscaler and TLS trust
+
+The macOS foundation can detect and configure Zscaler trust without requiring a
+separate manual path.
+
+- Detection uses `openssl s_client` against `registry.npmjs.org` and inspects
+  the issuer for Zscaler evidence.
+- When Zscaler is active, the foundation captures the certificate chain into
+  `~/certs/zscaler_chain.pem`.
+- It then builds `~/certs/golden_pem.pem`, writes the managed Zscaler block to
+  `~/.config/mise/.env`, re-activates the current shell, and validates that the
+  trust bundle works for the relevant tools.
+
+That sequencing is important. The trust bundle needs to exist before
+`mise install` when your network requires TLS interception to reach external
+registries.
+
+## Managed outputs
+
+The macOS foundation writes and maintains a small set of managed files and
+settings.
+
+- `~/.config/dotfiles/state.env` stores resolved preferences and discovered
+  state for later runs.
+- The managed shell activation block keeps Homebrew, `mise`, and `zoxide`
+  active in future shells.
+- `~/.config/mise/config.toml` receives the managed `mise` seed block.
+- `~/.config/mise/.env` receives the managed Zscaler environment block when
+  Zscaler trust is enabled.
+- `~/certs/zscaler_chain.pem` and `~/certs/golden_pem.pem` store the generated
+  trust material when Zscaler is active.
+
+## Personal layer handoff
+
+The macOS personal layer is optional and runs only when `--personal` is set.
+It builds on a healthy foundation and owns:
+
+- full Brewfile reconciliation
+- Tuckr symlink application
+- default-shell changes
+- macOS defaults
+- Rosetta installation on Apple Silicon
+
+That separation is deliberate. The foundation remains shareable and
+machine-safe, while the personal layer carries repository-specific workstation
+preferences.
+
+## Audit and validation
+
+Use the macOS audit when you want a read-only view of the current machine
+state.
+
+```bash
+~/.dotfiles/install.sh audit
+~/.dotfiles/install.sh audit --section configs
+~/.dotfiles/install.sh audit --json
+
+# Repo-local direct invocation
+./Other/scripts/audit-macos.zsh --section tools
 ```
 
-Load the environment into the current shell:
+The audit covers tool state, shell state, config state, and personal-layer
+state. A healthy machine should show Homebrew available, the foundation package
+set present, `mise` active, and the managed shell block in place.
 
-```zsh
-if [[ -x /opt/homebrew/bin/brew ]]; then
-  eval "$(/opt/homebrew/bin/brew shellenv)"
-elif [[ -x /usr/local/bin/brew ]]; then
-  eval "$(/usr/local/bin/brew shellenv)"
-fi
+## Advanced direct commands
+
+Use `install.sh` for normal operations. Use these direct commands when you need
+explicit control of the repo-local scripts.
+
+```bash
+# Repo-local foundation flows
+./Other/scripts/foundation-macos.zsh setup --shell zsh --profile work
+./Other/scripts/foundation-macos.zsh ensure --shell fish --profile home
+./Other/scripts/foundation-macos.zsh update --non-interactive
+
+# Repo-local audit
+./Other/scripts/audit-macos.zsh --json
 ```
 
-Verify:
-
-```zsh
-brew --version
-```
-
-## Phase 2: install foundation packages
-
-Install the minimum package-manager-managed toolset:
-
-```zsh
-brew install gum git gh jq yq fzf fd ripgrep zoxide lazygit mise openssl
-```
-
-Verify:
-
-```zsh
-git --version
-mise --version
-gum --version
-openssl version
-```
-
-## Phase 3: create the managed `zsh` bootstrap block
-
-Ensure `~/.zshrc` exists:
-
-```zsh
-touch ~/.zshrc
-```
-
-Write or update the managed bootstrap block:
-
-```zsh
-cat <<'EOF' > /tmp/foundation-zsh-block
-# >>> foundation-bootstrap >>>
-if command -v brew >/dev/null 2>&1; then
-  eval "$(brew shellenv)"
-fi
-export MISE_ZSH_AUTO_START=1
-eval "$(mise activate zsh)"
-eval "$(zoxide init zsh)"
-# <<< foundation-bootstrap <<<
-EOF
-```
-
-Then merge that block into `~/.zshrc` using your preferred editing approach or
-the script implementation.
-
-Reload the shell:
-
-```zsh
-source ~/.zshrc
-```
-
-Verify:
-
-```zsh
-command -v mise
-command -v zoxide
-```
-
-## Phase 4: create the seed `mise` config
-
-Create the directory:
-
-```zsh
-mkdir -p ~/.config/mise
-```
-
-Write the seed config:
-
-```zsh
-cat <<'EOF' > ~/.config/mise/config.toml
-[settings]
-experimental = true
-
-[env]
-_.file = "~/.config/mise/.env"
-
-[tools]
-go = "latest"
-node = "latest"
-bun = "latest"
-python = "latest"
-uv = "latest"
-terraform = "latest"
-gcloud = "latest"
-usage = "latest"
-EOF
-```
-
-Verify:
-
-```zsh
-cat ~/.config/mise/config.toml
-```
-
-## Phase 5: detect Zscaler and bootstrap trust
-
-Use Google Chrome as the decision point:
-
-1. Open Chrome.
-2. Browse to `https://registry.npmjs.org`.
-3. Inspect the certificate chain.
-4. If the chain shows Zscaler, continue with this section.
-5. If not, skip to Phase 6.
-
-Create the directory:
-
-```zsh
-mkdir -p ~/certs
-mkdir -p ~/.config/mise
-```
-
-Fetch the active certificate chain:
-
-```zsh
-openssl s_client -showcerts -connect registry.npmjs.org:443 -servername registry.npmjs.org < /dev/null 2>/dev/null \
-  | awk '/-----BEGIN CERTIFICATE-----/{p=1}; p; /-----END CERTIFICATE-----/{p=0}' \
-  > ~/certs/zscaler_chain.pem
-```
-
-Validate the issuer:
-
-```zsh
-openssl x509 -in ~/certs/zscaler_chain.pem -noout -issuer
-```
-
-The issuer must show Zscaler. If it does not, stop and inspect the network
-path before continuing.
-
-Bootstrap Python just enough to locate a certifi bundle:
-
-```zsh
-mise install python@latest
-source ~/.zshrc
-python3 -m ensurepip --upgrade
-CERTIFI_PATH=$(python3 -c 'import pip._vendor.certifi as c; print(c.where())')
-```
-
-Build the merged CA bundle:
-
-```zsh
-cat "$CERTIFI_PATH" ~/certs/zscaler_chain.pem > ~/certs/golden_pem.pem
-```
-
-Write the `mise` environment file:
-
-```zsh
-cat <<EOF > ~/.config/mise/.env
-SSL_CERT_FILE="$HOME/certs/golden_pem.pem"
-SSL_CERT_DIR="$HOME/certs"
-CERT_PATH="$HOME/certs/golden_pem.pem"
-CERT_DIR="$HOME/certs"
-REQUESTS_CA_BUNDLE="$HOME/certs/golden_pem.pem"
-CURL_CA_BUNDLE="$HOME/certs/golden_pem.pem"
-NODE_EXTRA_CA_CERTS="$HOME/certs/golden_pem.pem"
-GRPC_DEFAULT_SSL_ROOTS_FILE_PATH="$HOME/certs/golden_pem.pem"
-GIT_SSL_CAINFO="$HOME/certs/golden_pem.pem"
-CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE="$HOME/certs/golden_pem.pem"
-PIP_CERT="$HOME/certs/golden_pem.pem"
-NPM_CONFIG_CAFILE="$HOME/certs/golden_pem.pem"
-npm_config_cafile="$HOME/certs/golden_pem.pem"
-AWS_CA_BUNDLE="$HOME/certs/golden_pem.pem"
-EOF
-```
-
-Reload the shell:
-
-```zsh
-source ~/.zshrc
-```
-
-Configure Git and Python explicitly:
-
-```zsh
-git config --global http.sslcainfo "$HOME/certs/golden_pem.pem"
-python3 -m pip config set global.cert "$HOME/certs/golden_pem.pem"
-```
-
-If you use gcloud:
-
-```zsh
-gcloud config set core/custom_ca_certs_file "$HOME/certs/golden_pem.pem"
-```
-
-## Phase 6: validate cert-sensitive tooling before full `mise install`
-
-Run:
-
-```zsh
-node -p 'process.env.NODE_EXTRA_CA_CERTS'
-npm ping
-python3 -m pip --version
-git config --global --get http.sslcainfo
-```
-
-If these fail:
-- confirm Chrome still shows Zscaler
-- confirm `~/certs/golden_pem.pem` exists
-- confirm the fetched issuer is Zscaler
-- confirm the shell reloaded the `.env`-driven variables
-
-## Phase 7: run full `mise` reconciliation
-
-Install the full foundation toolset:
-
-```zsh
-mise install
-```
-
-Verify:
-
-```zsh
-mise current
-node --version
-python3 --version
-python3 -m pip --version
-go version
-terraform version
-gcloud version
-```
-
-## Phase 8: final validation
-
-Package manager and shell:
-
-```zsh
-brew --version
-echo $SHELL
-command -v brew
-command -v mise
-command -v zoxide
-```
-
-Foundation tools:
-
-```zsh
-git --version
-gh --version
-jq --version
-yq --version
-fzf --version
-fd --version
-rg --version
-zoxide --version
-lazygit --version
-mise --version
-gum --version
-openssl version
-```
-
-`mise` and runtimes:
-
-```zsh
-mise env
-mise current
-node --version
-python3 --version
-python3 -m pip --version
-go version
-terraform version
-```
-
-TLS-sensitive checks:
-
-```zsh
-node -p 'process.env.NODE_EXTRA_CA_CERTS'
-npm ping
-git config --global --get http.sslcainfo
-```
-
-If Zscaler is active, also verify:
-
-```zsh
-ls -l ~/certs/golden_pem.pem
-cat ~/.config/mise/.env
-```
-
-## Important lessons
-
-- Homebrew should install without issue in most environments, but Zscaler trust
-  must be repaired before network-heavy `mise` reconciliation if Chrome shows an
-  active Zscaler chain.
-- The foundation layer owns a managed `zsh` bootstrap block only. Fish remains a
-  personal-layer concern.
-- The seed `mise` config should remain minimal and customer-safe.
-- The TLS bundle must be reusable across npm, Python, Git, curl, and optionally
-  `gcloud`.
+The repo-local scripts accept the same broad operating modes as `install.sh`,
+but the public loader remains the default recommendation because it also handles
+repo resolution on a fresh machine.

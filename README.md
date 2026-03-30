@@ -21,18 +21,26 @@ installation to a fully functional workspace. The bootstrap follows a
   symlinking, brew bundle, tuckr, shell default, macOS defaults, and Rosetta.
   Triggered by passing `--personal`.
 
-For Windows, there is a documented user-space bootstrap workflow for native
-PowerShell plus Scoop under an effective `AllSigned` execution policy. See
-[Other/scripts/README.md](Other/scripts/README.md) for the Windows-specific
-process, including the required code-signing and re-signing steps for
-Scoop-managed `.ps1` files, the same signing requirement for `mise` wrappers
-and the PowerShell profile, the Windows Zscaler certificate flow, and the
-current `mise` setup pattern of storing certificate environment variables in
-either `.env` or `config.toml`, with `config.toml` preferred on Windows when
-dotenv parsing is unreliable. The Windows notes also cover the signed PowerShell
-profile pattern, `zoxide` startup, copying `git` and `opencode` configs, and a
-phased bootstrap style inspired by `EmileHofsink/dotfiles` and
-`withriley/engineer-enablement`.
+The public entrypoints are `install.sh` for macOS and `install.cmd` for
+Windows. Both loaders reuse an existing `~/.dotfiles` checkout when present,
+clone it when missing, and fall back to a temporary GitHub archive when `git`
+is unavailable.
+
+Windows has an extra repo-local bootstrap layer because first-run execution can
+start from Windows PowerShell 5.x and, on some machines, under an effective
+`AllSigned` policy. `install.cmd` delegates to
+`Other/scripts/bootstrap-windows.cmd`, which creates `LocalScoopSigner`,
+signs the local Windows bootstrap scripts, and only then launches the selected
+PowerShell target. The Windows foundation and audit scripts both load
+`lib/windows-precursor.ps1`, which installs Scoop and PowerShell 7 when needed
+and re-runs the same target under `pwsh`.
+
+The current Windows flow also stages Zscaler trust before and after
+`mise install`, activates `mise` via `pwsh --shims`, sets Windows Terminal's
+default profile to `pwsh`, and ships `Other/scripts/resign-windows.cmd` as a
+local repair path for signing drift. See
+[Other/scripts/README.md](Other/scripts/README.md) for the full bootstrap
+contract and platform-specific runbooks.
 
 Both layers are fully idempotent, dry-runnable, and gated by feature flags that
 resolve through a six-level precedence chain (CLI → env → state file → device
@@ -69,92 +77,84 @@ profile → interactive prompt → default).
 
 ## 🚀 Quick Start (New Machine)
 
-### Automated Bootstrap (Recommended)
+### Automated bootstrap (recommended)
 
-The bootstrap supports multiple modes and feature flags to control what gets
-installed.
+The public loaders handle the repo checkout and then delegate into the
+repo-local bootstrap layer. Use them for normal setup, ensure, update, and
+audit runs.
 
-**Common setups:**
-
-```bash
-# Work machine with fish shell
-install.sh setup --shell fish --profile work --personal
-
-# Home machine with zsh
-install.sh setup --shell zsh --profile home --personal
-
-# Minimal server (no GUI, no defaults)
-install.sh setup --shell zsh --profile minimal --non-interactive
-
-# Dry run — see what would happen without changing anything
-install.sh setup --dry-run --shell fish --profile work --personal
-```
-
-**Remote one-liner (macOS):**
+**macOS**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/benjaminwestern/dotfiles/main/install.sh | bash
-```
+# Remote one-liner
+curl -fsSL https://raw.githubusercontent.com/benjaminwestern/dotfiles/main/install.sh \
+  | bash -s -- setup --shell fish --profile work --personal
 
-**Clone first, then run (recommended for security):**
-
-```bash
+# Clone first, then run
 git clone https://github.com/benjaminwestern/dotfiles ~/.dotfiles
-# Inspect the code: cat ~/.dotfiles/install.sh
 ~/.dotfiles/install.sh setup --shell fish --profile work --personal
+
+# Minimal or repair flows
+~/.dotfiles/install.sh setup --shell zsh --profile minimal --non-interactive
+~/.dotfiles/install.sh ensure --personal
+~/.dotfiles/install.sh update
+~/.dotfiles/install.sh audit --json
 ```
 
-**Windows (Command Prompt or PowerShell):**
+**Windows**
 
 ```powershell
 # Remote one-liner
 curl.exe -fsSL -o "$env:TEMP\install.cmd" "https://raw.githubusercontent.com/benjaminwestern/dotfiles/main/install.cmd"
-& "$env:TEMP\install.cmd" setup --personal
+& "$env:TEMP\install.cmd" setup --profile work --personal
 
 # Clone first, then run
 git clone https://github.com/benjaminwestern/dotfiles $HOME\.dotfiles
-& "$HOME\.dotfiles\install.cmd" setup --personal
+& "$HOME\.dotfiles\install.cmd" setup --profile work --personal
 
-# Audit current machine state and populate the state file
+# Audit and state discovery
 & "$HOME\.dotfiles\install.cmd" audit --populate-state
+
+# Local signing repair
+& "$HOME\.dotfiles\Other\scripts\resign-windows.cmd"
 ```
 
-**Other modes:**
+<!-- prettier-ignore -->
+> [!IMPORTANT]
+> On Windows, use `install.cmd` or `Other\scripts\bootstrap-windows.cmd` for a
+> first run. Do not start with `pwsh -File foundation-windows.ps1` on a fresh
+> machine if local scripts may still be unsigned.
 
-```bash
-# Ensure current state is healthy, repair drift
-./install.sh ensure --personal
+### How the bootstrap runs
 
-# Update all package managers and tools
-./install.sh update
+The bootstrap has a simple public surface and a deeper repo-local execution
+layer.
 
-# Personal layer only (foundation must be healthy)
-./install.sh personal --non-interactive --shell zsh
+- `install.sh` and `install.cmd` are the only public entrypoints. They resolve
+  the working checkout, export the requested mode and flags, and then hand off
+  to the platform-specific bootstrap scripts.
+- On macOS, `foundation-macos.zsh` runs the foundation sequence in this order:
+  Homebrew, foundation packages, `mise`, managed shell activation, `mise` seed
+  config, Zscaler trust, `mise` tools, validation, and optional personal
+  bootstrap.
+- On Windows, `bootstrap-windows.cmd` is the first repo-local entrypoint. It
+  prepares `LocalScoopSigner`, signs the local `.ps1` bootstrap tree, and
+  launches `foundation-windows.ps1`, `audit-windows.ps1`,
+  `personal-bootstrap-windows.ps1`, or `resign-windows.ps1`.
+- `foundation-windows.ps1` and `audit-windows.ps1` both load
+  `lib/windows-precursor.ps1`. If the machine is still in Windows PowerShell
+  5.x, the precursor installs Scoop and PowerShell 7, signs the local script
+  tree, and re-runs the same target under `pwsh`.
+- The Windows foundation sequence then runs Scoop, foundation packages, `mise`,
+  managed PowerShell profile repair, current-shell `mise` activation, Windows
+  Terminal default profile repair, `mise` seed config, stage-1 Zscaler trust,
+  `mise install`, stage-2 Zscaler trust refresh, validation, and optional
+  personal bootstrap.
 
-# Audit current machine state (read-only, no changes)
-./install.sh audit
-./install.sh audit --section tools
-./install.sh audit --json
-```
-
-### How the Bootstrap Runs
-
-The bootstrap runs in two layers:
-
-**1. Foundation:** pre-flight inventory → Homebrew → foundation packages (incl. gum) → mise → shell profile → mise seed → Zscaler trust → mise tools → validate
-
-**2. Personal** (with `--personal`): pre-flight inventory → dotfiles repo → brew bundle → tuckr → shell default → macOS defaults → Rosetta
-
-Both layers start with a **pre-flight inventory** that snapshots what's already
-installed (tools, configs, shell state, Rosetta, Zscaler trust) so every
-subsequent step can make informed decisions about what to skip.
-
-Every step emits a **status line** (`✓` pass, `✗` fix, `○` skip) and a summary
-tally at the end.
-
-Use `--dry-run` to preview the full plan without making any changes —
-pre-flight, resolution, and validation all run normally, but no software is
-installed, no files are written, and no system settings are changed.
+Both platforms start with a pre-flight or current-state read so later steps can
+skip healthy state and repair drift instead of reinstalling blindly. Every step
+emits a status line and summary. Use `--dry-run` to preview the flow without
+making any system changes.
 
 **Total time:** ~10-15 minutes depending on internet connection.
 
@@ -198,7 +198,7 @@ export PATH="$HOME/.local/bin:$PATH"
 eval "$(mise activate bash)"
 
 # 10. Install all Mise tools
-mise up
+mise install
 
 # 11. Apply macOS defaults
 ~/.dotfiles/Other/scripts/macos-defaults.sh "my-macbook"
@@ -211,22 +211,28 @@ mise up
 
 ```mermaid
 flowchart TD
-    A["install.sh"] -->|macOS| B["foundation-macos.zsh"]
+    A["install.sh"] -->|macOS foundation| B["foundation-macos.zsh"]
+    A -->|macOS audit| H["audit-macos.zsh"]
     J["install.cmd"] -->|Windows| K["bootstrap-windows.cmd"]
     K --> C["foundation-windows.ps1"]
     K --> I["audit-windows.ps1"]
     K --> G["personal-bootstrap-windows.ps1"]
+    K --> R["resign-windows.ps1"]
 
     B --> D["lib/common.zsh"]
-    C --> E["lib/common.ps1"]
-
+    H --> D
     B -->|"--personal"| F["personal-bootstrap-macos.zsh"]
-
     F --> D
-    G --> E
 
-    H["audit-macos.zsh"] --> D
-    I["audit-windows.ps1"] --> E
+    C --> P["lib/windows-precursor.ps1"]
+    I --> P
+    C --> E["lib/common.ps1"]
+    C --> S["windows-signing-helpers.ps1"]
+    I --> E
+    I --> S
+    G --> E
+    R --> E
+    R --> S
 
     subgraph Foundation
         B
@@ -317,13 +323,16 @@ full feature flag catalogue and device profile presets.
 │       ├── foundation-windows.ps1     #   Windows foundation bootstrap
 │       ├── personal-bootstrap-windows.ps1 # Windows personal layer
 │       ├── audit-windows.ps1          #   Windows state audit (with -PopulateState)
+│       ├── resign-windows.cmd         #   Windows signing repair entrypoint
+│       ├── resign-windows.ps1         #   Windows signing repair workflow
 │       ├── windows-signing-helpers.ps1 #  Code signing utilities
 │       ├── macos-defaults.sh          #   macOS system preferences
 │       ├── macos-foundation-bootstrap.md # macOS runbook
 │       ├── windows-bootstrap.md       #   Windows runbook
 │       └── lib/
 │           ├── common.zsh            #   Shared zsh library
-│           └── common.ps1            #   Shared PowerShell library
+│           ├── common.ps1            #   Shared PowerShell library
+│           └── windows-precursor.ps1 #   PS5 -> pwsh Windows bridge
 └── Secrets/                           # Encrypted sensitive files (not committed)
 ```
 
@@ -339,10 +348,12 @@ full feature flag catalogue and device profile presets.
 
 ### After Bootstrap
 
-1. **Restart terminal** or run `exec fish` to activate Fish shell
+1. Restart your shell session. On macOS, run `exec fish` or `exec zsh`. On
+   Windows, reopen `pwsh` or Windows Terminal.
 2. Run `mise doctor` to verify everything is working
 3. **Setup Worktrunk** by running `wt config shell install`
-4. Some macOS changes require a system restart
+4. Some macOS changes require a system restart, and Windows Terminal may need
+   to be reopened after the default profile is repaired
 
 ### Managing Dotfiles
 
@@ -460,17 +471,35 @@ tuckr status
 ### Bootstrap fails mid-way
 
 The bootstrap script is idempotent — you can safely re-run it. It checks for
-existing installations and skips completed steps. Use `./install.sh ensure`
-to repair a partially completed setup.
+existing installations and skips completed steps. Use `./install.sh ensure` on
+macOS or `install.cmd ensure` on Windows to repair a partially completed setup.
 
 ### Windows signing drift after updates
 
-Scoop and mise updates create new unsigned `.ps1` shims. Run update mode to
-automatically re-sign after upgrading:
+On Windows, Scoop or `mise` updates can leave new `.ps1` wrappers unsigned.
+Under `AllSigned`, repair that state with the local re-sign entrypoint:
 
 ```powershell
-.\Other\scripts\foundation-windows.ps1 -Mode update
+.\Other\scripts\resign-windows.cmd
+
+# Preview only
+.\Other\scripts\resign-windows.cmd -DryRun
 ```
+
+You can also use the repo-local bootstrap wrapper directly:
+
+```powershell
+.\Other\scripts\bootstrap-windows.cmd resign
+```
+
+Update mode still re-signs automatically when `AllSigned` is active:
+
+```powershell
+& "$HOME\.dotfiles\install.cmd" update
+```
+
+Under `RemoteSigned`, unsigned local scripts are acceptable and the audit
+reports them as informational rather than as a failure.
 
 ## 🔄 Manual Recovery (Getting Things Online)
 
@@ -534,7 +563,7 @@ cd ~/.dotfiles && tuckr add \*
 
 ```bash
 # Install all mise-managed tools (takes ~10 mins)
-mise up
+mise install
 
 # Verify installation
 mise doctor

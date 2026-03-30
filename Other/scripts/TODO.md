@@ -1,8 +1,9 @@
 # Bootstrap Refactor TODO
 
-Tracking the current state of the bootstrap refactor. The two-layer architecture
-is implemented for macOS and scaffolded for Windows. This document captures what
-is done and what remains.
+Tracking the current state of the bootstrap refactor. The two-layer
+architecture is implemented on macOS and Windows, with public loaders at the
+repo root and repo-local platform bootstrap logic under `Other/scripts`. This
+document captures what is done and what remains.
 
 ## Completed
 
@@ -61,14 +62,23 @@ is done and what remains.
   discovers machine state (shell, profile, Zscaler, mise) and writes to
   `~/.config/dotfiles/state.env` so bootstrap can use detected values as
   baseline without re-prompting
+- Windows first-run bootstrap chain implemented end to end:
+  `install.cmd` → `bootstrap-windows.cmd` → `windows-precursor.ps1` →
+  `foundation-windows.ps1` / `audit-windows.ps1`
+- Windows signing repair path implemented via `resign-windows.cmd` and
+  `resign-windows.ps1`
+- Real Windows validation completed for:
+  - `audit-windows.ps1`
+  - `audit-windows.ps1 -Json`
+  - `foundation-windows.ps1 -Mode ensure -NonInteractive -DryRun`
+  - `foundation-windows.ps1 -Mode update -NonInteractive -DryRun`
+  - `foundation-windows.ps1 -Mode ensure -NonInteractive`
+  - final verification audit after foundation
 
 ## Remaining
 
 - Test `foundation-macos.zsh` on a real bare Mac and tighten the script based
   on actual output and validation results
-- Test `foundation-windows.ps1` on a real Windows machine and validate the
-  Scoop, signing, and Zscaler flows end to end
 - Test `personal-bootstrap-windows.ps1` on a real Windows machine
 - Linux foundation (not started)
-- Test `audit-windows.ps1` on a real Windows machine
 - CI/CD pipeline for bootstrap testing on ephemeral VMs
