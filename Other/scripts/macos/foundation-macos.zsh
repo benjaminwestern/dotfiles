@@ -53,8 +53,8 @@ GOLDEN_BUNDLE_PATH="$CERTS_DIR/golden_pem.pem"
 
 # -- Bootstrap root -----------------------------------------------------------
 # When called directly (not via install.sh), BOOTSTRAP_ROOT defaults to the
-# dotfiles repository root (two levels above this script).
-BOOTSTRAP_ROOT="${BOOTSTRAP_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+# dotfiles repository root (three levels above this script).
+BOOTSTRAP_ROOT="${BOOTSTRAP_ROOT:-$(cd "$SCRIPT_DIR/../../.." && pwd)}"
 
 # -- MODE env var -------------------------------------------------------------
 # May be pre-set by install.sh or the caller's environment.
@@ -1029,7 +1029,7 @@ personal_script_path() {
     return 0
   fi
 
-  printf '%s\n' "$BOOTSTRAP_ROOT/Other/scripts/personal-bootstrap-macos.zsh"
+  printf '%s\n' "$BOOTSTRAP_ROOT/Other/scripts/macos/personal-bootstrap-macos.zsh"
 }
 
 # run_personal_layer -- Execute the personal bootstrap script

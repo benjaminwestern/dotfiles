@@ -79,6 +79,12 @@ brew cleanup
 brew autoremove
 """
 
+[tasks.readme-assets]
+description = "Regenerates the SVG header assets embedded in the repository READMEs"
+run = """
+python "$HOME/.dotfiles/Other/repository/generate_readme_banners.py"
+"""
+
 # Google Cloud Tasks
 [tasks.set-gcp-project]
 description = "Sets the active Google Cloud project and ADC quota project."
@@ -191,6 +197,7 @@ unsetgsai = "gcloud config unset auth/impersonate_service_account"
 
 # Mise Task Aliases
 buu = "mise run bundle-update"
+rda = "mise run readme-assets"
 gsp = "mise run set-gcp-project"
 git-pull = "mise run pull-all-repos"
 git-check = "mise run check-all-repos"

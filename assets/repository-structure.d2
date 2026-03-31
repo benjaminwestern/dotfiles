@@ -72,36 +72,46 @@ dotfiles: {
   }
 
   scripts: {
-    label: "Other/scripts/"
+    label: "Other/scripts/\nOperator bootstrap and repair"
     class: folder
 
     macos_entrypoints: {
-      label: "macOS scripts\nbootstrap-macos.zsh\nfoundation-macos.zsh\npersonal-bootstrap-macos.zsh\naudit-macos.zsh\ndefaults-macos.sh"
+      label: "macos/\nbootstrap-macos.zsh\nfoundation-macos.zsh\npersonal-bootstrap-macos.zsh\naudit-macos.zsh\ndefaults-macos.sh"
       class: file
     }
 
     windows_entrypoints: {
-      label: "Windows entrypoints (.cmd)\nbootstrap-windows.cmd\nfoundation-windows.cmd\naudit-windows.cmd\npersonal-bootstrap-windows.cmd\nresign-windows.cmd"
+      label: "windows/ entrypoints (.cmd)\nbootstrap-windows.cmd\nfoundation-windows.cmd\naudit-windows.cmd\npersonal-bootstrap-windows.cmd\nresign-windows.cmd"
       class: file
     }
 
     windows_impl: {
-      label: "Windows implementation (.ps1)\nfoundation-windows.ps1\naudit-windows.ps1\npersonal-bootstrap-windows.ps1\nresign-windows.ps1"
+      label: "windows/ implementation (.ps1)\nfoundation-windows.ps1\naudit-windows.ps1\npersonal-bootstrap-windows.ps1\nresign-windows.ps1"
       class: file
     }
 
-    shim: {
-      label: "Compatibility shim\nsigning-helpers-windows.ps1"
+    macos_libs: {
+      label: "macos libraries\nmacos/lib/common.zsh"
       class: internal
     }
 
-    libs: {
-      label: "Libraries\nlib/common.zsh\nlib/common.ps1\nlib/windows-precursor.ps1\nlib/signing-helpers-windows.ps1"
+    windows_libs: {
+      label: "windows libraries\nwindows/lib/common.ps1\nwindows/lib/windows-precursor.ps1\nwindows/lib/signing-helpers-windows.ps1"
       class: internal
     }
 
     readme: {
       label: "Bootstrap docs\nOther/scripts/README.md"
+      class: file
+    }
+  }
+
+  repository: {
+    label: "Other/repository/"
+    class: folder
+
+    tooling: {
+      label: "Maintainer tooling\ngenerate_readme_banners.py"
       class: file
     }
   }

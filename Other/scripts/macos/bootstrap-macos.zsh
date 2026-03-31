@@ -18,10 +18,10 @@ Convenience:
   treats it as a foundation mode and dispatches to foundation-macos.zsh.
 
 Examples:
-  ./Other/scripts/bootstrap-macos.zsh foundation setup --shell fish --profile work
-  ./Other/scripts/bootstrap-macos.zsh ensure --shell fish --profile work
-  ./Other/scripts/bootstrap-macos.zsh audit --json
-  ./Other/scripts/bootstrap-macos.zsh personal --dry-run
+  ./Other/scripts/macos/bootstrap-macos.zsh foundation setup --shell fish --profile work
+  ./Other/scripts/macos/bootstrap-macos.zsh ensure --shell fish --profile work
+  ./Other/scripts/macos/bootstrap-macos.zsh audit --json
+  ./Other/scripts/macos/bootstrap-macos.zsh personal --dry-run
 EOF
 }
 

@@ -49,10 +49,10 @@ Advanced internal override surface for resolved feature flags.
 Advanced internal override surface for resolved feature flags.
 
 .EXAMPLE
-pwsh -NoLogo -NoProfile -File .\Other\scripts\foundation-windows.ps1 -Mode ensure -Profile_ work
+pwsh -NoLogo -NoProfile -File .\Other\scripts\windows\foundation-windows.ps1 -Mode ensure -Profile_ work
 
 .EXAMPLE
-pwsh -NoLogo -NoProfile -File .\Other\scripts\foundation-windows.ps1 -Mode update -DryRun
+pwsh -NoLogo -NoProfile -File .\Other\scripts\windows\foundation-windows.ps1 -Mode update -DryRun
 
 .NOTES
 For a first run on Windows, prefer install.cmd, foundation-windows.cmd, or
@@ -120,7 +120,7 @@ $GoldenBundlePath  = Join-Path $CertsDir 'golden_pem.pem'
 $BootstrapRoot = if ($env:BOOTSTRAP_ROOT) {
   $env:BOOTSTRAP_ROOT
 } else {
-  Split-Path -Parent (Split-Path -Parent $ScriptDir)
+  Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $ScriptDir))
 }
 
 if (-not $DotfilesRepo) {
@@ -618,12 +618,12 @@ function Ensure-Profile {
   $blockContent = @(
     $PROFILE_BEGIN
     '$env:MISE_PWSH_CHPWD_WARNING=0'
-    '. "~/.dotfiles/Other/scripts/lib/common.ps1"'
+    '. "~/.dotfiles/Other/scripts/windows/lib/common.ps1"'
     'Remove-MiseInstallPathsFromSessionPath'
     '(& mise activate pwsh --shims) | Out-String | Invoke-Expression'
     '(& zoxide init powershell) | Out-String | Invoke-Expression'
     ''
-    '. "~/.dotfiles/Other/scripts/lib/signing-helpers-windows.ps1"'
+    '. "~/.dotfiles/Other/scripts/windows/lib/signing-helpers-windows.ps1"'
     $PROFILE_END
   ) -join "`n"
 
@@ -999,7 +999,7 @@ function Get-PersonalScriptPath {
     return (Join-Path $BootstrapRoot $PersonalScript)
   }
 
-  return (Join-Path $BootstrapRoot 'Other\scripts\personal-bootstrap-windows.ps1')
+  return (Join-Path $BootstrapRoot 'Other\scripts\windows\personal-bootstrap-windows.ps1')
 }
 
 function Invoke-PersonalLayer {

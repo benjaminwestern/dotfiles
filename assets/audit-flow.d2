@@ -1,0 +1,129 @@
+direction: right
+
+classes: {
+  platform: {
+    style.fill: "#F8FAFC"
+    style.stroke: "#CBD5E1"
+    style.stroke-width: 1
+    style.font-color: "#0F172A"
+  }
+  entry: {
+    style.fill: "#DBEAFE"
+    style.stroke: "#2563EB"
+    style.stroke-width: 2
+    style.font-color: "#0F172A"
+  }
+  step: {
+    style.fill: "#DCFCE7"
+    style.stroke: "#16A34A"
+    style.stroke-width: 2
+    style.font-color: "#0F172A"
+  }
+  guard: {
+    style.fill: "#FEF3C7"
+    style.stroke: "#D97706"
+    style.stroke-width: 2
+    style.font-color: "#0F172A"
+  }
+  output: {
+    style.fill: "#EDE9FE"
+    style.stroke: "#7C3AED"
+    style.stroke-width: 2
+    style.font-color: "#0F172A"
+  }
+  state: {
+    style.fill: "#FCE7F3"
+    style.stroke: "#DB2777"
+    style.stroke-width: 2
+    style.font-color: "#0F172A"
+  }
+}
+
+macos: {
+  label: "macOS audit"
+  class: platform
+  direction: down
+
+  entrypoint: {
+    label: "install.sh audit\nor macos/bootstrap-macos.zsh audit"
+    class: entry
+  }
+
+  audit: {
+    label: "macos/audit-macos.zsh\nRead-only by default"
+    class: step
+  }
+
+  sections: {
+    label: "Sections\ntools | shell | configs | personal | all"
+    class: step
+  }
+
+  report: {
+    label: "Terminal report"
+    class: output
+  }
+
+  json: {
+    label: "JSON output\n--json"
+    class: output
+  }
+
+  entrypoint -> audit -> sections -> report
+  audit -> json: "--json"
+}
+
+windows: {
+  label: "Windows audit"
+  class: platform
+  direction: down
+
+  entrypoint: {
+    label: "install.cmd audit\nor windows/audit-windows.cmd"
+    class: entry
+  }
+
+  bootstrap: {
+    label: "windows/bootstrap-windows.cmd audit"
+    class: entry
+  }
+
+  sign: {
+    label: "Sign repo-local PowerShell scripts"
+    class: guard
+  }
+
+  audit: {
+    label: "windows/audit-windows.ps1"
+    class: step
+  }
+
+  precursor: {
+    label: "PowerShell precursor\nIf needed, re-run in pwsh"
+    class: guard
+  }
+
+  sections: {
+    label: "Sections\ntools | shell | configs | signing | zscaler | all"
+    class: step
+  }
+
+  report: {
+    label: "Terminal report"
+    class: output
+  }
+
+  populate: {
+    label: "Optional state write\n--populate-state | -PopulateState"
+    class: state
+  }
+
+  json: {
+    label: "JSON output\n--json | -Json"
+    class: output
+  }
+
+  entrypoint -> bootstrap -> sign -> audit -> precursor -> sections -> report
+  report -> populate: "optional"
+  audit -> json: "-Json"
+}

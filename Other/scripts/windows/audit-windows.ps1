@@ -21,13 +21,13 @@ Writes discovered baseline values into ~/.config/dotfiles/state.env after the
 audit completes.
 
 .EXAMPLE
-pwsh -NoLogo -NoProfile -File .\Other\scripts\audit-windows.ps1
+pwsh -NoLogo -NoProfile -File .\Other\scripts\windows\audit-windows.ps1
 
 .EXAMPLE
-pwsh -NoLogo -NoProfile -File .\Other\scripts\audit-windows.ps1 -Section signing
+pwsh -NoLogo -NoProfile -File .\Other\scripts\windows\audit-windows.ps1 -Section signing
 
 .EXAMPLE
-pwsh -NoLogo -NoProfile -File .\Other\scripts\audit-windows.ps1 -Json
+pwsh -NoLogo -NoProfile -File .\Other\scripts\windows\audit-windows.ps1 -Json
 
 .NOTES
 Use install.cmd audit, audit-windows.cmd, or bootstrap-windows.cmd audit on a

@@ -1,0 +1,24 @@
+min_version = "2026.3.0"
+
+[tools]
+python = "latest"
+uv = "latest"
+"go:oss.terrastruct.com/d2" = { version = "latest" }
+
+[tasks.readme-assets]
+description = "Generate the SVG header assets embedded in the repository READMEs"
+run = """
+python ./Other/repository/generate_readme_banners.py
+"""
+
+[tasks.readme-diagrams]
+description = "Render the D2 flow diagrams embedded in the repository READMEs"
+run = """
+d2 --layout=elk ./assets/bootstrap-flow.d2 ./assets/bootstrap-flow.svg
+d2 --layout=elk ./assets/foundation-flow.d2 ./assets/foundation-flow.svg
+d2 --layout=elk ./assets/audit-flow.d2 ./assets/audit-flow.svg
+"""
+
+[tasks.readme-refresh]
+description = "Regenerate README headers and D2 diagrams in one pass"
+depends = ["readme-assets", "readme-diagrams"]

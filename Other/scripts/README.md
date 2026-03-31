@@ -1,391 +1,317 @@
-# Bootstrap scripts
+![Bootstrap scripts banner](../../assets/readme/scripts-hero.svg)
 
 This directory contains the repo-local bootstrap, audit, and repair scripts
-for macOS and Windows. Use the public loaders at the repository root by
-default. This README is the single source of truth for the bootstrap contract,
-the files that perform work on each platform, the supported flags, and the
-end-to-end flow. It replaces the old per-platform runbooks.
+for macOS and Windows. Start with the public loaders at the repository root for
+normal use. Use the scripts here when you need to inspect the flow, run a
+single stage directly, or debug a failed run. Repository-maintainer tooling now
+lives separately under [`../repository/`](../repository/).
 
-## Naming convention
+Regenerate the README banner set with `mise run readme-assets`, or refresh the
+headers and D2 diagrams together with `mise run readme-refresh`. The repo-local
+[`../../mise.toml`](../../mise.toml) installs the Python and D2 tooling for
+that pipeline. The task calls
+[`generate_readme_banners.py`](../repository/generate_readme_banners.py)
+and writes the SVGs to `assets/readme/`.
 
-The repo-local script names use the Windows layout as the baseline. Shared
-workflows use the same purpose-first, OS-suffixed pattern on both platforms:
+![Start here banner](../../assets/readme/scripts-start-here.svg)
+
+Use the public loaders first because they make sure the repo exists locally and
+then hand off to the correct repo-local entrypoint for the task you requested.
+
+| Goal | macOS | Windows | Why |
+| --- | --- | --- | --- |
+| First run or routine rerun | [`install.sh`](../../install.sh) | [`install.cmd`](../../install.cmd) | Safest path from a fresh machine |
+| Read-only audit | `./install.sh audit ...` | `.\install.cmd audit ...` | Uses the same public contract as setup |
+| Direct repo-local control | [`macos/bootstrap-macos.zsh`](macos/bootstrap-macos.zsh) | [`windows/bootstrap-windows.cmd`](windows/bootstrap-windows.cmd) | Useful when debugging or iterating locally |
+| Signing repair | Not needed | [`windows/resign-windows.cmd`](windows/resign-windows.cmd) | Repairs local PowerShell signing drift |
+
+> **Important**
+> On Windows, use `install.cmd` or the repo-local `.cmd` entrypoints for a
+> first run. They create or reuse the local signing certificate, sign the
+> repo-local PowerShell scripts, and keep the PowerShell 5.x to `pwsh` bridge
+> intact.
+
+![Mental model banner](../../assets/readme/scripts-mental-model.svg)
+
+Both platforms share the same operator model even though the plumbing differs.
+
+- The root [`install.sh`](../../install.sh) and
+  [`install.cmd`](../../install.cmd) files are the public loaders.
+- The foundation layer installs or repairs shared tooling and can optionally
+  hand off to the personal layer.
+- The personal layer applies repo-specific preferences such as dotfiles,
+  defaults, shell choices, and copied config.
+- The audit path is read-only by default. Windows also exposes a repair path
+  for signing drift.
+- Settings resolve through the same precedence chain on both platforms: CLI
+  flag, environment variable, state file, device profile, interactive prompt,
+  then hard-coded default.
+
+![Bootstrap flow banner](../../assets/readme/scripts-bootstrap-flow.svg)
+
+The bootstrap flow answers the first operator question: which file do you run,
+and what does it launch next? The diagram below shows the normal path on each
+platform before the platform-specific foundation or audit work begins.
+
+The diagram below is rendered from
+[`../../assets/bootstrap-flow.d2`](../../assets/bootstrap-flow.d2).
+
+![Bootstrap flow comparing macOS and Windows](../../assets/bootstrap-flow.svg)
+
+macOS delegates directly from the public loader into the repo-local `zsh`
+router. Windows adds a guarded hop through
+[`windows/bootstrap-windows.cmd`](windows/bootstrap-windows.cmd) so the local PowerShell
+implementation can be signed before it runs.
+
+![Foundation flow banner](../../assets/readme/scripts-foundation-flow.svg)
+
+The foundation flow answers the next question: what actually happens during
+`setup`, `ensure`, or `update`? This is the shared layer that installs the base
+tooling, repairs shell activation, seeds `mise`, applies trust settings, and
+then optionally enters the personal layer.
+
+The diagram below is rendered from
+[`../../assets/foundation-flow.d2`](../../assets/foundation-flow.d2).
+
+![Foundation flow comparing macOS and Windows](../../assets/foundation-flow.svg)
+
+`setup` and `ensure` follow the sequence above. `update` adds package-manager
+upgrade steps before it falls back into the same ensure-style validation and
+optional personal handoff.
+
+![Audit flow banner](../../assets/readme/scripts-audit-flow.svg)
+
+The audit flow is the safest way to understand the current machine state before
+you change anything. It is read-only on macOS. On Windows, `-PopulateState`
+adds one optional write after the terminal report so you can capture
+discovered values in the shared state file.
+
+The diagram below is rendered from
+[`../../assets/audit-flow.d2`](../../assets/audit-flow.d2).
+
+![Audit flow comparing macOS and Windows](../../assets/audit-flow.svg)
+
+Use `--json` on macOS. On Windows, use `--json` and `--populate-state`
+through [`install.cmd`](../../install.cmd), or use `-Json` and
+`-PopulateState` when you call the repo-local wrappers directly.
+
+![Script ownership banner](../../assets/readme/scripts-ownership-map.svg)
+
+Treat this as an operator-facing entrypoint map. The table shows what you run
+for each stage. On Windows, the `.cmd` wrappers are the normal entry surface.
+The `.ps1` files sit behind them and only matter when you are debugging the
+implementation layer directly.
+
+| Stage | macOS entrypoint | Windows entrypoint | Use when |
+| --- | --- | --- | --- |
+| Public loader | [`install.sh`](../../install.sh) | [`install.cmd`](../../install.cmd) | First run or normal rerun from the repo root |
+| Repo-local router | [`macos/bootstrap-macos.zsh`](macos/bootstrap-macos.zsh) | [`windows/bootstrap-windows.cmd`](windows/bootstrap-windows.cmd) | Platform-local dispatch and focused debugging |
+| Foundation | [`macos/foundation-macos.zsh`](macos/foundation-macos.zsh) | [`windows/foundation-windows.cmd`](windows/foundation-windows.cmd) | `setup`, `ensure`, or `update` |
+| Personal layer | [`macos/personal-bootstrap-macos.zsh`](macos/personal-bootstrap-macos.zsh) | [`windows/personal-bootstrap-windows.cmd`](windows/personal-bootstrap-windows.cmd) | Personal-only reconciliation after foundation |
+| Audit | [`macos/audit-macos.zsh`](macos/audit-macos.zsh) | [`windows/audit-windows.cmd`](windows/audit-windows.cmd) | Read-only inspection of machine state |
+| Repair | Not needed | [`windows/resign-windows.cmd`](windows/resign-windows.cmd) | PowerShell signing drift on Windows |
+
+Windows PowerShell implementation files:
+- [`windows/foundation-windows.ps1`](windows/foundation-windows.ps1)
+- [`windows/personal-bootstrap-windows.ps1`](windows/personal-bootstrap-windows.ps1)
+- [`windows/audit-windows.ps1`](windows/audit-windows.ps1)
+- [`windows/resign-windows.ps1`](windows/resign-windows.ps1)
+
+Support libraries:
+- [`macos/lib/common.zsh`](macos/lib/common.zsh)
+- [`windows/lib/common.ps1`](windows/lib/common.ps1)
+- [`windows/lib/windows-precursor.ps1`](windows/lib/windows-precursor.ps1)
+- [`windows/lib/signing-helpers-windows.ps1`](windows/lib/signing-helpers-windows.ps1)
+
+The naming convention is purpose-first and OS-suffixed:
 `bootstrap-<os>`, `foundation-<os>`, `personal-bootstrap-<os>`, and
-`audit-<os>`. On Windows, the operator-facing entrypoints use `.cmd`, and the
-implementation files use `.ps1` with the same base name. Windows-only repair
-and helper files keep the `-windows` suffix. The root `install.sh` and
-`install.cmd` keep their historical names because they are the public remote
-entrypoints.
+`audit-<os>`. Windows keeps `.cmd` as the operator-facing wrapper layer and
+`.ps1` as the implementation layer. The directory split now mirrors that model:
+`macos/`, `windows/`, and later `linux/` if a third platform lands.
 
-Use this matrix as the canonical map of script names:
+![Shared contract banner](../../assets/readme/scripts-shared-contract.svg)
 
-| Purpose | macOS entrypoint | Windows entrypoint | Windows implementation |
-| --- | --- | --- | --- |
-| Public loader | [`install.sh`](../../install.sh) | [`install.cmd`](../../install.cmd) | Not needed |
-| Repo-local bootstrap | [`bootstrap-macos.zsh`](bootstrap-macos.zsh) | [`bootstrap-windows.cmd`](bootstrap-windows.cmd) | Not needed |
-| Foundation | [`foundation-macos.zsh`](foundation-macos.zsh) | [`foundation-windows.cmd`](foundation-windows.cmd) | [`foundation-windows.ps1`](foundation-windows.ps1) |
-| Personal layer | [`personal-bootstrap-macos.zsh`](personal-bootstrap-macos.zsh) | [`personal-bootstrap-windows.cmd`](personal-bootstrap-windows.cmd) | [`personal-bootstrap-windows.ps1`](personal-bootstrap-windows.ps1) |
-| Audit | [`audit-macos.zsh`](audit-macos.zsh) | [`audit-windows.cmd`](audit-windows.cmd) | [`audit-windows.ps1`](audit-windows.ps1) |
-| Repair | Not needed | [`resign-windows.cmd`](resign-windows.cmd) | [`resign-windows.ps1`](resign-windows.ps1) |
-| OS-specific helpers | [`defaults-macos.sh`](defaults-macos.sh), [`lib/common.zsh`](lib/common.zsh) | [`lib/common.ps1`](lib/common.ps1), [`lib/windows-precursor.ps1`](lib/windows-precursor.ps1), [`lib/signing-helpers-windows.ps1`](lib/signing-helpers-windows.ps1) | Top-level [`signing-helpers-windows.ps1`](signing-helpers-windows.ps1) remains only as a compatibility shim |
+These defaults and conventions stay stable across both platforms, so you can
+reason about the bootstrap without memorising every implementation detail.
 
-## Public entrypoints
-
-Start with the public loaders on a fresh machine. They make sure the dotfiles
-repo exists locally before they hand off to the repo-local scripts in this
-directory.
-
-| Platform | File | Purpose | Help |
-| --- | --- | --- | --- |
-| macOS | [`install.sh`](../../install.sh) | Public loader for setup, ensure, update, personal, and audit | `./install.sh --help` |
-| Windows | [`install.cmd`](../../install.cmd) | Public loader for setup, ensure, update, personal, and audit | `.\install.cmd --help` |
-
-Use the repo-local entrypoints only when you need explicit control of the
-platform scripts or when you are debugging a failed run.
-
-## Supported modes
-
-The public loaders share the same high-level operating modes across both
-platforms.
-
-| Mode | Effect |
+| Contract | Value |
 | --- | --- |
-| `setup` | Run the full foundation flow and optionally hand off to the personal layer |
-| `ensure` | Re-run idempotently and repair drift |
-| `update` | Upgrade package-manager-managed state, then re-run ensure |
-| `personal` | Run only the repo-specific personal layer |
-| `audit` | Run the read-only machine audit |
+| State file | `~/.config/dotfiles/state.env` |
+| Resolution precedence | CLI flag, environment variable, state file, device profile, interactive prompt, hard-coded default |
+| Modes | `setup`, `ensure`, `update`, `personal`, `audit` |
+| Dry-run | `--dry-run` on macOS, `-DryRun` on Windows |
+| Profiles | `work`, `home`, `minimal` |
+| First-run recommendation | Use the public loaders, not the direct implementation files |
 
-## Shared contract
+![Profiles and flags banner](../../assets/readme/scripts-profiles-flags.svg)
 
-Both platforms follow the same operating model even though the implementation
-details differ.
+Profiles keep the common path short. Individual flags let you override that
+path when a machine needs something different.
 
-- State file: `~/.config/dotfiles/state.env`
-- Resolution precedence: CLI flag, environment variable, state file, device
-  profile preset, interactive prompt, then hard-coded default
-- Dry-run: prints what would change without making destructive changes
-- Profiles: `work`, `home`, and `minimal`
-- First-run recommendation: use the public loader, not a direct repo-local
-  script invocation
+| Platform | Scope | Flags |
+| --- | --- | --- |
+| macOS | Foundation and package selection | `zscaler`, `work-apps`, `home-apps`, `gui`, `mise-tools` |
+| macOS | Personal layer | `tuckr`, `macos-defaults`, `rosetta`, `shell-default` |
+| Windows | Foundation | `zscaler`, `mise-tools` |
+| Windows | Personal layer | `git-config`, `ssh-config`, `mise-config`, `opencode-config`, `profile-extras` |
 
-## macOS flow
+![Recommended commands banner](../../assets/readme/scripts-recommended-commands.svg)
 
-The macOS bootstrap is a direct `zsh` flow. It does not need an intermediate
-wrapper or shell-version bridge.
+These commands cover the common operator paths without dropping into the
+implementation files too early.
 
-### Files that perform the macOS work
+### macOS
 
-These are the files that actually implement the macOS bootstrap behavior.
-
-- [`install.sh`](../../install.sh) parses the public CLI, resolves or clones
-  the repo, exports flags, and dispatches to the repo-local scripts.
-- [`bootstrap-macos.zsh`](bootstrap-macos.zsh) is the repo-local macOS
-  entrypoint. It dispatches to the foundation, audit, or personal scripts.
-- [`foundation-macos.zsh`](foundation-macos.zsh) applies the shared macOS
-  foundation: Homebrew, foundation packages, `mise`, managed shell activation,
-  Zscaler trust, `mise` tools, and validation.
-- [`personal-bootstrap-macos.zsh`](personal-bootstrap-macos.zsh) applies the
-  repo-specific macOS layer: Brewfile reconciliation, Tuckr, default shell,
-  macOS defaults, and Rosetta.
-- [`audit-macos.zsh`](audit-macos.zsh) reports current macOS machine state
-  without modifying it.
-- [`defaults-macos.sh`](defaults-macos.sh) applies macOS system settings when
-  the personal layer enables that step.
-- [`lib/common.zsh`](lib/common.zsh) provides shared state management,
-  resolution, dry-run gating, interactive prompts, status output, and managed
-  block helpers.
-
-### End-to-end macOS flow
-
-This is the execution order for a normal macOS bootstrap run.
-
-1. [`install.sh`](../../install.sh) parses the requested mode and flags, then
-   ensures the repo is present locally.
-2. It delegates to [`bootstrap-macos.zsh`](bootstrap-macos.zsh).
-3. For `setup`, `ensure`, and `update`,
-   [`bootstrap-macos.zsh`](bootstrap-macos.zsh) dispatches to
-   [`foundation-macos.zsh`](foundation-macos.zsh).
-4. [`foundation-macos.zsh`](foundation-macos.zsh) sources
-   [`lib/common.zsh`](lib/common.zsh), resolves all flags, applies the macOS
-   foundation, and optionally calls
-   [`personal-bootstrap-macos.zsh`](personal-bootstrap-macos.zsh) when
-   `--personal` is set.
-5. For `personal`, [`bootstrap-macos.zsh`](bootstrap-macos.zsh) runs
-   [`personal-bootstrap-macos.zsh`](personal-bootstrap-macos.zsh) directly.
-6. For `audit`, [`bootstrap-macos.zsh`](bootstrap-macos.zsh) runs
-   [`audit-macos.zsh`](audit-macos.zsh) directly.
-
-### macOS options
-
-These are the public options that matter when you run the macOS loader.
-
-The macOS public loader accepts these options:
-
-- `--shell <fish|zsh>`
-- `--profile <work|home|minimal>`
-- `--enable-<flag>`
-- `--disable-<flag>`
-- `--personal`
-- `--non-interactive`
-- `--dry-run`
-- `--dotfiles-repo <url>`
-- `--dotfiles-dir <path>`
-- `--personal-script <path>`
-
-The macOS feature flags are:
-
-- `zscaler`
-- `work-apps`
-- `home-apps`
-- `gui`
-- `tuckr`
-- `macos-defaults`
-- `rosetta`
-- `mise-tools`
-- `shell-default`
-
-### Direct macOS help
-
-The repo-local macOS scripts also expose their own direct help surfaces.
+Use the root loader for normal setup and audit work. Drop to the repo-local
+router only when you need to inspect or debug a local stage directly.
 
 ```bash
-./Other/scripts/bootstrap-macos.zsh --help
-./Other/scripts/foundation-macos.zsh --help
-./Other/scripts/personal-bootstrap-macos.zsh --help
-./Other/scripts/audit-macos.zsh --help
-```
-
-## Windows flow
-
-The Windows bootstrap has one extra layer because it must be safe on machines
-that still start in Windows PowerShell 5.x or under an effective `AllSigned`
-policy.
-
-### Files that perform the Windows work
-
-These are the files that implement the Windows bootstrap behavior. The `.cmd`
-files are the supported operator-facing entrypoints. The `.ps1` files are the
-implementation layer they protect.
-
-- [`install.cmd`](../../install.cmd) parses the public CLI, resolves or clones
-  the repo, exports flags, and delegates into the repo-local Windows wrapper.
-- [`bootstrap-windows.cmd`](bootstrap-windows.cmd) is the first-run-safe
-  repo-local Windows entrypoint. It ensures the local signing certificate
-  exists, signs the repo-local `.ps1` files, and launches the selected target.
-- [`foundation-windows.cmd`](foundation-windows.cmd),
-  [`audit-windows.cmd`](audit-windows.cmd),
-  [`personal-bootstrap-windows.cmd`](personal-bootstrap-windows.cmd), and
-  [`resign-windows.cmd`](resign-windows.cmd) are the single-purpose Windows
-  entrypoints. They all route through [`bootstrap-windows.cmd`](bootstrap-windows.cmd).
-- [`lib/windows-precursor.ps1`](lib/windows-precursor.ps1) bridges Windows
-  PowerShell 5.x to PowerShell 7 by ensuring Scoop and `pwsh` exist and then
-  re-running the same target under `pwsh`.
-- [`foundation-windows.ps1`](foundation-windows.ps1) applies the shared
-  Windows foundation: Scoop, foundation packages, `mise`, managed PowerShell
-  profile activation, Windows Terminal defaults, Zscaler trust, and
-  validation.
-- [`personal-bootstrap-windows.ps1`](personal-bootstrap-windows.ps1) applies
-  the repo-specific Windows layer: dotfiles checkout, Git config, SSH config,
-  `mise` config, Opencode config, and PowerShell profile extras.
-- [`audit-windows.ps1`](audit-windows.ps1) reports current Windows machine
-  state, including outdated foundation Scoop packages and outdated `mise`
-  tools, without modifying it.
-- [`resign-windows.ps1`](resign-windows.ps1) repairs signing drift after
-  updates or local edits.
-- [`lib/signing-helpers-windows.ps1`](lib/signing-helpers-windows.ps1)
-  provides the shared local certificate and signing helpers used by
-  foundation, audit, and repair.
-- [`signing-helpers-windows.ps1`](signing-helpers-windows.ps1) is a
-  compatibility shim for older profile blocks and local imports.
-- [`lib/common.ps1`](lib/common.ps1) provides shared state management,
-  resolution, dry-run gating, status output, Windows Terminal helpers, and
-  managed block helpers.
-
-### End-to-end Windows flow
-
-This is the execution order for a normal Windows bootstrap run.
-
-1. [`install.cmd`](../../install.cmd) parses the requested mode and flags, then
-   ensures the repo is present locally.
-2. For normal Windows operations, it delegates to
-   [`bootstrap-windows.cmd`](bootstrap-windows.cmd). The single-purpose
-   wrappers such as [`foundation-windows.cmd`](foundation-windows.cmd) and
-   [`audit-windows.cmd`](audit-windows.cmd) also delegate there.
-3. [`bootstrap-windows.cmd`](bootstrap-windows.cmd) creates or reuses
-   `LocalScoopSigner`, signs the repo-local Windows PowerShell scripts, and
-   launches the selected `.ps1` target.
-4. [`foundation-windows.ps1`](foundation-windows.ps1) and
-   [`audit-windows.ps1`](audit-windows.ps1) immediately load
-   [`lib/windows-precursor.ps1`](lib/windows-precursor.ps1).
-5. If the current host is still Windows PowerShell 5.x, the precursor ensures
-   Scoop exists, ensures `pwsh` exists, then re-runs the same target under
-   PowerShell 7.
-6. Once the target is running in `pwsh`,
-   [`foundation-windows.ps1`](foundation-windows.ps1) applies the Windows
-   foundation. When `--personal` is set, it hands off to
-   [`personal-bootstrap-windows.ps1`](personal-bootstrap-windows.ps1).
-7. For `audit`, the wrapper runs
-   [`audit-windows.ps1`](audit-windows.ps1).
-8. For manual signing repair, use
-   [`resign-windows.cmd`](resign-windows.cmd). The wrapper enters
-   [`resign-windows.ps1`](resign-windows.ps1) through the same protected path.
-
-### Windows options
-
-These are the public options that matter when you run the Windows loader.
-
-The Windows public loader accepts these options:
-
-- `--shell <pwsh>`
-- `--profile <work|home|minimal>`
-- `--enable-<flag>`
-- `--disable-<flag>`
-- `--personal`
-- `--non-interactive`
-- `--dry-run`
-- `--dotfiles-repo <url>`
-- `--dotfiles-dir <path>`
-- `--personal-script <path>`
-- `--section <name>` for `audit`
-- `--json` for `audit`
-- `--populate-state` for `audit`
-
-The Windows foundation feature flags are:
-
-- `zscaler`
-- `mise-tools`
-
-The Windows personal-layer feature flags are:
-
-- `git-config`
-- `ssh-config`
-- `mise-config`
-- `opencode-config`
-- `profile-extras`
-
-### Direct Windows help
-
-Use these commands when you need help from the repo-local Windows entrypoints.
-
-The repo-local Windows entrypoints expose both wrapper help and PowerShell
-comment-based help. Use the `.cmd` commands for normal operations and
-`Get-Help` only when you are inspecting the implementation layer directly.
-
-```powershell
-.\Other\scripts\bootstrap-windows.cmd --help
-.\Other\scripts\foundation-windows.cmd --help
-.\Other\scripts\audit-windows.cmd --help
-.\Other\scripts\personal-bootstrap-windows.cmd --help
-.\Other\scripts\resign-windows.cmd --help
-Get-Help .\Other\scripts\foundation-windows.ps1 -Detailed
-Get-Help .\Other\scripts\personal-bootstrap-windows.ps1 -Detailed
-Get-Help .\Other\scripts\audit-windows.ps1 -Detailed
-Get-Help .\Other\scripts\resign-windows.ps1 -Detailed
-```
-
-## Audit and repair entrypoints
-
-Use the audit scripts when you want a read-only view of the current machine
-state. Use the Windows re-sign flow when an `AllSigned` environment needs local
-PowerShell wrappers to be signed again after updates.
-
-- macOS audit: [`audit-macos.zsh`](audit-macos.zsh)
-- Windows audit: [`audit-windows.cmd`](audit-windows.cmd) ->
-  [`audit-windows.ps1`](audit-windows.ps1)
-- Windows signing repair: [`resign-windows.cmd`](resign-windows.cmd) ->
-  [`resign-windows.ps1`](resign-windows.ps1)
-
-## Internal libraries
-
-The platform scripts share small internal libraries instead of duplicating
-common logic in every entrypoint.
-
-- [`lib/common.zsh`](lib/common.zsh) is the shared macOS library.
-- [`lib/common.ps1`](lib/common.ps1) is the shared Windows library.
-- [`lib/windows-precursor.ps1`](lib/windows-precursor.ps1) handles the Windows
-  PowerShell 5.x to PowerShell 7 bridge.
-- [`lib/signing-helpers-windows.ps1`](lib/signing-helpers-windows.ps1)
-  handles the local certificate and PowerShell signing helpers.
-
-## Recommended operator paths
-
-These are the normal entrypoints to use in practice.
-
-```bash
-# macOS
-./install.sh --help
 ./install.sh setup --shell fish --profile work --personal
+./install.sh ensure --personal
+./install.sh update
 ./install.sh audit --json
-./Other/scripts/bootstrap-macos.zsh --help
+./Other/scripts/macos/bootstrap-macos.zsh ensure --shell fish --profile work
+```
+
+### Windows
+
+Use the root loader for normal setup and audit work. Use the repo-local `.cmd`
+wrappers when you want a single-purpose entrypoint or a local repair path.
+
+```powershell
+.\install.cmd setup --profile work --personal
+.\install.cmd ensure
+.\install.cmd audit --populate-state
+.\Other\scripts\windows\bootstrap-windows.cmd audit -Section tools
+.\Other\scripts\windows\resign-windows.cmd
+```
+
+![Direct help banner](../../assets/readme/scripts-direct-help.svg)
+
+The fastest way to inspect a single entrypoint is to use its built-in help
+surface. The `.cmd` wrappers are the normal Windows help path. `Get-Help` is
+for inspecting the PowerShell implementation layer directly.
+
+<details>
+<summary>Show direct help commands</summary>
+
+```bash
+./Other/scripts/macos/bootstrap-macos.zsh --help
+./Other/scripts/macos/foundation-macos.zsh --help
+./Other/scripts/macos/personal-bootstrap-macos.zsh --help
+./Other/scripts/macos/audit-macos.zsh --help
 ```
 
 ```powershell
-# Windows
-.\install.cmd --help
-.\install.cmd setup --profile work --personal
-.\install.cmd audit --populate-state
-.\Other\scripts\bootstrap-windows.cmd --help
-.\Other\scripts\foundation-windows.cmd --help
-.\Other\scripts\audit-windows.cmd --help
-.\Other\scripts\personal-bootstrap-windows.cmd --help
-.\Other\scripts\resign-windows.cmd --help
+.\Other\scripts\windows\bootstrap-windows.cmd --help
+.\Other\scripts\windows\foundation-windows.cmd --help
+.\Other\scripts\windows\audit-windows.cmd --help
+.\Other\scripts\windows\personal-bootstrap-windows.cmd --help
+.\Other\scripts\windows\resign-windows.cmd --help
+Get-Help .\Other\scripts\windows\foundation-windows.ps1 -Detailed
+Get-Help .\Other\scripts\windows\personal-bootstrap-windows.ps1 -Detailed
+Get-Help .\Other\scripts\windows\audit-windows.ps1 -Detailed
+Get-Help .\Other\scripts\windows\resign-windows.ps1 -Detailed
 ```
 
-## FAQ
+</details>
 
-These are the operator questions that come up most often when the Windows
-bootstrap contract looks unusual at first glance.
+![Manual recovery banner](../../assets/readme/scripts-manual-recovery.svg)
+
+This section is a temporary macOS fallback. It exists while the macOS overhaul
+is still closing the remaining automation gaps, and it should disappear once
+the normal bootstrap path no longer needs a manual escape hatch.
+
+<details>
+<summary>Show manual macOS recovery steps</summary>
+
+Use this only as a last resort. The normal Windows recovery path still depends
+on the signed `.cmd` wrappers documented elsewhere in this README.
+
+1. Install the basic prerequisites.
+
+   ```bash
+   xcode-select --install
+   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+   eval "$(/opt/homebrew/bin/brew shellenv)"
+   brew install git fish
+   ```
+
+2. Clone the repo and move the remote to SSH if you plan to push changes.
+
+   ```bash
+   git clone https://github.com/benjaminwestern/dotfiles ~/.dotfiles
+   cd ~/.dotfiles
+   git remote set-url origin git@github.com:benjaminwestern/dotfiles.git
+   ```
+
+3. Install the base package layer and `mise`.
+
+   ```bash
+   brew bundle --file=~/.dotfiles/Configs/brew/Brewfile
+   curl https://mise.run | sh
+   export PATH="$HOME/.local/bin:$PATH"
+   eval "$(mise activate bash)"
+   ```
+
+4. Prepare the shell and config directories before you symlink anything.
+
+   ```bash
+   sudo sh -c 'echo /opt/homebrew/bin/fish >> /etc/shells'
+   chsh -s /opt/homebrew/bin/fish
+   mkdir -p ~/.ssh && chmod 700 ~/.ssh
+   mkdir -p ~/.config
+   mkdir -p ~/.codex
+   ```
+
+5. Apply the managed dotfiles and language toolchain.
+
+   ```bash
+   cd ~/.dotfiles && tuckr add \*
+   mise install
+   mise doctor
+   tuckr status
+   ```
+
+6. Apply the machine-specific finishing steps.
+
+   ```bash
+   ~/.dotfiles/Other/scripts/macos/defaults-macos.sh "$(hostname -s)"
+   /usr/sbin/softwareupdate --install-rosetta --agree-to-license
+   exec /opt/homebrew/bin/fish
+   ```
+
+</details>
+
+![FAQ banner](../../assets/readme/scripts-faq.svg)
+
+These are the questions that usually come up once you understand the normal
+flow but want to know why Windows looks more defensive than macOS.
 
 ### Can I launch the Windows `.cmd` entrypoints from PowerShell or Windows PowerShell 5.1?
 
 Yes. PowerShell can invoke the `.cmd` wrappers directly by path, for example
-`& .\Other\scripts\foundation-windows.cmd -Mode ensure`. The wrapper then runs
-under `cmd.exe`, which is exactly what the Windows bootstrap expects for the
-first-hop launch path.
-
-The main caveat is session scope. If a `.cmd` file changes environment
-variables, those changes stay inside the child process and do not flow back
-into the parent PowerShell session. That is acceptable here because the
-Windows `.cmd` files are only bootstrap entrypoints. They launch the protected
-PowerShell implementation, but they do not try to initialise your current
-interactive session.
+`& .\Other\scripts\windows\foundation-windows.cmd -Mode ensure`. The wrapper then runs
+under `cmd.exe`, which is the intended first hop for the Windows bootstrap.
 
 ### Why does Windows keep both `.cmd` and `.ps1` files?
 
-Windows uses `.cmd` as the operator-facing entrypoint layer and `.ps1` as the
-implementation layer. This avoids a chicken-and-egg problem on fresh machines
-or `AllSigned` machines where direct PowerShell execution may fail before the
-local signing and PowerShell 7 precursor logic has run.
+Windows uses `.cmd` as the operator-facing layer and `.ps1` as the
+implementation layer. That split avoids a chicken-and-egg problem on fresh
+machines or `AllSigned` machines where direct PowerShell execution can fail
+before the local signing and PowerShell 7 precursor logic has run.
 
-In practice, use the `.cmd` files for normal operation and use `Get-Help` on
-the `.ps1` files only when you are inspecting or debugging the implementation.
-
-## Roadmap
+![Validation roadmap banner](../../assets/readme/scripts-validation-roadmap.svg)
 
 The bootstrap contract is in place on macOS and Windows. The remaining work is
-mostly validation, automation, and the next platform expansion, not a rewrite
-of the current two-layer design.
+mostly about proving the current flow on real machines and in CI, not
+redesigning the current two-layer model.
 
-- Validate the macOS foundation flow on a true bare Mac and use those results
-  to tighten pre-flight checks, validation, and repair paths.
+- Validate the macOS foundation flow on a true bare Mac and tighten pre-flight
+  checks, validation, and repair paths from the results.
 - Validate the Windows personal layer on a real Windows machine so the repo
   copy, profile, SSH, Git, and config flows are proven outside dry-run paths.
 - Add CI coverage on ephemeral macOS and Windows runners so `setup`, `ensure`,
   `update`, and `audit` stay exercised continuously.
 - Add Linux only after the current macOS and Windows contract is stable enough
-  to copy forward without creating a third naming or flow variant.
-
-## TODO
-
-These are the next concrete tasks to close against the roadmap above.
-
-- Run [`foundation-macos.zsh`](foundation-macos.zsh) on a bare macOS machine
-  and capture the validation gaps that need script changes.
-- Run
-  [`personal-bootstrap-windows.cmd`](personal-bootstrap-windows.cmd) end to
-  end on a real Windows machine and fix any path, copy, or profile drift.
-- Define the first CI matrix for [`install.sh`](../../install.sh),
-  [`install.cmd`](../../install.cmd), and the direct audit and dry-run flows.
-- When Linux starts, keep the same purpose-first naming contract used here so
-  the next platform does not reintroduce naming drift.
+  to copy forward without introducing a third naming or flow variant.

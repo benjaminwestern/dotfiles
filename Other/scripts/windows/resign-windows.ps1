@@ -14,10 +14,10 @@ profile when present.
 Prints what the script would sign without modifying any files.
 
 .EXAMPLE
-pwsh -NoLogo -NoProfile -File .\Other\scripts\resign-windows.ps1
+pwsh -NoLogo -NoProfile -File .\Other\scripts\windows\resign-windows.ps1
 
 .EXAMPLE
-pwsh -NoLogo -NoProfile -File .\Other\scripts\resign-windows.ps1 -DryRun
+pwsh -NoLogo -NoProfile -File .\Other\scripts\windows\resign-windows.ps1 -DryRun
 #>
 param(
   [switch]$DryRun
@@ -116,7 +116,7 @@ function Main {
 
   Invoke-ReSignSet `
     -Label 'Dotfiles Windows scripts' `
-    -RootPath (Join-Path $HOME '.dotfiles\Other\scripts') `
+    -RootPath (Join-Path $HOME '.dotfiles\Other\scripts\windows') `
     -SignAction { Sign-DotfilesWindowsScripts }
 
   Invoke-ReSignProfile

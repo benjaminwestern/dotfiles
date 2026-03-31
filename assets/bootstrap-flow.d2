@@ -1,0 +1,144 @@
+direction: right
+
+classes: {
+  platform: {
+    style.fill: "#F8FAFC"
+    style.stroke: "#CBD5E1"
+    style.stroke-width: 1
+    style.font-color: "#0F172A"
+  }
+  entry: {
+    style.fill: "#DBEAFE"
+    style.stroke: "#2563EB"
+    style.stroke-width: 2
+    style.font-color: "#0F172A"
+  }
+  step: {
+    style.fill: "#DCFCE7"
+    style.stroke: "#16A34A"
+    style.stroke-width: 2
+    style.font-color: "#0F172A"
+  }
+  guard: {
+    style.fill: "#FEF3C7"
+    style.stroke: "#D97706"
+    style.stroke-width: 2
+    style.font-color: "#0F172A"
+  }
+  repair: {
+    style.fill: "#FEE2E2"
+    style.stroke: "#DC2626"
+    style.stroke-width: 2
+    style.font-color: "#0F172A"
+  }
+  note: {
+    style.fill: "#EDE9FE"
+    style.stroke: "#7C3AED"
+    style.stroke-width: 2
+    style.font-color: "#0F172A"
+  }
+}
+
+macos: {
+  label: "macOS bootstrap path"
+  class: platform
+  direction: down
+
+  loader: {
+    label: "install.sh\nPublic loader"
+    class: entry
+  }
+
+  checkout: {
+    label: "Ensure the repo exists locally\nReuse checkout, clone, or use archive fallback"
+    class: step
+  }
+
+  bootstrap: {
+    label: "macos/bootstrap-macos.zsh\nRepo-local router"
+    class: entry
+  }
+
+  foundation: {
+    label: "macos/foundation-macos.zsh\nsetup | ensure | update"
+    class: step
+  }
+
+  audit: {
+    label: "macos/audit-macos.zsh\naudit"
+    class: step
+  }
+
+  personal: {
+    label: "macos/personal-bootstrap-macos.zsh\npersonal"
+    class: step
+  }
+
+  loader -> checkout -> bootstrap
+  bootstrap -> foundation: "default path"
+  bootstrap -> audit: "audit"
+  bootstrap -> personal: "personal"
+}
+
+windows: {
+  label: "Windows bootstrap path"
+  class: platform
+  direction: down
+
+  loader: {
+    label: "install.cmd\nPublic loader"
+    class: entry
+  }
+
+  checkout: {
+    label: "Ensure the repo exists locally\nReuse checkout, clone, or use archive fallback"
+    class: step
+  }
+
+  bootstrap: {
+    label: "windows/bootstrap-windows.cmd\nRepo-local router"
+    class: entry
+  }
+
+  certificate: {
+    label: "Create or reuse LocalScoopSigner"
+    class: guard
+  }
+
+  sign: {
+    label: "Sign repo-local PowerShell scripts"
+    class: guard
+  }
+
+  foundation: {
+    label: "windows/foundation-windows.ps1\nsetup | ensure | update"
+    class: step
+  }
+
+  audit: {
+    label: "windows/audit-windows.ps1\naudit"
+    class: step
+  }
+
+  personal: {
+    label: "windows/personal-bootstrap-windows.ps1\npersonal"
+    class: step
+  }
+
+  resign: {
+    label: "windows/resign-windows.ps1\nrepair signing drift"
+    class: repair
+  }
+
+  direct_wrappers: {
+    label: "Direct single-purpose wrappers also route here\nwindows/foundation-windows.cmd\nwindows/audit-windows.cmd\nwindows/personal-bootstrap-windows.cmd\nwindows/resign-windows.cmd"
+    class: note
+  }
+
+  loader -> checkout -> bootstrap -> certificate -> sign
+  sign -> foundation: "foundation"
+  sign -> audit: "audit"
+  sign -> personal: "personal"
+  sign -> resign: "resign"
+  direct_wrappers -> bootstrap: "same guarded path"
+}

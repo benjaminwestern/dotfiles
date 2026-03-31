@@ -1,0 +1,181 @@
+direction: right
+
+classes: {
+  platform: {
+    style.fill: "#F8FAFC"
+    style.stroke: "#CBD5E1"
+    style.stroke-width: 1
+    style.font-color: "#0F172A"
+  }
+  entry: {
+    style.fill: "#DBEAFE"
+    style.stroke: "#2563EB"
+    style.stroke-width: 2
+    style.font-color: "#0F172A"
+  }
+  step: {
+    style.fill: "#DCFCE7"
+    style.stroke: "#16A34A"
+    style.stroke-width: 2
+    style.font-color: "#0F172A"
+  }
+  shell: {
+    style.fill: "#E0F2FE"
+    style.stroke: "#0284C7"
+    style.stroke-width: 2
+    style.font-color: "#0F172A"
+  }
+  trust: {
+    style.fill: "#FEF3C7"
+    style.stroke: "#D97706"
+    style.stroke-width: 2
+    style.font-color: "#0F172A"
+  }
+  finish: {
+    style.fill: "#EDE9FE"
+    style.stroke: "#7C3AED"
+    style.stroke-width: 2
+    style.font-color: "#0F172A"
+  }
+}
+
+macos: {
+  label: "macOS foundation"
+  class: platform
+  direction: down
+
+  entrypoint: {
+    label: "macos/foundation-macos.zsh"
+    class: entry
+  }
+
+  preflight: {
+    label: "Pre-flight inventory\nRead current state and resolve flags"
+    class: shell
+  }
+
+  homebrew: {
+    label: "Homebrew\nEnsure package manager and shellenv"
+    class: step
+  }
+
+  packages: {
+    label: "Foundation packages"
+    class: step
+  }
+
+  mise: {
+    label: "mise"
+    class: step
+  }
+
+  shell_state: {
+    label: "Shell state\nManaged profile block and activation"
+    class: shell
+  }
+
+  config: {
+    label: "Seed mise config"
+    class: shell
+  }
+
+  zscaler: {
+    label: "Zscaler trust\nEnable or detect trust settings"
+    class: trust
+  }
+
+  tools: {
+    label: "mise tools"
+    class: step
+  }
+
+  validation: {
+    label: "Validation"
+    class: finish
+  }
+
+  personal: {
+    label: "Optional personal layer\n--personal"
+    class: finish
+  }
+
+  entrypoint -> preflight -> homebrew -> packages -> mise -> shell_state -> config -> zscaler -> tools -> validation -> personal
+}
+
+windows: {
+  label: "Windows foundation"
+  class: platform
+  direction: down
+
+  entrypoint: {
+    label: "windows/foundation-windows.ps1"
+    class: entry
+  }
+
+  precursor: {
+    label: "PowerShell precursor\nIf needed, install Scoop and pwsh\nthen re-run in PowerShell 7"
+    class: trust
+  }
+
+  resolve: {
+    label: "Resolve mode, profile, and flags"
+    class: shell
+  }
+
+  scoop: {
+    label: "Scoop"
+    class: step
+  }
+
+  packages: {
+    label: "Foundation packages"
+    class: step
+  }
+
+  mise: {
+    label: "mise"
+    class: step
+  }
+
+  shell_state: {
+    label: "PowerShell state\nManaged profile and current-shell activation"
+    class: shell
+  }
+
+  terminal: {
+    label: "Windows Terminal\nRepair pwsh default profile"
+    class: shell
+  }
+
+  config: {
+    label: "Seed mise config"
+    class: shell
+  }
+
+  zscaler_stage_one: {
+    label: "Zscaler trust stage 1\nBefore mise install"
+    class: trust
+  }
+
+  tools: {
+    label: "mise tools"
+    class: step
+  }
+
+  zscaler_stage_two: {
+    label: "Zscaler trust stage 2\nRefresh after mise install"
+    class: trust
+  }
+
+  validation: {
+    label: "Validation"
+    class: finish
+  }
+
+  personal: {
+    label: "Optional personal layer\n-Personal"
+    class: finish
+  }
+
+  entrypoint -> precursor -> resolve -> scoop -> packages -> mise -> shell_state -> terminal -> config -> zscaler_stage_one -> tools -> zscaler_stage_two -> validation -> personal
+}

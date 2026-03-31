@@ -21,10 +21,10 @@ cloned.
 Prints what the script would change without modifying files.
 
 .EXAMPLE
-pwsh -NoLogo -NoProfile -File .\Other\scripts\personal-bootstrap-windows.ps1
+pwsh -NoLogo -NoProfile -File .\Other\scripts\windows\personal-bootstrap-windows.ps1
 
 .EXAMPLE
-pwsh -NoLogo -NoProfile -File .\Other\scripts\personal-bootstrap-windows.ps1 -DryRun
+pwsh -NoLogo -NoProfile -File .\Other\scripts\windows\personal-bootstrap-windows.ps1 -DryRun
 
 .NOTES
 Run foundation-windows.cmd first, or enter through install.cmd,

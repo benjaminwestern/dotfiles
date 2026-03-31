@@ -65,10 +65,10 @@ Feature flags: zscaler, work-apps, home-apps, gui, tuckr, macos-defaults,
                rosetta, mise-tools, shell-default
 
 Repo-local scripts:
-  bootstrap-macos.zsh
-  foundation-macos.zsh
-  personal-bootstrap-macos.zsh
-  audit-macos.zsh
+  Other/scripts/macos/bootstrap-macos.zsh
+  Other/scripts/macos/foundation-macos.zsh
+  Other/scripts/macos/personal-bootstrap-macos.zsh
+  Other/scripts/macos/audit-macos.zsh
 
 Examples:
   install.sh setup --shell fish --profile work
@@ -204,7 +204,7 @@ export_flags() {
 }
 
 local_repo_root() {
-  if [[ -n "$SELF_DIR" ]] && [[ -f "$SELF_DIR/Other/scripts/bootstrap-macos.zsh" ]]; then
+  if [[ -n "$SELF_DIR" ]] && [[ -f "$SELF_DIR/Other/scripts/macos/bootstrap-macos.zsh" ]]; then
     printf '%s\n' "$SELF_DIR"
     return 0
   fi
@@ -244,7 +244,7 @@ ensure_run_root() {
     return
   fi
 
-  if [[ -f "$DOTFILES_DIR/Other/scripts/bootstrap-macos.zsh" ]]; then
+  if [[ -f "$DOTFILES_DIR/Other/scripts/macos/bootstrap-macos.zsh" ]]; then
     RUN_ROOT="$DOTFILES_DIR"
     return
   fi
@@ -284,13 +284,13 @@ run_macos_entrypoint() {
   local exit_code
 
   if [[ "$MODE" == "audit" ]]; then
-    /bin/zsh "$RUN_ROOT/Other/scripts/bootstrap-macos.zsh" audit "${AUDIT_ARGS[@]}"
+    /bin/zsh "$RUN_ROOT/Other/scripts/macos/bootstrap-macos.zsh" audit "${AUDIT_ARGS[@]}"
     exit_code=$?
   elif [[ "$MODE" == "personal" ]]; then
-    /bin/zsh "$RUN_ROOT/Other/scripts/bootstrap-macos.zsh" personal
+    /bin/zsh "$RUN_ROOT/Other/scripts/macos/bootstrap-macos.zsh" personal
     exit_code=$?
   else
-    /bin/zsh "$RUN_ROOT/Other/scripts/bootstrap-macos.zsh" "$MODE"
+    /bin/zsh "$RUN_ROOT/Other/scripts/macos/bootstrap-macos.zsh" "$MODE"
     exit_code=$?
   fi
 

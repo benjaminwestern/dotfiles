@@ -26,7 +26,7 @@ source "$SCRIPT_DIR/lib/common.zsh"
 MODE="${MODE:-personal}"
 DOTFILES_REPO="${DOTFILES_REPO:-https://github.com/benjaminwestern/dotfiles.git}"
 DOTFILES_DIR="${DOTFILES_DIR:-$HOME/.dotfiles}"
-BOOTSTRAP_ROOT="${BOOTSTRAP_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+BOOTSTRAP_ROOT="${BOOTSTRAP_ROOT:-$(cd "$SCRIPT_DIR/../../.." && pwd)}"
 
 personal_usage() {
   cat <<'EOF'
@@ -342,7 +342,7 @@ apply_macos_defaults() {
     return 0
   fi
 
-  local defaults_script="$DOTFILES_DIR/Other/scripts/defaults-macos.sh"
+  local defaults_script="$DOTFILES_DIR/Other/scripts/macos/defaults-macos.sh"
 
   if [[ ! -f "$defaults_script" ]]; then
     status_fail "macOS defaults" "script not found at $defaults_script"

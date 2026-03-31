@@ -20,7 +20,7 @@ if not "%DOTFILES_DIR%"=="" (
 )
 
 for %%I in ("%~dp0.") do set "LOCAL_ROOT=%%~fI"
-if exist "%LOCAL_ROOT%\Other\scripts\bootstrap-windows.cmd" (
+if exist "%LOCAL_ROOT%\Other\scripts\windows\bootstrap-windows.cmd" (
   set "RUN_ROOT=%LOCAL_ROOT%"
 ) else (
   set "RUN_ROOT="
@@ -188,11 +188,11 @@ if not errorlevel 1 (
 )
 
 if /I "%ENTRY_TARGET%"=="audit" (
-  call "%RUN_ROOT%\Other\scripts\bootstrap-windows.cmd" audit %FORWARD_ARGS%
+  call "%RUN_ROOT%\Other\scripts\windows\bootstrap-windows.cmd" audit %FORWARD_ARGS%
 ) else if /I "%ENTRY_TARGET%"=="personal" (
-  call "%RUN_ROOT%\Other\scripts\bootstrap-windows.cmd" personal %FORWARD_ARGS%
+  call "%RUN_ROOT%\Other\scripts\windows\bootstrap-windows.cmd" personal %FORWARD_ARGS%
 ) else (
-  call "%RUN_ROOT%\Other\scripts\bootstrap-windows.cmd" foundation -Mode %ENTRY_MODE% %FORWARD_ARGS%
+  call "%RUN_ROOT%\Other\scripts\windows\bootstrap-windows.cmd" foundation -Mode %ENTRY_MODE% %FORWARD_ARGS%
 )
 set "EXITCODE=%ERRORLEVEL%"
 
@@ -225,11 +225,11 @@ echo   Personal:   git-config, ssh-config, mise-config, opencode-config,
 echo               profile-extras
 echo.
 echo Repo-local scripts:
-echo   bootstrap-windows.cmd
-echo   foundation-windows.cmd
-echo   audit-windows.cmd
-echo   personal-bootstrap-windows.cmd
-echo   resign-windows.cmd
+echo   Other\scripts\windows\bootstrap-windows.cmd
+echo   Other\scripts\windows\foundation-windows.cmd
+echo   Other\scripts\windows\audit-windows.cmd
+echo   Other\scripts\windows\personal-bootstrap-windows.cmd
+echo   Other\scripts\windows\resign-windows.cmd
 echo.
 echo Examples:
 echo   install.cmd setup --profile work --personal
@@ -278,7 +278,7 @@ set "RUN_ROOT=%ARCHIVE_RUN_ROOT%"
 exit /b 0
 
 :ensure_run_root
-if exist "%TARGET_DOTFILES_DIR%\Other\scripts\bootstrap-windows.cmd" (
+if exist "%TARGET_DOTFILES_DIR%\Other\scripts\windows\bootstrap-windows.cmd" (
   set "RUN_ROOT=%TARGET_DOTFILES_DIR%"
   exit /b 0
 )

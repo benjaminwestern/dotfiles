@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="320" viewBox="0 0 1600 320" fill="none" role="img" aria-label="Bootstrap scripts">
+<defs><pattern id="grid-scripts-hero-svg" width="64" height="64" patternUnits="userSpaceOnUse"><path d="M 64 0 L 0 0 0 64" fill="none" stroke="#263A63" stroke-opacity="0.07" stroke-width="1"/></pattern></defs>
+<rect width="1600" height="320" rx="30" fill="#F5F0E6"/>
+<rect x="10" y="10" width="1580" height="300" rx="24" fill="url(#grid-scripts-hero-svg)" stroke="#263A63" stroke-width="2"/>
+<rect x="26" y="26" width="250" height="268" rx="20" fill="#C55A38"/>
+<path d="M 66 252 H 210" stroke="#FFF9F0" stroke-width="4" stroke-linecap="round"/>
+<path d="M 66 274 H 178" stroke="#FFF9F0" stroke-opacity="0.72" stroke-width="4" stroke-linecap="round"/>
+<text x="58" y="82" fill="#FFF9F0" font-size="18" font-weight="700" letter-spacing="0.30em" font-family="IBM Plex Mono, SFMono-Regular, Menlo, Consolas, monospace">10</text>
+<text x="58" y="122" fill="#FFF9F0" font-size="14" font-weight="700" letter-spacing="0.05em" font-family="IBM Plex Mono, SFMono-Regular, Menlo, Consolas, monospace">REPO-LOCAL</text><text x="58" y="141" fill="#FFF9F0" font-size="14" font-weight="700" letter-spacing="0.05em" font-family="IBM Plex Mono, SFMono-Regular, Menlo, Consolas, monospace">EXECUTION</text>
+<text x="324" y="110" fill="#172033" font-size="70" font-weight="760" letter-spacing="-0.04em" font-family="IBM Plex Sans, Avenir Next, Segoe UI, Helvetica Neue, Arial, sans-serif">Bootstrap scripts</text>
+<text x="328" y="202" fill="#5C667A" font-size="20" font-weight="600" letter-spacing="-0.01em" font-family="IBM Plex Sans, Avenir Next, Segoe UI, Helvetica Neue, Arial, sans-serif">The detailed operator contract for setup, ensure,</text><text x="328" y="228" fill="#5C667A" font-size="20" font-weight="600" letter-spacing="-0.01em" font-family="IBM Plex Sans, Avenir Next, Segoe UI, Helvetica Neue, Arial, sans-serif">update, audit, and repair across macOS and Windows.</text>
+<g transform="translate(1382,46)"><rect width="146" height="32" rx="16" fill="#FFF9F0" stroke="#C55A38" stroke-width="1.5"/><text x="73.0" y="21" text-anchor="middle" fill="#172033" font-size="13" font-weight="700" letter-spacing="0.08em" font-family="IBM Plex Sans, Avenir Next, Segoe UI, Helvetica Neue, Arial, sans-serif">ENTRYPOINTS</text></g><g transform="translate(1382,88)"><rect width="86" height="32" rx="16" fill="#FFF9F0" stroke="#C55A38" stroke-width="1.5"/><text x="43.0" y="21" text-anchor="middle" fill="#172033" font-size="13" font-weight="700" letter-spacing="0.08em" font-family="IBM Plex Sans, Avenir Next, Segoe UI, Helvetica Neue, Arial, sans-serif">FLOWS</text></g>
+</svg>

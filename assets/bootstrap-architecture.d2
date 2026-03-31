@@ -47,27 +47,27 @@ macos: {
   class: container
 
   bootstrap: {
-    label: "bootstrap-macos.zsh"
+    label: "macos/bootstrap-macos.zsh"
     class: entrypoint
   }
 
   foundation: {
-    label: "foundation-macos.zsh"
+    label: "macos/foundation-macos.zsh"
     class: implementation
   }
 
   personal: {
-    label: "personal-bootstrap-macos.zsh"
+    label: "macos/personal-bootstrap-macos.zsh"
     class: implementation
   }
 
   audit: {
-    label: "audit-macos.zsh"
+    label: "macos/audit-macos.zsh"
     class: implementation
   }
 
   common: {
-    label: "lib/common.zsh"
+    label: "macos/lib/common.zsh"
     class: library
   }
 }
@@ -77,27 +77,27 @@ windows_cmd: {
   class: container
 
   bootstrap: {
-    label: "bootstrap-windows.cmd"
+    label: "windows/bootstrap-windows.cmd"
     class: entrypoint
   }
 
   foundation: {
-    label: "foundation-windows.cmd"
+    label: "windows/foundation-windows.cmd"
     class: entrypoint
   }
 
   audit: {
-    label: "audit-windows.cmd"
+    label: "windows/audit-windows.cmd"
     class: entrypoint
   }
 
   personal: {
-    label: "personal-bootstrap-windows.cmd"
+    label: "windows/personal-bootstrap-windows.cmd"
     class: entrypoint
   }
 
   resign: {
-    label: "resign-windows.cmd"
+    label: "windows/resign-windows.cmd"
     class: entrypoint
   }
 }
@@ -107,22 +107,22 @@ windows_ps1: {
   class: container
 
   foundation: {
-    label: "foundation-windows.ps1"
+    label: "windows/foundation-windows.ps1"
     class: implementation
   }
 
   audit: {
-    label: "audit-windows.ps1"
+    label: "windows/audit-windows.ps1"
     class: implementation
   }
 
   personal: {
-    label: "personal-bootstrap-windows.ps1"
+    label: "windows/personal-bootstrap-windows.ps1"
     class: implementation
   }
 
   resign: {
-    label: "resign-windows.ps1"
+    label: "windows/resign-windows.ps1"
     class: implementation
   }
 }
@@ -132,17 +132,17 @@ windows_lib: {
   class: container
 
   precursor: {
-    label: "lib/windows-precursor.ps1"
+    label: "windows/lib/windows-precursor.ps1"
     class: library
   }
 
   common: {
-    label: "lib/common.ps1"
+    label: "windows/lib/common.ps1"
     class: library
   }
 
   signing: {
-    label: "lib/signing-helpers-windows.ps1"
+    label: "windows/lib/signing-helpers-windows.ps1"
     class: library
   }
 }

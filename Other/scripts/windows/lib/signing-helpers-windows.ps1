@@ -64,7 +64,7 @@ function global:Sign-MiseScripts {
 function global:Sign-DotfilesWindowsScripts {
   $cert = Get-LocalCodeSigningCert
   if (-not $cert) { return }
-  $scriptsRoot = Join-Path $HOME '.dotfiles\Other\scripts'
+  $scriptsRoot = Join-Path $HOME '.dotfiles\Other\scripts\windows'
   if (-not (Test-Path $scriptsRoot)) { return }
   Get-ChildItem $scriptsRoot -Recurse -Filter *.ps1 -ErrorAction SilentlyContinue |
     Where-Object { $_.Length -ge 4 } |
