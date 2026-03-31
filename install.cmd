@@ -219,9 +219,23 @@ echo   --section ^<name^>          Audit section ^(audit mode only^)
 echo   --json                      JSON audit output ^(audit mode only^)
 echo   --populate-state            Populate audit state ^(audit mode only^)
 echo.
+echo Feature flags:
+echo   Foundation: zscaler, mise-tools
+echo   Personal:   git-config, ssh-config, mise-config, opencode-config,
+echo               profile-extras
+echo.
+echo Repo-local scripts:
+echo   bootstrap-windows.cmd
+echo   foundation-windows.cmd
+echo   audit-windows.cmd
+echo   personal-bootstrap-windows.cmd
+echo   resign-windows.cmd
+echo.
 echo Examples:
 echo   install.cmd setup --profile work --personal
 echo   install.cmd ensure
+echo   install.cmd setup --enable-zscaler --disable-mise-tools
+echo   install.cmd personal --disable-opencode-config
 echo   install.cmd audit --section tools
 echo   install.cmd audit --json
 endlocal & exit /b 0

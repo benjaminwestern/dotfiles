@@ -17,6 +17,7 @@
 #   ./audit-macos.zsh --section tools     # Audit only the tools section
 #   ./audit-macos.zsh --json              # Output machine-readable JSON
 #   NON_INTERACTIVE=1 ./audit-macos.zsh   # No gum dependency
+#   ./bootstrap-macos.zsh audit --json    # Repo-local entrypoint path
 #
 # Exit codes:
 #   0 -- audit completed (does not mean everything is installed)

@@ -10,6 +10,7 @@
 #
 # Usage:
 #   ./personal-bootstrap-macos.zsh
+#   ./personal-bootstrap-macos.zsh --dry-run
 #   MODE=personal ./personal-bootstrap-macos.zsh
 #
 # Prerequisites:
@@ -26,6 +27,59 @@ MODE="${MODE:-personal}"
 DOTFILES_REPO="${DOTFILES_REPO:-https://github.com/benjaminwestern/dotfiles.git}"
 DOTFILES_DIR="${DOTFILES_DIR:-$HOME/.dotfiles}"
 BOOTSTRAP_ROOT="${BOOTSTRAP_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+
+personal_usage() {
+  cat <<'EOF'
+Usage:
+  personal-bootstrap-macos.zsh [options]
+
+Options:
+  --dotfiles-repo <url>    Override dotfiles repository URL
+  --dotfiles-dir <path>    Override the local dotfiles checkout path
+  --dry-run                Show what would happen without making changes
+  --non-interactive        Disable gum-styled prompts and panels
+  -h, --help               Show this help text
+
+Notes:
+  This script consumes resolved state written by the foundation layer.
+  Feature-flag overrides are normally set through install.sh, environment
+  variables, or ~/.config/dotfiles/state.env before this script runs.
+EOF
+}
+
+parse_personal_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --dotfiles-repo)
+        [[ $# -ge 2 ]] || fail "--dotfiles-repo requires a value"
+        DOTFILES_REPO="$2"
+        shift 2
+        ;;
+      --dotfiles-dir)
+        [[ $# -ge 2 ]] || fail "--dotfiles-dir requires a value"
+        DOTFILES_DIR="$2"
+        shift 2
+        ;;
+      --dry-run)
+        DRY_RUN=1
+        shift
+        ;;
+      --non-interactive)
+        NON_INTERACTIVE=1
+        shift
+        ;;
+      -h|--help)
+        personal_usage
+        exit 0
+        ;;
+      *)
+        fail "Unknown argument: $1"
+        ;;
+    esac
+  done
+}
+
+parse_personal_args "$@"
 
 # -----------------------------------------------------------------------------
 # Read the state file to populate all RESOLVED_* variables.
@@ -267,7 +321,7 @@ apply_shell_default() {
 # SECTION 6: MACOS DEFAULTS
 # =============================================================================
 
-# apply_macos_defaults -- Run the macos-defaults.sh preferences script
+# apply_macos_defaults -- Run the defaults-macos.sh preferences script
 #
 # Checks: Whether the defaults script exists at the expected path.
 # Gates: RESOLVED_MACOS_DEFAULTS — skips when "false" or empty (default: true).
@@ -288,7 +342,7 @@ apply_macos_defaults() {
     return 0
   fi
 
-  local defaults_script="$DOTFILES_DIR/Other/scripts/macos-defaults.sh"
+  local defaults_script="$DOTFILES_DIR/Other/scripts/defaults-macos.sh"
 
   if [[ ! -f "$defaults_script" ]]; then
     status_fail "macOS defaults" "script not found at $defaults_script"
@@ -391,4 +445,4 @@ main() {
   success "Personal bootstrap completed."
 }
 
-main "$@"
+main

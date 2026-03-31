@@ -1,0 +1,113 @@
+direction: down
+
+classes: {
+  container: {
+    style.fill: "#F8FAFC"
+    style.stroke: "#CBD5E1"
+    style.stroke-width: 1
+    style.font-color: "#0F172A"
+  }
+  file: {
+    style.fill: "#EDE9FE"
+    style.stroke: "#7C3AED"
+    style.stroke-width: 2
+    style.font-color: "#0F172A"
+  }
+  folder: {
+    style.fill: "#DCFCE7"
+    style.stroke: "#16A34A"
+    style.stroke-width: 2
+    style.font-color: "#0F172A"
+  }
+  internal: {
+    style.fill: "#FEF3C7"
+    style.stroke: "#D97706"
+    style.stroke-width: 2
+    style.font-color: "#0F172A"
+  }
+}
+
+dotfiles: {
+  label: ".dotfiles"
+  class: container
+
+  install_sh: {
+    label: "install.sh\nmacOS or Unix public entrypoint"
+    class: file
+  }
+
+  install_cmd: {
+    label: "install.cmd\nWindows public entrypoint"
+    class: file
+  }
+
+  configs: {
+    label: "Configs/"
+    class: folder
+
+    platform: {
+      label: "Platform groups\naerospace\nborders\nhypr\npitchfork"
+      class: file
+    }
+
+    shells: {
+      label: "Shell groups\nbash\nfish\nzsh"
+      class: file
+    }
+
+    editors: {
+      label: "Editor and terminal groups\nghostty\nnvim\ntmux"
+      class: file
+    }
+
+    tooling: {
+      label: "Tooling groups\nbrew\ngit\nmise\nopencode\nssh\nworktrunk\nyazi"
+      class: file
+    }
+
+    agents: {
+      label: "Assistant groups\nclaude\ncodex\ngemini"
+      class: file
+    }
+  }
+
+  scripts: {
+    label: "Other/scripts/"
+    class: folder
+
+    macos_entrypoints: {
+      label: "macOS scripts\nbootstrap-macos.zsh\nfoundation-macos.zsh\npersonal-bootstrap-macos.zsh\naudit-macos.zsh\ndefaults-macos.sh"
+      class: file
+    }
+
+    windows_entrypoints: {
+      label: "Windows entrypoints (.cmd)\nbootstrap-windows.cmd\nfoundation-windows.cmd\naudit-windows.cmd\npersonal-bootstrap-windows.cmd\nresign-windows.cmd"
+      class: file
+    }
+
+    windows_impl: {
+      label: "Windows implementation (.ps1)\nfoundation-windows.ps1\naudit-windows.ps1\npersonal-bootstrap-windows.ps1\nresign-windows.ps1"
+      class: file
+    }
+
+    shim: {
+      label: "Compatibility shim\nsigning-helpers-windows.ps1"
+      class: internal
+    }
+
+    libs: {
+      label: "Libraries\nlib/common.zsh\nlib/common.ps1\nlib/windows-precursor.ps1\nlib/signing-helpers-windows.ps1"
+      class: internal
+    }
+
+    readme: {
+      label: "Bootstrap docs\nOther/scripts/README.md"
+      class: file
+    }
+  }
+
+  secrets: {
+    label: "Secrets/\nEncrypted sensitive files"
+    class: folder
+  }
+}

@@ -1,12 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
-# macos-defaults.sh
+# defaults-macos.sh
 # Configures macOS system defaults for a fresh machine setup.
 # Sets hostname, Dock behaviour, battery menu bar, Finder preferences,
 # mouse settings, power/sleep options, and screenshot format.
 #
-# Usage: ./macos-defaults.sh [computer-name]
+# Usage: ./defaults-macos.sh [computer-name]
 #   computer-name  defaults to "macbook-pro" if omitted.
 
 # Assign input parameters to variables or use default values

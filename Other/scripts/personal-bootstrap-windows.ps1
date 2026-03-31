@@ -1,27 +1,36 @@
-# =============================================================================
-# personal-bootstrap-windows.ps1 -- Windows personal layer bootstrap
-#
-# Runs AFTER foundation-windows.ps1 has completed successfully. Sources the
-# shared library (lib/common.ps1) and reads the state file that foundation
-# already populated with all resolved feature flags.
-#
-# Targets:
-#   - Dotfiles repo clone/pull
-#   - Git config (copy .gitconfig to $HOME)
-#   - SSH config (copy .ssh/config to $HOME\.ssh)
-#   - Mise config (copy config.toml, .env, scripts to $HOME\.config\mise)
-#   - Opencode config (copy opencode.json and plugins to $HOME\.config\opencode)
-#   - PowerShell profile extras (managed block with personal aliases/functions)
-#
-# Usage:
-#   .\personal-bootstrap-windows.ps1
-#   .\personal-bootstrap-windows.ps1 -Mode personal -DotfilesRepo <url>
-#
-# Prerequisites:
-#   - foundation-windows.ps1 has been run at least once (state file exists)
-#   - Scoop is installed and on PATH
-# =============================================================================
+<#
+.SYNOPSIS
+Applies the repo-specific Windows personal layer after the foundation layer.
 
+.DESCRIPTION
+Use this script to reconcile the repository-specific Windows customizations:
+the dotfiles checkout, Git config, SSH config, mise config, Opencode config,
+and PowerShell profile extras. It reads the shared state file and respects the
+personal feature flags exposed through environment variables such as
+ENABLE_GIT_CONFIG, ENABLE_SSH_CONFIG, ENABLE_MISE_CONFIG,
+ENABLE_OPENCODE_CONFIG, and ENABLE_PROFILE_EXTRAS.
+
+.PARAMETER Mode
+Execution label for the personal layer. The default is personal.
+
+.PARAMETER DotfilesRepo
+Overrides the repository URL used when the local dotfiles checkout needs to be
+cloned.
+
+.PARAMETER DryRun
+Prints what the script would change without modifying files.
+
+.EXAMPLE
+pwsh -NoLogo -NoProfile -File .\Other\scripts\personal-bootstrap-windows.ps1
+
+.EXAMPLE
+pwsh -NoLogo -NoProfile -File .\Other\scripts\personal-bootstrap-windows.ps1 -DryRun
+
+.NOTES
+Run foundation-windows.cmd first, or enter through install.cmd,
+personal-bootstrap-windows.cmd, or bootstrap-windows.cmd, so the shared state
+and foundation prerequisites already exist.
+#>
 param(
   [string]$Mode = 'personal',
   [string]$DotfilesRepo = 'https://github.com/benjaminwestern/dotfiles.git',

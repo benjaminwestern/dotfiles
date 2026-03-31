@@ -40,7 +40,7 @@ The current Windows flow also stages Zscaler trust before and after
 default profile to `pwsh`, and ships `Other/scripts/resign-windows.cmd` as a
 local repair path for signing drift. See
 [Other/scripts/README.md](Other/scripts/README.md) for the full bootstrap
-contract and platform-specific runbooks.
+contract, file ownership, and platform-specific flow.
 
 Both layers are fully idempotent, dry-runnable, and gated by feature flags that
 resolve through a six-level precedence chain (CLI → env → state file → device
@@ -121,8 +121,8 @@ git clone https://github.com/benjaminwestern/dotfiles $HOME\.dotfiles
 
 <!-- prettier-ignore -->
 > [!IMPORTANT]
-> On Windows, use `install.cmd` or `Other\scripts\bootstrap-windows.cmd` for a
-> first run. Do not start with `pwsh -File foundation-windows.ps1` on a fresh
+> On Windows, use `install.cmd` or the repo-local `.cmd` entrypoints for a
+> first run. Do not start with the bootstrap `.ps1` files directly on a fresh
 > machine if local scripts may still be unsigned.
 
 ### How the bootstrap runs
@@ -133,14 +133,23 @@ layer.
 - `install.sh` and `install.cmd` are the only public entrypoints. They resolve
   the working checkout, export the requested mode and flags, and then hand off
   to the platform-specific bootstrap scripts.
-- On macOS, `foundation-macos.zsh` runs the foundation sequence in this order:
+- The repo-local scripts use one shared naming convention by purpose.
+  macOS exposes `bootstrap-macos.zsh`, `foundation-macos.zsh`,
+  `personal-bootstrap-macos.zsh`, and `audit-macos.zsh`. Windows exposes
+  `bootstrap-windows.cmd`, `foundation-windows.cmd`, `audit-windows.cmd`,
+  `personal-bootstrap-windows.cmd`, and `resign-windows.cmd`. On Windows,
+  those `.cmd` entrypoints delegate to the same-named `.ps1`
+  implementation files through `bootstrap-windows.cmd`.
+- On macOS, `bootstrap-macos.zsh` is the repo-local entrypoint and
+  `foundation-macos.zsh` runs the foundation sequence in this order:
   Homebrew, foundation packages, `mise`, managed shell activation, `mise` seed
   config, Zscaler trust, `mise` tools, validation, and optional personal
   bootstrap.
 - On Windows, `bootstrap-windows.cmd` is the first repo-local entrypoint. It
-  prepares `LocalScoopSigner`, signs the local `.ps1` bootstrap tree, and
-  launches `foundation-windows.ps1`, `audit-windows.ps1`,
-  `personal-bootstrap-windows.ps1`, or `resign-windows.ps1`.
+  also sits behind `foundation-windows.cmd`, `audit-windows.cmd`,
+  `personal-bootstrap-windows.cmd`, and `resign-windows.cmd`. It prepares
+  `LocalScoopSigner`, signs the local `.ps1` bootstrap tree, and launches the
+  corresponding PowerShell implementation.
 - `foundation-windows.ps1` and `audit-windows.ps1` both load
   `lib/windows-precursor.ps1`. If the machine is still in Windows PowerShell
   5.x, the precursor installs Scoop and PowerShell 7, signs the local script
@@ -201,7 +210,7 @@ eval "$(mise activate bash)"
 mise install
 
 # 11. Apply macOS defaults
-~/.dotfiles/Other/scripts/macos-defaults.sh "my-macbook"
+~/.dotfiles/Other/scripts/defaults-macos.sh "my-macbook"
 
 # 12. Install Rosetta (Apple Silicon only)
 /usr/sbin/softwareupdate --install-rosetta --agree-to-license
@@ -209,46 +218,10 @@ mise install
 
 ## 🏗️ Architecture
 
-```mermaid
-flowchart TD
-    A["install.sh"] -->|macOS foundation| B["foundation-macos.zsh"]
-    A -->|macOS audit| H["audit-macos.zsh"]
-    J["install.cmd"] -->|Windows| K["bootstrap-windows.cmd"]
-    K --> C["foundation-windows.ps1"]
-    K --> I["audit-windows.ps1"]
-    K --> G["personal-bootstrap-windows.ps1"]
-    K --> R["resign-windows.ps1"]
+The bootstrap architecture below is rendered from
+[`assets/bootstrap-architecture.d2`](assets/bootstrap-architecture.d2).
 
-    B --> D["lib/common.zsh"]
-    H --> D
-    B -->|"--personal"| F["personal-bootstrap-macos.zsh"]
-    F --> D
-
-    C --> P["lib/windows-precursor.ps1"]
-    I --> P
-    C --> E["lib/common.ps1"]
-    C --> S["windows-signing-helpers.ps1"]
-    I --> E
-    I --> S
-    G --> E
-    R --> E
-    R --> S
-
-    subgraph Foundation
-        B
-        C
-    end
-
-    subgraph Personal
-        F
-        G
-    end
-
-    subgraph Audit
-        H
-        I
-    end
-```
+![Bootstrap architecture](./assets/bootstrap-architecture.svg)
 
 ### Personal Phase Comparison
 
@@ -289,60 +262,18 @@ full feature flag catalogue and device profile presets.
 
 ## 📁 Repository Structure
 
-```
-.dotfiles/
-├── install.sh                         # macOS/Unix public entrypoint
-├── install.cmd                        # Windows public entrypoint
-├── Configs/                           # Dotfile groups (see Configs/README.md)
-│   ├── aerospace/                     #   Window manager config
-│   ├── bash/                          #   Bash config (.bashrc, .bash_profile, .hushlogin)
-│   ├── borders/                       #   Window borders config
-│   ├── brew/Brewfile                  #   Homebrew packages
-│   ├── claude/.claude/                #   Claude Code settings
-│   ├── codex/.codex/                  #   Codex CLI config
-│   ├── fish/.config/fish/             #   Fish shell config
-│   ├── gemini/                        #   Gemini settings
-│   ├── ghostty/.config/ghostty/       #   Ghostty terminal config
-│   ├── git/.gitconfig                 #   Git configuration
-│   ├── hypr/.config/hypr/             #   Hyprland config (Linux)
-│   ├── mise/.config/mise/             #   Mise config, env, scripts
-│   ├── nvim/.config/nvim/             #   Neovim configuration
-│   ├── opencode/.config/opencode/     #   Opencode config and plugins
-│   ├── pitchfork/.config/pitchfork/   #   Pitchfork config
-│   ├── ssh/.ssh/config                #   SSH config (keys not included)
-│   ├── tmux/.tmux.conf                #   Tmux configuration
-│   ├── worktrunk/.config/worktrunk/   #   Worktrunk worktree manager
-│   ├── yazi/.config/yazi/             #   Yazi file manager
-│   └── zsh/                           #   Zsh config (.zshrc, .zprofile)
-├── Other/
-│   └── scripts/                       # Bootstrap system (see Other/scripts/README.md)
-│       ├── foundation-macos.zsh       #   macOS foundation bootstrap
-│       ├── personal-bootstrap-macos.zsh #  macOS personal layer
-│       ├── audit-macos.zsh            #   Read-only machine state audit
-│       ├── bootstrap-windows.cmd      #   Windows repo-local bootstrap entrypoint
-│       ├── foundation-windows.ps1     #   Windows foundation bootstrap
-│       ├── personal-bootstrap-windows.ps1 # Windows personal layer
-│       ├── audit-windows.ps1          #   Windows state audit (with -PopulateState)
-│       ├── resign-windows.cmd         #   Windows signing repair entrypoint
-│       ├── resign-windows.ps1         #   Windows signing repair workflow
-│       ├── windows-signing-helpers.ps1 #  Code signing utilities
-│       ├── macos-defaults.sh          #   macOS system preferences
-│       ├── macos-foundation-bootstrap.md # macOS runbook
-│       ├── windows-bootstrap.md       #   Windows runbook
-│       └── lib/
-│           ├── common.zsh            #   Shared zsh library
-│           ├── common.ps1            #   Shared PowerShell library
-│           └── windows-precursor.ps1 #   PS5 -> pwsh Windows bridge
-└── Secrets/                           # Encrypted sensitive files (not committed)
-```
+The repository map below is rendered from
+[`assets/repository-structure.d2`](assets/repository-structure.d2).
+
+![Repository structure](./assets/repository-structure.svg)
 
 > 📖 **[Configs/README.md](Configs/README.md)** — What each config group
 > contains, how tuckr and copy-based management work across platforms, and how
 > to add a new config group.
 >
 > 📖 **[Other/scripts/README.md](Other/scripts/README.md)** — Full bootstrap
-> reference: feature flags, resolution precedence, device profiles, dry-run,
-> state file, pre-flight inventory, status output, and manual recovery.
+> reference: entrypoints, flags, file ownership, platform flow, state
+> handling, audits, and repair paths.
 
 ## 🔧 Daily Usage
 
@@ -410,7 +341,7 @@ flag and the resolved `ENABLE_WORK_APPS` / `ENABLE_HOME_APPS` feature flags.
 Pass a custom name to the macOS defaults script:
 
 ```bash
-~/.dotfiles/Other/scripts/macos-defaults.sh "work-macbook-pro"
+~/.dotfiles/Other/scripts/defaults-macos.sh "work-macbook-pro"
 ```
 
 This sets the hostname and appears in your shell prompt.
@@ -574,7 +505,7 @@ tuckr status
 
 ```bash
 # Apply macOS defaults
-~/.dotfiles/Other/scripts/macos-defaults.sh "$(hostname -s)"
+~/.dotfiles/Other/scripts/defaults-macos.sh "$(hostname -s)"
 
 # Install Rosetta (Apple Silicon only)
 /usr/sbin/softwareupdate --install-rosetta --agree-to-license

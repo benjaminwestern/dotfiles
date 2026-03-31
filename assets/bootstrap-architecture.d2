@@ -1,0 +1,180 @@
+direction: right
+
+classes: {
+  container: {
+    style.fill: "#F8FAFC"
+    style.stroke: "#CBD5E1"
+    style.stroke-width: 1
+    style.font-color: "#0F172A"
+  }
+  entrypoint: {
+    style.fill: "#DBEAFE"
+    style.stroke: "#2563EB"
+    style.stroke-width: 2
+    style.font-color: "#0F172A"
+  }
+  implementation: {
+    style.fill: "#D1FAE5"
+    style.stroke: "#059669"
+    style.stroke-width: 2
+    style.font-color: "#0F172A"
+  }
+  library: {
+    style.fill: "#FEF3C7"
+    style.stroke: "#D97706"
+    style.stroke-width: 2
+    style.font-color: "#0F172A"
+  }
+}
+
+public_loaders: {
+  label: "Public loaders"
+  class: container
+
+  install_sh: {
+    label: "install.sh\nmacOS public loader"
+    class: entrypoint
+  }
+
+  install_cmd: {
+    label: "install.cmd\nWindows public loader"
+    class: entrypoint
+  }
+}
+
+macos: {
+  label: "macOS flow"
+  class: container
+
+  bootstrap: {
+    label: "bootstrap-macos.zsh"
+    class: entrypoint
+  }
+
+  foundation: {
+    label: "foundation-macos.zsh"
+    class: implementation
+  }
+
+  personal: {
+    label: "personal-bootstrap-macos.zsh"
+    class: implementation
+  }
+
+  audit: {
+    label: "audit-macos.zsh"
+    class: implementation
+  }
+
+  common: {
+    label: "lib/common.zsh"
+    class: library
+  }
+}
+
+windows_cmd: {
+  label: "Windows entrypoints (.cmd)"
+  class: container
+
+  bootstrap: {
+    label: "bootstrap-windows.cmd"
+    class: entrypoint
+  }
+
+  foundation: {
+    label: "foundation-windows.cmd"
+    class: entrypoint
+  }
+
+  audit: {
+    label: "audit-windows.cmd"
+    class: entrypoint
+  }
+
+  personal: {
+    label: "personal-bootstrap-windows.cmd"
+    class: entrypoint
+  }
+
+  resign: {
+    label: "resign-windows.cmd"
+    class: entrypoint
+  }
+}
+
+windows_ps1: {
+  label: "Windows implementation (.ps1)"
+  class: container
+
+  foundation: {
+    label: "foundation-windows.ps1"
+    class: implementation
+  }
+
+  audit: {
+    label: "audit-windows.ps1"
+    class: implementation
+  }
+
+  personal: {
+    label: "personal-bootstrap-windows.ps1"
+    class: implementation
+  }
+
+  resign: {
+    label: "resign-windows.ps1"
+    class: implementation
+  }
+}
+
+windows_lib: {
+  label: "Windows libraries"
+  class: container
+
+  precursor: {
+    label: "lib/windows-precursor.ps1"
+    class: library
+  }
+
+  common: {
+    label: "lib/common.ps1"
+    class: library
+  }
+
+  signing: {
+    label: "lib/signing-helpers-windows.ps1"
+    class: library
+  }
+}
+
+public_loaders.install_sh -> macos.bootstrap: "macOS"
+public_loaders.install_cmd -> windows_cmd.bootstrap: "Windows"
+
+macos.bootstrap -> macos.foundation: "setup | ensure | update"
+macos.bootstrap -> macos.personal: "personal"
+macos.bootstrap -> macos.audit: "audit"
+macos.foundation -> macos.personal: "--personal"
+macos.foundation -> macos.common: "sources"
+macos.personal -> macos.common: "sources"
+macos.audit -> macos.common: "sources"
+
+windows_cmd.foundation -> windows_cmd.bootstrap: "routes"
+windows_cmd.audit -> windows_cmd.bootstrap: "routes"
+windows_cmd.personal -> windows_cmd.bootstrap: "routes"
+windows_cmd.resign -> windows_cmd.bootstrap: "routes"
+
+windows_cmd.bootstrap -> windows_ps1.foundation: "launches foundation"
+windows_cmd.bootstrap -> windows_ps1.audit: "launches audit"
+windows_cmd.bootstrap -> windows_ps1.personal: "launches personal"
+windows_cmd.bootstrap -> windows_ps1.resign: "launches repair"
+
+windows_ps1.foundation -> windows_lib.precursor: "loads"
+windows_ps1.audit -> windows_lib.precursor: "loads"
+windows_ps1.foundation -> windows_lib.common: "loads"
+windows_ps1.audit -> windows_lib.common: "loads"
+windows_ps1.personal -> windows_lib.common: "loads"
+windows_ps1.resign -> windows_lib.common: "loads"
+windows_ps1.foundation -> windows_lib.signing: "loads"
+windows_ps1.audit -> windows_lib.signing: "loads"
+windows_ps1.resign -> windows_lib.signing: "loads"
+windows_ps1.foundation -> windows_ps1.personal: "--personal"

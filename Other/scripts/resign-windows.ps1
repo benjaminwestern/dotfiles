@@ -1,7 +1,24 @@
-# =============================================================================
-# resign-windows.ps1 -- Re-sign local Windows PowerShell assets
-# =============================================================================
+<#
+.SYNOPSIS
+Re-signs local Windows PowerShell assets used by the bootstrap.
 
+.DESCRIPTION
+Use this repair script after Scoop or mise updates, or after local edits, when
+PowerShell scripts need to be signed again under an AllSigned execution policy.
+Normal operators should enter through resign-windows.cmd. This implementation
+ensures the local signing certificate exists, then re-signs Scoop scripts,
+mise scripts, repo-local Windows bootstrap scripts, and the current PowerShell
+profile when present.
+
+.PARAMETER DryRun
+Prints what the script would sign without modifying any files.
+
+.EXAMPLE
+pwsh -NoLogo -NoProfile -File .\Other\scripts\resign-windows.ps1
+
+.EXAMPLE
+pwsh -NoLogo -NoProfile -File .\Other\scripts\resign-windows.ps1 -DryRun
+#>
 param(
   [switch]$DryRun
 )
@@ -10,7 +27,7 @@ $ErrorActionPreference = 'Stop'
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 . (Join-Path $ScriptDir 'lib\common.ps1')
-. (Join-Path $ScriptDir 'windows-signing-helpers.ps1')
+. (Join-Path $ScriptDir 'lib\signing-helpers-windows.ps1')
 
 if ($DryRun -or $env:DRY_RUN -eq '1') { $global:DRY_RUN = $true }
 

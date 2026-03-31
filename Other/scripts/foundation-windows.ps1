@@ -1,7 +1,64 @@
-# =============================================================================
-# foundation-windows.ps1 -- Windows foundation bootstrap
-# =============================================================================
+<#
+.SYNOPSIS
+Bootstraps the shared Windows foundation layer for this dotfiles repository.
 
+.DESCRIPTION
+Use this script to install or repair the reusable Windows base machine state:
+Scoop, the baseline package set, mise, managed PowerShell profile activation,
+Windows Terminal defaults, Zscaler trust, and validation. Normal operators
+should enter through install.cmd, foundation-windows.cmd, or
+bootstrap-windows.cmd. Direct invocation is intended for repo-local recovery,
+debugging, and advanced control.
+
+.PARAMETER Mode
+Selects the execution mode. Use setup for a first run, ensure to repair drift,
+update to upgrade Scoop and mise-managed tools before re-running ensure, and
+personal to validate then run only the personal layer handoff.
+
+.PARAMETER Shell
+Sets the preferred shell value persisted through the shared state machinery.
+Windows currently expects pwsh here.
+
+.PARAMETER Profile_
+Selects the device profile preset. Supported values are work, home, and
+minimal.
+
+.PARAMETER NonInteractive
+Disables interactive prompts. Required for unattended or scripted runs.
+
+.PARAMETER Personal
+Runs the personal layer after the foundation completes successfully.
+
+.PARAMETER TakeoverMiseConfig
+Replaces an existing user-owned mise config with the managed seed block. This
+is an advanced repo-local recovery option and is not exposed through install.cmd.
+
+.PARAMETER DryRun
+Prints what the script would change without making any destructive changes.
+
+.PARAMETER DotfilesRepo
+Overrides the dotfiles repository URL used by the optional personal layer.
+
+.PARAMETER PersonalScript
+Overrides the personal layer script path.
+
+.PARAMETER EnableFlags
+Advanced internal override surface for resolved feature flags.
+
+.PARAMETER DisableFlags
+Advanced internal override surface for resolved feature flags.
+
+.EXAMPLE
+pwsh -NoLogo -NoProfile -File .\Other\scripts\foundation-windows.ps1 -Mode ensure -Profile_ work
+
+.EXAMPLE
+pwsh -NoLogo -NoProfile -File .\Other\scripts\foundation-windows.ps1 -Mode update -DryRun
+
+.NOTES
+For a first run on Windows, prefer install.cmd, foundation-windows.cmd, or
+bootstrap-windows.cmd so the repo-local PowerShell files can be signed before
+direct execution.
+#>
 param(
   [ValidateSet('setup', 'ensure', 'update', 'personal')]
   [string]$Mode,
@@ -35,7 +92,7 @@ if ($PSBoundParameters.ContainsKey('PersonalScript')) { $PrecursorArgs += @('-Pe
 Invoke-PwshPrecursor -ScriptPath $MyInvocation.MyCommand.Path -ArgumentList $PrecursorArgs
 
 . (Join-Path $ScriptDir 'lib\common.ps1')
-. (Join-Path $ScriptDir 'windows-signing-helpers.ps1')
+. (Join-Path $ScriptDir 'lib\signing-helpers-windows.ps1')
 
 if ($DryRun -or $env:DRY_RUN -eq '1') { $global:DRY_RUN = $true }
 
@@ -566,7 +623,7 @@ function Ensure-Profile {
     '(& mise activate pwsh --shims) | Out-String | Invoke-Expression'
     '(& zoxide init powershell) | Out-String | Invoke-Expression'
     ''
-    '. "~/.dotfiles/Other/scripts/windows-signing-helpers.ps1"'
+    '. "~/.dotfiles/Other/scripts/lib/signing-helpers-windows.ps1"'
     $PROFILE_END
   ) -join "`n"
 

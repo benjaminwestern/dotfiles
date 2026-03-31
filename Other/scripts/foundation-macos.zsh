@@ -7,7 +7,7 @@
 # integration, mise language runtime seeding, and optional Zscaler TLS trust.
 #
 # Can be invoked in two ways:
-#   1. Via install.sh (repo resolved and env vars pre-populated from CLI parsing)
+#   1. Via install.sh or bootstrap-macos.zsh
 #   2. Directly: ./foundation-macos.zsh setup --shell fish --profile work
 #
 # Architecture:
@@ -68,7 +68,7 @@ MODE="${MODE:-}"
 # parse_foundation_args -- Parse CLI arguments for direct invocation
 #
 # What: Accepts the same flags as install.sh so the foundation script can be
-#       run standalone without the public loader.
+#       run standalone without the public loader or bootstrap-macos.zsh.
 # Why:  Enables direct execution for testing, CI, or users who prefer to skip
 #       the entrypoint.
 # Checks: Validates mode is not set twice; required values have arguments.
@@ -92,6 +92,34 @@ typeset -g CLI_ENABLE_MACOS_DEFAULTS=""
 typeset -g CLI_ENABLE_ROSETTA=""
 typeset -g CLI_ENABLE_MISE_TOOLS=""
 typeset -g CLI_ENABLE_SHELL_DEFAULT=""
+
+foundation_usage() {
+  cat <<'EOF'
+Usage:
+  foundation-macos.zsh <setup|ensure|update|personal> [options]
+
+Options:
+  --shell <fish|zsh>       Set preferred shell
+  --profile <work|home|minimal>
+                           Set device profile preset
+  --enable-<flag>          Enable a feature flag
+  --disable-<flag>         Disable a feature flag
+  --personal               Run the personal layer after foundation
+  --non-interactive        Disable interactive prompts
+  --dry-run                Show what would happen without making changes
+  --dotfiles-repo <url>    Override dotfiles repository URL
+  --personal-script <path> Override the personal bootstrap script path
+
+Feature flags:
+  zscaler, work-apps, home-apps, gui, tuckr, macos-defaults,
+  rosetta, mise-tools, shell-default
+
+Examples:
+  ./foundation-macos.zsh setup --shell fish --profile work
+  ./foundation-macos.zsh ensure --personal
+  ./foundation-macos.zsh update --dry-run
+EOF
+}
 
 parse_foundation_args() {
   # If install.sh already parsed, these env vars will be set. Use them as
@@ -159,8 +187,7 @@ parse_foundation_args() {
         shift 2
         ;;
       -h|--help)
-        printf 'Usage: foundation-macos.zsh <setup|ensure|update|personal> [options]\n'
-        printf 'Options: --shell, --profile, --enable-*/--disable-*, --personal, --non-interactive, --dry-run\n'
+        foundation_usage
         exit 0
         ;;
       *)
@@ -1127,24 +1154,25 @@ select_mode() {
 # =============================================================================
 
 main() {
-  # Phase 1: Bootstrap minimum deps (need brew + gum for UI)
+  # Phase 1: Parse args
+  # Parse early so --help can exit cleanly before any bootstrap work runs.
+  parse_foundation_args "$@"
+
+  # Phase 2: Bootstrap minimum deps (need brew + gum for UI)
   # Homebrew must be available before we can install gum, and gum must be
   # available before we can show interactive prompts or themed output.
   ensure_homebrew
   brew_shellenv
 
-  # Phase 2: Parse args and set up UI
-  # This handles direct invocation (args on command line) and delegated
-  # invocation (env vars from install.sh).
-  parse_foundation_args "$@"
+  # Phase 3: Set up UI
   setup_gum_theme
 
-  # Phase 3: Pre-flight inventory
+  # Phase 4: Pre-flight inventory
   # Snapshot everything that's already installed BEFORE making any changes.
   # Populates PREFLIGHT_* globals that ensure_* functions can reference.
   preflight_inventory
 
-  # Phase 4: Read state and resolve all flags
+  # Phase 5: Read state and resolve all flags
   # The resolution engine walks CLI -> env -> state -> profile -> prompt -> default
   # for every configurable setting.
   state_read

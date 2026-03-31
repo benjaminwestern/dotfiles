@@ -1,734 +1,391 @@
-# 🔧 Bootstrap scripts
+# Bootstrap scripts
 
-This directory contains the repo-local bootstrap and audit scripts for macOS
-and Windows. The public loaders live at the repository root:
+This directory contains the repo-local bootstrap, audit, and repair scripts
+for macOS and Windows. Use the public loaders at the repository root by
+default. This README is the single source of truth for the bootstrap contract,
+the files that perform work on each platform, the supported flags, and the
+end-to-end flow. It replaces the old per-platform runbooks.
 
-- `install.sh` is the macOS and Unix-facing entrypoint.
-- `install.cmd` is the Windows-facing entrypoint.
+## Naming convention
 
-Those loaders resolve or clone the repo, export the selected flags, and then
-delegate to the repo-local scripts in this directory. The actual foundation and
-personal behaviour lives here.
+The repo-local script names use the Windows layout as the baseline. Shared
+workflows use the same purpose-first, OS-suffixed pattern on both platforms:
+`bootstrap-<os>`, `foundation-<os>`, `personal-bootstrap-<os>`, and
+`audit-<os>`. On Windows, the operator-facing entrypoints use `.cmd`, and the
+implementation files use `.ps1` with the same base name. Windows-only repair
+and helper files keep the `-windows` suffix. The root `install.sh` and
+`install.cmd` keep their historical names because they are the public remote
+entrypoints.
 
-## 🏗️ Architecture overview
+Use this matrix as the canonical map of script names:
 
-```mermaid
-flowchart TD
-    A["install.sh<br/>(macOS public entrypoint)"] -->|foundation| B["foundation-macos.zsh"]
-    A -->|audit| H["audit-macos.zsh"]
-    J["install.cmd<br/>(Windows public entrypoint)"] --> K["bootstrap-windows.cmd"]
-    K --> C["foundation-windows.ps1"]
-    K --> I["audit-windows.ps1"]
-    K --> G["personal-bootstrap-windows.ps1"]
-    K --> R["resign-windows.ps1"]
+| Purpose | macOS entrypoint | Windows entrypoint | Windows implementation |
+| --- | --- | --- | --- |
+| Public loader | [`install.sh`](../../install.sh) | [`install.cmd`](../../install.cmd) | Not needed |
+| Repo-local bootstrap | [`bootstrap-macos.zsh`](bootstrap-macos.zsh) | [`bootstrap-windows.cmd`](bootstrap-windows.cmd) | Not needed |
+| Foundation | [`foundation-macos.zsh`](foundation-macos.zsh) | [`foundation-windows.cmd`](foundation-windows.cmd) | [`foundation-windows.ps1`](foundation-windows.ps1) |
+| Personal layer | [`personal-bootstrap-macos.zsh`](personal-bootstrap-macos.zsh) | [`personal-bootstrap-windows.cmd`](personal-bootstrap-windows.cmd) | [`personal-bootstrap-windows.ps1`](personal-bootstrap-windows.ps1) |
+| Audit | [`audit-macos.zsh`](audit-macos.zsh) | [`audit-windows.cmd`](audit-windows.cmd) | [`audit-windows.ps1`](audit-windows.ps1) |
+| Repair | Not needed | [`resign-windows.cmd`](resign-windows.cmd) | [`resign-windows.ps1`](resign-windows.ps1) |
+| OS-specific helpers | [`defaults-macos.sh`](defaults-macos.sh), [`lib/common.zsh`](lib/common.zsh) | [`lib/common.ps1`](lib/common.ps1), [`lib/windows-precursor.ps1`](lib/windows-precursor.ps1), [`lib/signing-helpers-windows.ps1`](lib/signing-helpers-windows.ps1) | Top-level [`signing-helpers-windows.ps1`](signing-helpers-windows.ps1) remains only as a compatibility shim |
 
-    B --> D["lib/common.zsh"]
-    H --> D
-    B -->|"--personal"| F["personal-bootstrap-macos.zsh"]
-    F --> D
+## Public entrypoints
 
-    C --> P["lib/windows-precursor.ps1"]
-    I --> P
-    C --> E["lib/common.ps1"]
-    C --> S["windows-signing-helpers.ps1"]
-    I --> E
-    I --> S
-    G --> E
-    R --> E
-    R --> S
+Start with the public loaders on a fresh machine. They make sure the dotfiles
+repo exists locally before they hand off to the repo-local scripts in this
+directory.
 
-    subgraph Foundation
-        B
-        C
-    end
+| Platform | File | Purpose | Help |
+| --- | --- | --- | --- |
+| macOS | [`install.sh`](../../install.sh) | Public loader for setup, ensure, update, personal, and audit | `./install.sh --help` |
+| Windows | [`install.cmd`](../../install.cmd) | Public loader for setup, ensure, update, personal, and audit | `.\install.cmd --help` |
 
-    subgraph Personal
-        F
-        G
-    end
+Use the repo-local entrypoints only when you need explicit control of the
+platform scripts or when you are debugging a failed run.
 
-    subgraph Audit and repair
-        H
-        I
-        R
-    end
+## Supported modes
+
+The public loaders share the same high-level operating modes across both
+platforms.
+
+| Mode | Effect |
+| --- | --- |
+| `setup` | Run the full foundation flow and optionally hand off to the personal layer |
+| `ensure` | Re-run idempotently and repair drift |
+| `update` | Upgrade package-manager-managed state, then re-run ensure |
+| `personal` | Run only the repo-specific personal layer |
+| `audit` | Run the read-only machine audit |
+
+## Shared contract
+
+Both platforms follow the same operating model even though the implementation
+details differ.
+
+- State file: `~/.config/dotfiles/state.env`
+- Resolution precedence: CLI flag, environment variable, state file, device
+  profile preset, interactive prompt, then hard-coded default
+- Dry-run: prints what would change without making destructive changes
+- Profiles: `work`, `home`, and `minimal`
+- First-run recommendation: use the public loader, not a direct repo-local
+  script invocation
+
+## macOS flow
+
+The macOS bootstrap is a direct `zsh` flow. It does not need an intermediate
+wrapper or shell-version bridge.
+
+### Files that perform the macOS work
+
+These are the files that actually implement the macOS bootstrap behavior.
+
+- [`install.sh`](../../install.sh) parses the public CLI, resolves or clones
+  the repo, exports flags, and dispatches to the repo-local scripts.
+- [`bootstrap-macos.zsh`](bootstrap-macos.zsh) is the repo-local macOS
+  entrypoint. It dispatches to the foundation, audit, or personal scripts.
+- [`foundation-macos.zsh`](foundation-macos.zsh) applies the shared macOS
+  foundation: Homebrew, foundation packages, `mise`, managed shell activation,
+  Zscaler trust, `mise` tools, and validation.
+- [`personal-bootstrap-macos.zsh`](personal-bootstrap-macos.zsh) applies the
+  repo-specific macOS layer: Brewfile reconciliation, Tuckr, default shell,
+  macOS defaults, and Rosetta.
+- [`audit-macos.zsh`](audit-macos.zsh) reports current macOS machine state
+  without modifying it.
+- [`defaults-macos.sh`](defaults-macos.sh) applies macOS system settings when
+  the personal layer enables that step.
+- [`lib/common.zsh`](lib/common.zsh) provides shared state management,
+  resolution, dry-run gating, interactive prompts, status output, and managed
+  block helpers.
+
+### End-to-end macOS flow
+
+This is the execution order for a normal macOS bootstrap run.
+
+1. [`install.sh`](../../install.sh) parses the requested mode and flags, then
+   ensures the repo is present locally.
+2. It delegates to [`bootstrap-macos.zsh`](bootstrap-macos.zsh).
+3. For `setup`, `ensure`, and `update`,
+   [`bootstrap-macos.zsh`](bootstrap-macos.zsh) dispatches to
+   [`foundation-macos.zsh`](foundation-macos.zsh).
+4. [`foundation-macos.zsh`](foundation-macos.zsh) sources
+   [`lib/common.zsh`](lib/common.zsh), resolves all flags, applies the macOS
+   foundation, and optionally calls
+   [`personal-bootstrap-macos.zsh`](personal-bootstrap-macos.zsh) when
+   `--personal` is set.
+5. For `personal`, [`bootstrap-macos.zsh`](bootstrap-macos.zsh) runs
+   [`personal-bootstrap-macos.zsh`](personal-bootstrap-macos.zsh) directly.
+6. For `audit`, [`bootstrap-macos.zsh`](bootstrap-macos.zsh) runs
+   [`audit-macos.zsh`](audit-macos.zsh) directly.
+
+### macOS options
+
+These are the public options that matter when you run the macOS loader.
+
+The macOS public loader accepts these options:
+
+- `--shell <fish|zsh>`
+- `--profile <work|home|minimal>`
+- `--enable-<flag>`
+- `--disable-<flag>`
+- `--personal`
+- `--non-interactive`
+- `--dry-run`
+- `--dotfiles-repo <url>`
+- `--dotfiles-dir <path>`
+- `--personal-script <path>`
+
+The macOS feature flags are:
+
+- `zscaler`
+- `work-apps`
+- `home-apps`
+- `gui`
+- `tuckr`
+- `macos-defaults`
+- `rosetta`
+- `mise-tools`
+- `shell-default`
+
+### Direct macOS help
+
+The repo-local macOS scripts also expose their own direct help surfaces.
+
+```bash
+./Other/scripts/bootstrap-macos.zsh --help
+./Other/scripts/foundation-macos.zsh --help
+./Other/scripts/personal-bootstrap-macos.zsh --help
+./Other/scripts/audit-macos.zsh --help
 ```
 
-## 📜 Script catalogue
+## Windows flow
 
-### `install.sh` and `install.cmd` (public entrypoints)
+The Windows bootstrap has one extra layer because it must be safe on machines
+that still start in Windows PowerShell 5.x or under an effective `AllSigned`
+policy.
 
-**Location:** Repository root (`~/.dotfiles/install.sh`,
-`~/.dotfiles/install.cmd`)
+### Files that perform the Windows work
 
-These are the only public bootstrap entrypoints. They reuse an existing local
-checkout when possible, clone the repo when it is missing, and can run once
-from a temporary GitHub archive when `git` is unavailable. After that, they
-delegate to the repo-local platform bootstrap.
+These are the files that implement the Windows bootstrap behavior. The `.cmd`
+files are the supported operator-facing entrypoints. The `.ps1` files are the
+implementation layer they protect.
 
-**Supported modes**
+- [`install.cmd`](../../install.cmd) parses the public CLI, resolves or clones
+  the repo, exports flags, and delegates into the repo-local Windows wrapper.
+- [`bootstrap-windows.cmd`](bootstrap-windows.cmd) is the first-run-safe
+  repo-local Windows entrypoint. It ensures the local signing certificate
+  exists, signs the repo-local `.ps1` files, and launches the selected target.
+- [`foundation-windows.cmd`](foundation-windows.cmd),
+  [`audit-windows.cmd`](audit-windows.cmd),
+  [`personal-bootstrap-windows.cmd`](personal-bootstrap-windows.cmd), and
+  [`resign-windows.cmd`](resign-windows.cmd) are the single-purpose Windows
+  entrypoints. They all route through [`bootstrap-windows.cmd`](bootstrap-windows.cmd).
+- [`lib/windows-precursor.ps1`](lib/windows-precursor.ps1) bridges Windows
+  PowerShell 5.x to PowerShell 7 by ensuring Scoop and `pwsh` exist and then
+  re-running the same target under `pwsh`.
+- [`foundation-windows.ps1`](foundation-windows.ps1) applies the shared
+  Windows foundation: Scoop, foundation packages, `mise`, managed PowerShell
+  profile activation, Windows Terminal defaults, Zscaler trust, and
+  validation.
+- [`personal-bootstrap-windows.ps1`](personal-bootstrap-windows.ps1) applies
+  the repo-specific Windows layer: dotfiles checkout, Git config, SSH config,
+  `mise` config, Opencode config, and PowerShell profile extras.
+- [`audit-windows.ps1`](audit-windows.ps1) reports current Windows machine
+  state, including outdated foundation Scoop packages and outdated `mise`
+  tools, without modifying it.
+- [`resign-windows.ps1`](resign-windows.ps1) repairs signing drift after
+  updates or local edits.
+- [`lib/signing-helpers-windows.ps1`](lib/signing-helpers-windows.ps1)
+  provides the shared local certificate and signing helpers used by
+  foundation, audit, and repair.
+- [`signing-helpers-windows.ps1`](signing-helpers-windows.ps1) is a
+  compatibility shim for older profile blocks and local imports.
+- [`lib/common.ps1`](lib/common.ps1) provides shared state management,
+  resolution, dry-run gating, status output, Windows Terminal helpers, and
+  managed block helpers.
 
-- `setup` runs the full foundation flow and can optionally hand off to the
-  personal layer.
-- `ensure` repairs drift without assuming a clean machine.
-- `update` upgrades package-manager-managed state and then re-runs ensure.
-- `personal` runs the personal layer only.
-- `audit` runs the read-only machine audit.
+### End-to-end Windows flow
 
-**Usage**
+This is the execution order for a normal Windows bootstrap run.
+
+1. [`install.cmd`](../../install.cmd) parses the requested mode and flags, then
+   ensures the repo is present locally.
+2. For normal Windows operations, it delegates to
+   [`bootstrap-windows.cmd`](bootstrap-windows.cmd). The single-purpose
+   wrappers such as [`foundation-windows.cmd`](foundation-windows.cmd) and
+   [`audit-windows.cmd`](audit-windows.cmd) also delegate there.
+3. [`bootstrap-windows.cmd`](bootstrap-windows.cmd) creates or reuses
+   `LocalScoopSigner`, signs the repo-local Windows PowerShell scripts, and
+   launches the selected `.ps1` target.
+4. [`foundation-windows.ps1`](foundation-windows.ps1) and
+   [`audit-windows.ps1`](audit-windows.ps1) immediately load
+   [`lib/windows-precursor.ps1`](lib/windows-precursor.ps1).
+5. If the current host is still Windows PowerShell 5.x, the precursor ensures
+   Scoop exists, ensures `pwsh` exists, then re-runs the same target under
+   PowerShell 7.
+6. Once the target is running in `pwsh`,
+   [`foundation-windows.ps1`](foundation-windows.ps1) applies the Windows
+   foundation. When `--personal` is set, it hands off to
+   [`personal-bootstrap-windows.ps1`](personal-bootstrap-windows.ps1).
+7. For `audit`, the wrapper runs
+   [`audit-windows.ps1`](audit-windows.ps1).
+8. For manual signing repair, use
+   [`resign-windows.cmd`](resign-windows.cmd). The wrapper enters
+   [`resign-windows.ps1`](resign-windows.ps1) through the same protected path.
+
+### Windows options
+
+These are the public options that matter when you run the Windows loader.
+
+The Windows public loader accepts these options:
+
+- `--shell <pwsh>`
+- `--profile <work|home|minimal>`
+- `--enable-<flag>`
+- `--disable-<flag>`
+- `--personal`
+- `--non-interactive`
+- `--dry-run`
+- `--dotfiles-repo <url>`
+- `--dotfiles-dir <path>`
+- `--personal-script <path>`
+- `--section <name>` for `audit`
+- `--json` for `audit`
+- `--populate-state` for `audit`
+
+The Windows foundation feature flags are:
+
+- `zscaler`
+- `mise-tools`
+
+The Windows personal-layer feature flags are:
+
+- `git-config`
+- `ssh-config`
+- `mise-config`
+- `opencode-config`
+- `profile-extras`
+
+### Direct Windows help
+
+Use these commands when you need help from the repo-local Windows entrypoints.
+
+The repo-local Windows entrypoints expose both wrapper help and PowerShell
+comment-based help. Use the `.cmd` commands for normal operations and
+`Get-Help` only when you are inspecting the implementation layer directly.
+
+```powershell
+.\Other\scripts\bootstrap-windows.cmd --help
+.\Other\scripts\foundation-windows.cmd --help
+.\Other\scripts\audit-windows.cmd --help
+.\Other\scripts\personal-bootstrap-windows.cmd --help
+.\Other\scripts\resign-windows.cmd --help
+Get-Help .\Other\scripts\foundation-windows.ps1 -Detailed
+Get-Help .\Other\scripts\personal-bootstrap-windows.ps1 -Detailed
+Get-Help .\Other\scripts\audit-windows.ps1 -Detailed
+Get-Help .\Other\scripts\resign-windows.ps1 -Detailed
+```
+
+## Audit and repair entrypoints
+
+Use the audit scripts when you want a read-only view of the current machine
+state. Use the Windows re-sign flow when an `AllSigned` environment needs local
+PowerShell wrappers to be signed again after updates.
+
+- macOS audit: [`audit-macos.zsh`](audit-macos.zsh)
+- Windows audit: [`audit-windows.cmd`](audit-windows.cmd) ->
+  [`audit-windows.ps1`](audit-windows.ps1)
+- Windows signing repair: [`resign-windows.cmd`](resign-windows.cmd) ->
+  [`resign-windows.ps1`](resign-windows.ps1)
+
+## Internal libraries
+
+The platform scripts share small internal libraries instead of duplicating
+common logic in every entrypoint.
+
+- [`lib/common.zsh`](lib/common.zsh) is the shared macOS library.
+- [`lib/common.ps1`](lib/common.ps1) is the shared Windows library.
+- [`lib/windows-precursor.ps1`](lib/windows-precursor.ps1) handles the Windows
+  PowerShell 5.x to PowerShell 7 bridge.
+- [`lib/signing-helpers-windows.ps1`](lib/signing-helpers-windows.ps1)
+  handles the local certificate and PowerShell signing helpers.
+
+## Recommended operator paths
+
+These are the normal entrypoints to use in practice.
 
 ```bash
 # macOS
+./install.sh --help
 ./install.sh setup --shell fish --profile work --personal
-./install.sh ensure --personal
-./install.sh update
 ./install.sh audit --json
+./Other/scripts/bootstrap-macos.zsh --help
 ```
 
 ```powershell
 # Windows
+.\install.cmd --help
 .\install.cmd setup --profile work --personal
-.\install.cmd ensure
-.\install.cmd update
 .\install.cmd audit --populate-state
+.\Other\scripts\bootstrap-windows.cmd --help
+.\Other\scripts\foundation-windows.cmd --help
+.\Other\scripts\audit-windows.cmd --help
+.\Other\scripts\personal-bootstrap-windows.cmd --help
+.\Other\scripts\resign-windows.cmd --help
 ```
 
-The public loaders do not implement foundation logic themselves. They exist to
-make the bootstrap safe and convenient from a fresh machine.
-
----
-
-### `foundation-macos.zsh` (macOS foundation)
-
-**Location:** `Other/scripts/foundation-macos.zsh`
-
-This is the repo-local macOS foundation orchestrator. It owns the shared,
-machine-safe setup layer: Homebrew, baseline CLI packages, `mise`, managed
-shell activation, Zscaler trust, `mise` seed config, and validation.
-
-**Foundation flow**
-
-1. Ensure Homebrew exists and activate it in the current shell.
-2. Ensure the foundation Homebrew package set is present.
-3. Ensure `mise` is installed, preferring Homebrew and falling back to the
-   first-party shell installer.
-4. Write or repair the managed `zsh` or `fish` activation block.
-5. Activate the current shell session.
-6. Create or update the managed `mise` seed block.
-7. Detect Zscaler via TLS probe and repair trust if needed.
-8. Run `mise install` when `ENABLE_MISE_TOOLS=true`.
-9. Validate the resulting toolchain and optionally hand off to the personal
-   layer.
-
-The macOS foundation package list is `git`, `gh`, `jq`, `yq`, `fzf`, `fd`,
-`ripgrep`, `zoxide`, `lazygit`, `openssl`, and `gum`. `mise` is managed
-separately because it has both Homebrew and shell-installer paths.
-
----
-
-### `personal-bootstrap-macos.zsh` (macOS personal layer)
-
-**Location:** `Other/scripts/personal-bootstrap-macos.zsh`
-
-This is the repo-specific macOS layer. It expects the shared library to have
-resolved all flags and then runs dotfiles checkout, Brewfile reconciliation,
-Tuckr symlinking, default-shell changes, macOS defaults, and Rosetta
-installation.
-
-Use this layer when you want the full workstation customisation on top of a
-healthy foundation. Use the foundation only when you need a reusable,
-shareable base machine configuration.
-
----
-
-### `audit-macos.zsh` (macOS machine audit)
-
-**Location:** `Other/scripts/audit-macos.zsh`
-
-This is the read-only audit for macOS. It reports current tool state, shell
-state, config state, and personal-layer outcomes without installing or
-modifying anything.
-
-**Usage**
-
-```bash
-./audit-macos.zsh
-./audit-macos.zsh --section tools
-./audit-macos.zsh --json
-
-# Or via the public loader
-./install.sh audit
-./install.sh audit --section configs
-```
-
----
-
-### `bootstrap-windows.cmd` (Windows repo-local entrypoint)
-
-**Location:** `Other/scripts/bootstrap-windows.cmd`
-
-This is the first repo-local Windows entrypoint. It exists because Windows can
-start in Windows PowerShell 5.x and, on some machines, under an effective
-`AllSigned` policy with unsigned local `.ps1` files.
-
-`bootstrap-windows.cmd` normalises the script root, creates the local
-`LocalScoopSigner` certificate if needed, signs the repo-local Windows `.ps1`
-bootstrap files, and then launches the selected PowerShell target with
-`powershell.exe -File`.
-
-**Supported targets**
-
-- `foundation`
-- `audit`
-- `personal`
-- `resign`
-
-**Usage**
-
-```powershell
-.\Other\scripts\bootstrap-windows.cmd foundation -Mode ensure -DryRun
-.\Other\scripts\bootstrap-windows.cmd audit -Json
-.\Other\scripts\bootstrap-windows.cmd resign
-```
-
-Use this wrapper for first-run or repair scenarios. Direct `pwsh -File` usage
-is fine on an already-bootstrapped machine, but it bypasses the unsigned-script
-protection this wrapper provides.
-
----
-
-### `lib/windows-precursor.ps1` (Windows PowerShell 5 bridge)
-
-**Location:** `Other/scripts/lib/windows-precursor.ps1`
-
-This shared precursor is loaded by both `foundation-windows.ps1` and
-`audit-windows.ps1`. When the current host is already PowerShell 7 or later, it
-returns immediately. When the current host is Windows PowerShell 5.x, it
-ensures Scoop exists, ensures `pwsh` exists, signs the local script tree, and
-re-runs the same target under PowerShell 7.
-
-That keeps the real foundation and audit logic in `pwsh` without requiring the
-operator to solve the first-run PowerShell upgrade path manually.
-
----
-
-### `foundation-windows.ps1` (Windows foundation)
-
-**Location:** `Other/scripts/foundation-windows.ps1`
-
-This is the repo-local Windows foundation orchestrator. After the precursor
-hands it off to `pwsh`, it owns the Windows foundation layer: Scoop, baseline
-packages, `mise`, managed PowerShell profile repair, current-shell activation,
-Windows Terminal default profile repair, `mise` seed config, staged Zscaler
-trust, and validation.
-
-**Foundation flow**
-
-1. Ensure Scoop and the required buckets are present.
-2. Ensure the Windows foundation package set is present.
-3. Ensure `mise` is installed.
-4. Write or repair the managed PowerShell profile block.
-5. Activate `mise` in the current `pwsh` session with `pwsh --shims`.
-6. Set Windows Terminal's default profile to `pwsh`.
-7. Create or update the managed `mise` seed config.
-8. Configure stage-1 Zscaler trust before `mise install`.
-9. Run `mise install`.
-10. Refresh TLS trust with Python `certifi` after `mise install`.
-11. Validate the resulting toolchain and optionally hand off to the personal
-    layer.
-
-**Signing behaviour**
-
-- Under `AllSigned`, the foundation creates `LocalScoopSigner` and signs Scoop,
-  `mise`, dotfiles scripts, and the PowerShell profile where required.
-- Under `RemoteSigned`, unsigned local scripts are acceptable and the audit
-  reports unsigned profile or script counts as informational.
-
-**Advanced direct invocation**
-
-```powershell
-pwsh -NoLogo -NoProfile -File .\Other\scripts\foundation-windows.ps1 -Mode ensure
-pwsh -NoLogo -NoProfile -File .\Other\scripts\foundation-windows.ps1 -Mode ensure -TakeoverMiseConfig
-```
-
-`-TakeoverMiseConfig` is intentionally an advanced repo-local option. It is not
-currently exposed through `install.cmd`.
-
----
-
-### `resign-windows.cmd` and `resign-windows.ps1` (Windows signing repair)
-
-**Location:** `Other/scripts/resign-windows.cmd`,
-`Other/scripts/resign-windows.ps1`
-
-These scripts provide the local repair path for Windows signing drift.
-`resign-windows.cmd` is the muscle-memory wrapper and
-`resign-windows.ps1` performs the work.
-
-The repair flow ensures `LocalScoopSigner` exists, then re-signs:
-
-- Scoop-managed PowerShell scripts
-- `mise`-managed PowerShell scripts
-- repo-local Windows bootstrap scripts under `~/.dotfiles/Other/scripts`
-- the current PowerShell profile, when one exists
-
-**Usage**
-
-```powershell
-.\Other\scripts\resign-windows.cmd
-.\Other\scripts\resign-windows.cmd -DryRun
-```
-
----
-
-### `personal-bootstrap-windows.ps1` (Windows personal layer)
-
-**Location:** `Other/scripts/personal-bootstrap-windows.ps1`
-
-This is the repo-specific Windows layer. It reads the resolved state, then
-reconciles the dotfiles checkout, Git config, SSH config, `mise` config,
-Opencode config, and PowerShell profile extras.
-
-All targets are idempotent, file-hash-aware, and dry-run capable. The script
-does not change package-manager-managed foundation state.
-
----
-
-### `audit-windows.ps1` (Windows machine audit)
-
-**Location:** `Other/scripts/audit-windows.ps1`
-
-This is the read-only audit for Windows. It shares the same PowerShell 5 to
-PowerShell 7 precursor path as foundation, so it can start safely from a fresh
-machine as long as you enter via `install.cmd` or `bootstrap-windows.cmd`.
-
-**Sections**
-
-- `tools` reports Scoop, foundation package coverage, `mise`, and runtime
-  availability.
-- `shell` reports execution policy, managed profile state, `mise` activation,
-  `mise doctor`, and Windows Terminal default profile state.
-- `configs` reports dotfiles checkout state, state file contents, `mise`
-  config, `mise` `.env`, and system information.
-- `signing` reports cert presence plus Scoop, `mise`, dotfiles, and profile
-  signing state.
-- `zscaler` reports live TLS detection, cert-store evidence, CA bundles,
-  `mise` `.env` state, user env vars, and TLS client configuration.
-
-**Usage**
-
-```powershell
-.\Other\scripts\bootstrap-windows.cmd audit
-.\Other\scripts\bootstrap-windows.cmd audit -Section signing
-.\Other\scripts\bootstrap-windows.cmd audit -Json
-.\Other\scripts\bootstrap-windows.cmd audit -PopulateState
-```
-
-On an already-bootstrapped machine, direct `pwsh -File audit-windows.ps1` is
-also fine. The audit never installs or modifies machine state, apart from the
-optional `-PopulateState` write to `~/.config/dotfiles/state.env`.
-
-The `-PopulateState` switch discovers the current machine state and writes it
-into `~/.config/dotfiles/state.env`. This lets a subsequent bootstrap run use
-detected values (shell, profile, Zscaler presence, mise status) as a baseline
-instead of re-prompting. The state file is used by the resolution engine at
-precedence level 3 (after CLI flags and environment variables).
-
----
-
-### `windows-signing-helpers.ps1` (Code Signing Utilities)
-
-**Location:** `Other/scripts/windows-signing-helpers.ps1`
-
-Shared Windows signing library. It manages lookup and creation of the local
-`LocalScoopSigner` certificate, imports that certificate into the required user
-stores, and exposes the signing helpers used by foundation, audit, and the
-re-sign repair flow.
-
-The helper surface covers Scoop scripts, `mise` scripts, repo-local Windows
-dotfiles scripts, and the current PowerShell profile. All helpers skip tiny
-files so placeholder or empty `.ps1` files do not generate noisy audit output.
-
----
-
-### `macos-defaults.sh` (macOS System Preferences)
-
-**Location:** `Other/scripts/macos-defaults.sh`
-
-Applies macOS system defaults and preferences. Called by the personal layer
-but can be run independently. Uses proper quoting and groups all Dock changes
-under a single `killall Dock` at the end.
-
-**What it configures:**
-
-- Hostname (ComputerName, HostName, LocalHostName)
-- Dock (left side, auto-hide, no delay, remove default apps, remove recents)
-- Battery (show percentage on menu bar)
-- Mouse (disable acceleration)
-- Power / Sleep (display, disk, and system sleep times)
-- Finder (show path bar, status bar, all extensions, show ~/Library and /Volumes, no warnings)
-- Screenshots (PNG format)
-
-**Usage:**
-
-```bash
-~/.dotfiles/Other/scripts/macos-defaults.sh "computer-name"
-```
-
-**Note:** Some changes require logging out or restarting to take full effect.
-
----
-
-### `lib/common.zsh` (Shared Zsh Library)
-
-**Location:** `Other/scripts/lib/common.zsh`
-
-Shared zsh library providing state management, setting resolution, status
-output, dry-run infrastructure, and UI helpers. Sources the state file, resolves
-all feature flags through the precedence chain, and provides `gum`-driven
-interactive prompts.
-
-**Key responsibilities:**
-
-- State file read/write (`~/.config/dotfiles/state.env`)
-- Setting resolution with the full precedence chain
-- Device profile preset lookup
-- `gum`-based interactive prompts and status output
-- `RESOLVED_*` global population
-- Dry-run gating via `run_or_dry()` and `dry_run_active()`
-- Pre-flight inventory via `preflight_inventory()`
-- Managed block writing via `write_managed_block()`
-
----
-
-### `lib/common.ps1` (Shared PowerShell Library)
-
-**Location:** `Other/scripts/lib/common.ps1`
-
-Shared PowerShell library providing equivalent state management, resolution,
-status output, dry-run infrastructure, and managed block writing for the Windows
-scripts.
-
-**Key responsibilities:**
-
-- State file read/write (`~/.config/dotfiles/state.env`)
-- Setting resolution with the full precedence chain (`Resolve-Setting`, `Resolve-AllFlags`)
-- Device profile preset lookup (`Get-ProfileDefault`)
-- Scoop and `mise` installation detection (`Test-ScoopPackageInstalled`,
-  `Get-MiseInstallMethod`)
-- Windows Terminal settings discovery and profile lookup
-- `mise doctor` helpers and stale `mise\installs\...` PATH cleanup
-- Zscaler live-TLS detection, cert-store detection, and effective setting
-  resolution
-- Status output (`Write-StatusPass`, `Write-StatusFix`, `Write-StatusSkip`, `Write-StatusFail`, `Write-StatusSummary`)
-- Dry-run gating via `Invoke-OrDry`, `Test-DryRun`, and `Write-DryRunLog`
-- Managed block writing via `Write-ManagedBlock` (dry-run aware)
-
----
-
-## 💾 State File
-
-The bootstrap persists resolved settings to a state file so that subsequent
-runs (ensure, update) remember previous choices without re-prompting.
-
-**Location:** `~/.config/dotfiles/state.env`
-
-**Format:**
-
-```bash
-PREFERRED_SHELL=fish
-DEVICE_PROFILE=work
-ENABLE_ZSCALER=auto
-ENABLE_WORK_APPS=true
-ENABLE_HOME_APPS=false
-ENABLE_GUI=true
-ENABLE_TUCKR=true
-ENABLE_MACOS_DEFAULTS=true
-ENABLE_ROSETTA=true
-ENABLE_MISE_TOOLS=true
-ENABLE_SHELL_DEFAULT=true
-```
-
-The state file is a plain key=value file read by both `lib/common.zsh` and
-`lib/common.ps1`. It is created automatically by the resolution engine after
-the first run and updated on every subsequent invocation.
-
----
-
-## 🏷️ Feature Flag Catalogue
-
-Every step in both the foundation and personal layers is gated by a resolved
-feature flag. The `RESOLVED_*` globals are populated by `lib/common.zsh`
-through the resolution precedence chain.
-
-| Flag | Type | Description |
-|------|------|-------------|
-| `RESOLVED_SHELL` | `fish` / `zsh` | Preferred interactive shell |
-| `RESOLVED_PROFILE` | `work` / `home` / `minimal` | Device profile preset |
-| `RESOLVED_ZSCALER` | `auto` / `true` / `false` | Zscaler trust bootstrap |
-| `RESOLVED_WORK_APPS` | `true` / `false` | Install work apps (Edge, Teams) |
-| `RESOLVED_HOME_APPS` | `true` / `false` | Install home apps (databases, MAS) |
-| `RESOLVED_GUI` | `true` / `false` | Install GUI applications via Brewfile |
-| `RESOLVED_TUCKR` | `true` / `false` | Run tuckr symlink application |
-| `RESOLVED_MACOS_DEFAULTS` | `true` / `false` | Apply macOS system defaults |
-| `RESOLVED_ROSETTA` | `true` / `false` | Install Rosetta 2 (Apple Silicon) |
-| `RESOLVED_MISE_TOOLS` | `true` / `false` | Install mise-managed tools |
-| `RESOLVED_SHELL_DEFAULT` | `true` / `false` | Change default shell to preferred |
-
----
-
-## 🔗 Resolution Precedence
-
-Each feature flag is resolved through a six-level precedence chain. The first
-non-empty value wins:
-
-1. **CLI flag** — Explicit flag passed on the command line
-2. **Environment variable** — Matching `ENABLE_*` env var exported in the shell
-3. **State file** — Value persisted from a previous run (`~/.config/dotfiles/state.env`)
-4. **Device profile preset** — Default from the selected profile (work/home/minimal)
-5. **Interactive prompt** — `gum` prompt shown to the operator (skipped with `--non-interactive`)
-6. **Hard-coded default** — Fallback value baked into the script
-
----
-
-## 📊 Device Profile Presets
-
-Profiles encode sensible defaults for each device role. The `--profile` flag
-selects a preset; individual flags can still override any preset value.
-
-| Flag | `work` | `home` | `minimal` |
-|------|--------|--------|-----------|
-| `ENABLE_ZSCALER` | auto | false | false |
-| `ENABLE_WORK_APPS` | true | false | false |
-| `ENABLE_HOME_APPS` | false | true | false |
-| `ENABLE_GUI` | true | true | false |
-| `ENABLE_TUCKR` | true | true | true |
-| `ENABLE_MACOS_DEFAULTS` | true | true | false |
-| `ENABLE_ROSETTA` | true | true | false |
-| `ENABLE_MISE_TOOLS` | true | true | true |
-| `ENABLE_SHELL_DEFAULT` | true | true | true |
-
----
-
-## 🔍 Pre-Flight Inventory
-
-Before making any changes, both the foundation and personal layers run a
-**pre-flight inventory** that snapshots the current machine state into
-`PREFLIGHT_*` global variables. This lets every subsequent step make informed
-decisions about what to install, skip, or repair.
-
-**What gets inventoried:**
-
-- Tool availability (`brew`, `git`, `fish`, `zsh`, `mise`, `tuckr`, `gum`, `zoxide`, `fzf`)
-- Shell state (current `$SHELL`, whether fish/zsh is in `/etc/shells`)
-- macOS specifics (Rosetta installed, Zscaler detected, architecture)
-- Configuration state (state file exists, mise config exists, dotfiles cloned)
-- Runtime versions (Homebrew version, mise version)
-
-Each inventory check is silent — it populates globals without printing output.
-The results are used by `ensure_*` functions to decide whether to act or skip.
-For example, `ensure_homebrew()` checks `PREFLIGHT_HAS_BREW` before attempting
-installation.
-
----
-
-## 🏃 Dry-Run Mode
-
-### macOS
-
-Pass `--dry-run` to preview the full bootstrap pipeline without making any
-changes. Every destructive command is wrapped in `run_or_dry()` which logs what
-*would* happen instead of executing it.
-
-**What runs normally in dry-run:**
-
-- Pre-flight inventory (all checks are read-only)
-- Feature flag resolution (CLI → env → state → profile → prompt → default)
-- Validation checks (verifying current state)
-- Status output (every step still prints its pass/fix/skip/fail line)
-
-**What is skipped in dry-run:**
-
-- Package installation (`brew install`, `brew bundle`, `mise install`)
-- File writes (state file, profile blocks, managed blocks, cert bundles)
-- System changes (`chsh`, `/etc/shells` modification, macOS defaults, Rosetta)
-- Git operations (`git clone`, `git pull`)
-- Directory creation (`mkdir`)
-
-**Status lines in dry-run** use `status_fix` with "would ..." phrasing:
-
-```
-  ✗ Homebrew                    — would install
-  ✗ Foundation packages         — would install 12 packages
-  ✗ Brew bundle                 — would install/update 47 packages
-  ○ Zscaler trust               — disabled by flag
-  ✗ Default shell               — would set to /opt/homebrew/bin/fish
-```
-
-The dry-run log is also written to stdout via `dry_run_log()` so you can see
-the exact commands that would have been executed.
-
-### Windows
-
-On Windows, prefer the repo-local CMD wrapper for first-run-safe dry-runs:
-
-```powershell
-.\Other\scripts\bootstrap-windows.cmd foundation -Mode setup -DryRun
-.\Other\scripts\resign-windows.cmd -DryRun
-```
-
-Direct PowerShell dry-runs are also available on an already-bootstrapped
-machine:
-
-```powershell
-.\Other\scripts\foundation-windows.ps1 -Mode setup -DryRun
-.\Other\scripts\personal-bootstrap-windows.ps1 -DryRun
-```
-
-Or via `install.cmd`, which threads the flag into the repo-local Windows
-bootstrap:
-
-```powershell
-.\install.cmd setup --dry-run
-```
-
-The Windows dry-run uses `Invoke-OrDry` (parallel to `run_or_dry()`) and
-`Test-DryRun` (parallel to `dry_run_active()`). All destructive operations —
-Scoop installs, file copies, cert creation, signing, profile writes — are gated.
-`Write-ManagedBlock` is also dry-run aware and logs what would change.
-
----
-
-## ✅ Status Output System
-
-Every step in the bootstrap emits a status line so you can see at a glance what
-happened. macOS and Windows share the same pass, skip, and fail semantics. The
-Windows scripts use a dedicated `!` fix marker, while the macOS scripts still
-render fix lines with a yellow `✗`.
-
-| Symbol | Function | Meaning |
-|--------|----------|---------|
-| `✓` (green) | `status_pass` / `Write-StatusPass` | Already correct, no action needed |
-| `✗` or `!` (yellow) | `status_fix` / `Write-StatusFix` | Was wrong, corrective action taken |
-| `○` (gray) | `status_skip` / `Write-StatusSkip` | Intentionally skipped (disabled by flag) |
-| `✗` (red) | `status_fail` / `Write-StatusFail` | Failed — could not be corrected |
-
-**Example output:**
-
-```
-  ✓ Homebrew installed                          (4.4.2)
-  ✓ Foundation packages present                 (12/12)
-  ✗ Fish not in /etc/shells                     — added
-  ✓ Fish set as default shell                   (/opt/homebrew/bin/fish)
-  ○ Zscaler trust                               — disabled by flag
-  ✓ Mise tools installed                        (14 tools)
-```
-
-At the end of each layer, a **summary tally** is printed:
-
-```
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Foundation: 11 passed, 2 fixed, 1 skipped, 0 failed
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
----
-
-## 📖 Runbooks
-
-Detailed manual runbooks are available for reference when the automated scripts
-are not suitable or when debugging a failed bootstrap:
-
-- **macOS:** [macos-foundation-bootstrap.md](macos-foundation-bootstrap.md)
-- **Windows:** [windows-bootstrap.md](windows-bootstrap.md)
-
----
-
-## 🔄 Manual Recovery Steps
-
-If the bootstrap script fails or you need to manually get things working:
-
-### 1. Get Basic Shell Working
-
-```bash
-# If stuck without tools, manually install:
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-eval "$(/opt/homebrew/bin/brew shellenv)"
-brew install git fish
-```
-
-### 2. Get Dotfiles
-
-```bash
-git clone https://github.com/benjaminwestern/dotfiles ~/.dotfiles
-cd ~/.dotfiles
-git remote set-url origin git@github.com:benjaminwestern/dotfiles.git
-```
-
-### 3. Install Core Tools
-
-```bash
-brew bundle --file=~/.dotfiles/Configs/brew/Brewfile
-```
-
-### 4. Setup Shell
-
-```bash
-# Add fish to shells
-sudo sh -c 'echo /opt/homebrew/bin/fish >> /etc/shells'
-chsh -s /opt/homebrew/bin/fish
-
-# Pre-create directories
-mkdir -p ~/.ssh && chmod 700 ~/.ssh
-mkdir -p ~/.config
-
-# Symlink dotfiles
-tuckr add \*
-```
-
-### 5. Get Mise Working
-
-```bash
-curl https://mise.run | sh
-export PATH="$HOME/.local/bin:$PATH"
-eval "$(mise activate bash)"  # or zsh/fish
-mise install
-```
-
-### 6. Activate Everything
-
-```bash
-# Restart terminal or
-exec /opt/homebrew/bin/fish
-
-# Verify
-mise doctor
-tuckr status
-```
-
----
-
-## 🧰 Core Tool Stack
-
-### Present Tools (All Implemented)
-
-| Tool | Purpose | Install Method | Config Location |
-|------|---------|----------------|-----------------|
-| **Fish** | Shell | Homebrew | `Configs/fish/.config/fish/` |
-| **Tuckr** | Dotfile manager | Homebrew | This repo |
-| **Mise** | Dev environment | Homebrew / curl / Scoop | `Configs/mise/.config/mise/` |
-| **Homebrew** | Package manager (macOS) | curl installer | `Configs/brew/Brewfile` |
-| **Scoop** | Package manager (Windows) | PowerShell installer | N/A |
-| **Gum** | Interactive CLI prompts and status output | Homebrew / Scoop | Dracula theme via env vars |
-| **Tmux** | Terminal multiplexer | Homebrew | `Configs/tmux/.tmux.conf` |
-| **Neovim** | Editor | Homebrew | `Configs/nvim/.config/nvim/` |
-| **Zoxide** | Smart cd | Homebrew / Scoop | Activated in all shells |
-| **FZF** | Fuzzy finder | Homebrew / Scoop | Activated in all shells |
-
-### Deprecated / Replaced
-
-| Old Tool | Replacement | Reason |
-|----------|-------------|---------|
-| **Stow** | Tuckr | Better conflict detection, Rust-based |
-| **setup-osx.sh** | install.sh | Unified macOS public entry |
-| **macos-bootstrap.sh** | foundation-macos.zsh + personal-bootstrap-macos.zsh | Two-layer architecture with feature flags |
+## FAQ
+
+These are the operator questions that come up most often when the Windows
+bootstrap contract looks unusual at first glance.
+
+### Can I launch the Windows `.cmd` entrypoints from PowerShell or Windows PowerShell 5.1?
+
+Yes. PowerShell can invoke the `.cmd` wrappers directly by path, for example
+`& .\Other\scripts\foundation-windows.cmd -Mode ensure`. The wrapper then runs
+under `cmd.exe`, which is exactly what the Windows bootstrap expects for the
+first-hop launch path.
+
+The main caveat is session scope. If a `.cmd` file changes environment
+variables, those changes stay inside the child process and do not flow back
+into the parent PowerShell session. That is acceptable here because the
+Windows `.cmd` files are only bootstrap entrypoints. They launch the protected
+PowerShell implementation, but they do not try to initialise your current
+interactive session.
+
+### Why does Windows keep both `.cmd` and `.ps1` files?
+
+Windows uses `.cmd` as the operator-facing entrypoint layer and `.ps1` as the
+implementation layer. This avoids a chicken-and-egg problem on fresh machines
+or `AllSigned` machines where direct PowerShell execution may fail before the
+local signing and PowerShell 7 precursor logic has run.
+
+In practice, use the `.cmd` files for normal operation and use `Get-Help` on
+the `.ps1` files only when you are inspecting or debugging the implementation.
+
+## Roadmap
+
+The bootstrap contract is in place on macOS and Windows. The remaining work is
+mostly validation, automation, and the next platform expansion, not a rewrite
+of the current two-layer design.
+
+- Validate the macOS foundation flow on a true bare Mac and use those results
+  to tighten pre-flight checks, validation, and repair paths.
+- Validate the Windows personal layer on a real Windows machine so the repo
+  copy, profile, SSH, Git, and config flows are proven outside dry-run paths.
+- Add CI coverage on ephemeral macOS and Windows runners so `setup`, `ensure`,
+  `update`, and `audit` stay exercised continuously.
+- Add Linux only after the current macOS and Windows contract is stable enough
+  to copy forward without creating a third naming or flow variant.
+
+## TODO
+
+These are the next concrete tasks to close against the roadmap above.
+
+- Run [`foundation-macos.zsh`](foundation-macos.zsh) on a bare macOS machine
+  and capture the validation gaps that need script changes.
+- Run
+  [`personal-bootstrap-windows.cmd`](personal-bootstrap-windows.cmd) end to
+  end on a real Windows machine and fix any path, copy, or profile drift.
+- Define the first CI matrix for [`install.sh`](../../install.sh),
+  [`install.cmd`](../../install.cmd), and the direct audit and dry-run flows.
+- When Linux starts, keep the same purpose-first naming contract used here so
+  the next platform does not reintroduce naming drift.

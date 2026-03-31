@@ -1,7 +1,39 @@
-# =============================================================================
-# audit-windows.ps1 -- Standalone Windows machine audit
-# =============================================================================
+<#
+.SYNOPSIS
+Runs the read-only Windows machine audit for this dotfiles repository.
 
+.DESCRIPTION
+Use this script to inspect the current Windows bootstrap state without making
+changes. It reports foundation package coverage, outdated Scoop foundation
+packages, outdated mise tools, shell and profile state, signing posture,
+configuration files, and Zscaler trust state. The only optional write is
+PopulateState, which records discovered values into the shared state file.
+
+.PARAMETER Section
+Limits the audit to one section. Supported values are tools, shell, configs,
+signing, zscaler, and all.
+
+.PARAMETER Json
+Outputs machine-readable JSON instead of the formatted terminal report.
+
+.PARAMETER PopulateState
+Writes discovered baseline values into ~/.config/dotfiles/state.env after the
+audit completes.
+
+.EXAMPLE
+pwsh -NoLogo -NoProfile -File .\Other\scripts\audit-windows.ps1
+
+.EXAMPLE
+pwsh -NoLogo -NoProfile -File .\Other\scripts\audit-windows.ps1 -Section signing
+
+.EXAMPLE
+pwsh -NoLogo -NoProfile -File .\Other\scripts\audit-windows.ps1 -Json
+
+.NOTES
+Use install.cmd audit, audit-windows.cmd, or bootstrap-windows.cmd audit on a
+fresh machine so the PowerShell 5 precursor path and repo-local signing
+protections stay in place.
+#>
 param(
   [ValidateSet('tools', 'shell', 'configs', 'signing', 'zscaler', 'all')]
   [string]$Section = 'all',
@@ -21,7 +53,7 @@ if ($PopulateState) { $PrecursorArgs += '-PopulateState' }
 Invoke-PwshPrecursor -ScriptPath $MyInvocation.MyCommand.Path -ArgumentList $PrecursorArgs
 
 . (Join-Path $ScriptDir 'lib\common.ps1')
-. (Join-Path $ScriptDir 'windows-signing-helpers.ps1')
+. (Join-Path $ScriptDir 'lib\signing-helpers-windows.ps1')
 
 $FoundationPackages = @(
   'git', 'gh', 'jq', 'jid', 'yq', 'fzf', 'fd', 'ripgrep', 'zoxide',
@@ -267,8 +299,173 @@ function Get-ToolVersion {
   return 'installed'
 }
 
+function Get-ScoopOutdatedPackages {
+  $result = [ordered]@{
+    checked             = $false
+    uses_local_metadata = $true
+    packages            = @()
+    foundation_packages = @()
+    note                = ''
+  }
+
+  if (-not (Test-CommandExists 'scoop')) {
+    return [pscustomobject]$result
+  }
+
+  try {
+    $statusItems = @(scoop status --local 2>$null)
+  } catch {
+    $result.note = 'status check failed'
+    return [pscustomobject]$result
+  }
+  $statusExitCode = $LASTEXITCODE
+  if ($statusExitCode -ne 0) {
+    $result.note = "status check failed (exit $statusExitCode)"
+    return [pscustomobject]$result
+  }
+
+  $packages = @()
+  foreach ($item in $statusItems) {
+    if (-not $item) { continue }
+    if (-not ($item.PSObject.Properties.Name -contains 'Name')) { continue }
+
+    $name = [string](Get-PropertyValue -Object $item -Names @('Name'))
+    if (-not $name) { continue }
+
+    $installed = [string](Get-PropertyValue -Object $item -Names @('Installed Version', 'InstalledVersion'))
+    $latest = [string](Get-PropertyValue -Object $item -Names @('Latest Version', 'LatestVersion'))
+    $missingDeps = [string](Get-PropertyValue -Object $item -Names @('Missing Dependencies', 'MissingDependencies'))
+    $info = [string](Get-PropertyValue -Object $item -Names @('Info'))
+
+    $normalizedName = $name
+    if ($normalizedName.Contains('/')) {
+      $normalizedName = ($normalizedName -split '/')[(-1)]
+    }
+
+    $packages += [pscustomobject]@{
+      name                 = $name
+      normalized_name      = $normalizedName
+      current              = $installed
+      latest               = $latest
+      missing_dependencies = $missingDeps
+      info                 = $info
+      outdated             = -not [string]::IsNullOrWhiteSpace($latest)
+    }
+  }
+
+  $outdatedPackages = @($packages | Where-Object { $_.outdated })
+  $foundationOutdated = @($outdatedPackages | Where-Object { $FoundationPackages -contains $_.normalized_name })
+
+  $result.checked = $true
+  $result.packages = $outdatedPackages
+  $result.foundation_packages = $foundationOutdated
+  return [pscustomobject]$result
+}
+
+function Get-MiseOutdatedTools {
+  $result = [ordered]@{
+    checked = $false
+    tools   = @()
+    note    = ''
+  }
+
+  if (-not (Test-CommandExists 'mise')) {
+    return [pscustomobject]$result
+  }
+
+  try {
+    $json = @((mise outdated --json 2>$null)) -join "`n"
+  } catch {
+    $result.note = 'outdated check failed'
+    return [pscustomobject]$result
+  }
+  $outdatedExitCode = $LASTEXITCODE
+  if ($outdatedExitCode -ne 0) {
+    $result.note = "outdated check failed (exit $outdatedExitCode)"
+    return [pscustomobject]$result
+  }
+
+  $result.checked = $true
+  if (-not $json) {
+    return [pscustomobject]$result
+  }
+
+  try {
+    $parsed = $json | ConvertFrom-Json
+  } catch {
+    $result.note = 'invalid JSON from mise outdated'
+    return [pscustomobject]$result
+  }
+
+  $tools = @()
+  foreach ($property in $parsed.PSObject.Properties) {
+    if (-not $property) { continue }
+
+    $tool = $property.Value
+    if (-not $tool) { continue }
+
+    $source = Get-PropertyValue -Object $tool -Names @('source')
+    $sourcePath = if ($source) {
+      [string](Get-PropertyValue -Object $source -Names @('path'))
+    } else {
+      ''
+    }
+
+    $tools += [pscustomobject]@{
+      name        = if ((Get-PropertyValue -Object $tool -Names @('name'))) {
+        [string](Get-PropertyValue -Object $tool -Names @('name'))
+      } else {
+        [string]$property.Name
+      }
+      requested   = [string](Get-PropertyValue -Object $tool -Names @('requested'))
+      current     = [string](Get-PropertyValue -Object $tool -Names @('current'))
+      latest      = [string](Get-PropertyValue -Object $tool -Names @('latest'))
+      bump        = [string](Get-PropertyValue -Object $tool -Names @('bump'))
+      source_path = $sourcePath
+    }
+  }
+
+  $result.tools = $tools
+  return [pscustomobject]$result
+}
+
+function Format-OutdatedEntries {
+  param(
+    [object[]]$Entries,
+    [int]$Limit = 5
+  )
+
+  if (-not $Entries -or $Entries.Count -eq 0) {
+    return 'none'
+  }
+
+  $rendered = @()
+  foreach ($entry in ($Entries | Select-Object -First $Limit)) {
+    $name = [string](Get-PropertyValue -Object $entry -Names @('name'))
+    $current = [string](Get-PropertyValue -Object $entry -Names @('current'))
+    $latest = [string](Get-PropertyValue -Object $entry -Names @('latest'))
+
+    if ($current -and $latest) {
+      $rendered += "$name ($current -> $latest)"
+    } elseif ($latest) {
+      $rendered += "$name (latest $latest)"
+    } else {
+      $rendered += $name
+    }
+  }
+
+  if ($Entries.Count -gt $Limit) {
+    $rendered += "+$($Entries.Count - $Limit) more"
+  }
+
+  return ($rendered -join ', ')
+}
+
 function Invoke-AuditTools {
   Write-SectionHeader 'Tooling'
+
+  $scoopOutdated = Get-ScoopOutdatedPackages
+  $miseOutdated = Get-MiseOutdatedTools
 
   if (Test-CommandExists 'scoop') {
     Write-AuditLine 'Scoop:' (Get-ToolVersion -CommandName 'scoop')
@@ -293,10 +490,39 @@ function Invoke-AuditTools {
     Write-AuditLine 'Foundation packages:' 'cannot audit without Scoop'
   }
 
+  if (Test-CommandExists 'scoop') {
+    if (-not $scoopOutdated.checked) {
+      $detail = if ($scoopOutdated.note) { $scoopOutdated.note } else { 'not checked' }
+      Write-AuditLine 'Scoop outdated:' $detail
+    } else {
+      $detail = "$($scoopOutdated.foundation_packages.Count) outdated foundation package(s)"
+      if ($scoopOutdated.packages.Count -gt $scoopOutdated.foundation_packages.Count) {
+        $detail += ", $($scoopOutdated.packages.Count) outdated Scoop app(s) total"
+      }
+      $detail += ' (local bucket metadata)'
+      Write-AuditLine 'Scoop outdated:' $detail
+      if ($scoopOutdated.foundation_packages.Count -gt 0) {
+        Write-AuditLine 'Outdated Scoop packages:' (Format-OutdatedEntries -Entries $scoopOutdated.foundation_packages)
+      }
+    }
+  }
+
   if (Test-CommandExists 'mise') {
     Write-AuditLine 'Mise:' "$(Get-ToolVersion -CommandName 'mise') ($(Get-MiseInstallMethod))"
   } else {
     Write-AuditLine 'Mise:' 'not installed'
+  }
+
+  if (Test-CommandExists 'mise') {
+    if (-not $miseOutdated.checked) {
+      $detail = if ($miseOutdated.note) { $miseOutdated.note } else { 'not checked' }
+      Write-AuditLine 'Mise outdated:' $detail
+    } else {
+      Write-AuditLine 'Mise outdated:' "$($miseOutdated.tools.Count) outdated tool(s)"
+      if ($miseOutdated.tools.Count -gt 0) {
+        Write-AuditLine 'Outdated mise tools:' (Format-OutdatedEntries -Entries $miseOutdated.tools)
+      }
+    }
   }
 
   foreach ($tool in @(
@@ -553,6 +779,8 @@ function Invoke-PopulateState {
 }
 
 function Invoke-AuditJson {
+  $scoopOutdated = Get-ScoopOutdatedPackages
+  $miseOutdated = Get-MiseOutdatedTools
   $miseAudit = Get-MiseAuditState
   $terminalAudit = Get-WindowsTerminalAudit
   $profileSignature = if (Test-Path $PROFILE) {
@@ -577,7 +805,19 @@ function Invoke-AuditJson {
     }
     tools = @{
       scoop = (Test-CommandExists 'scoop')
+      scoop_outdated = @{
+        checked = $scoopOutdated.checked
+        uses_local_metadata = $scoopOutdated.uses_local_metadata
+        packages = $scoopOutdated.packages
+        foundation_packages = $scoopOutdated.foundation_packages
+        note = $scoopOutdated.note
+      }
       mise = (Test-CommandExists 'mise')
+      mise_outdated = @{
+        checked = $miseOutdated.checked
+        tools = $miseOutdated.tools
+        note = $miseOutdated.note
+      }
       foundation_packages = @{}
       mise_method = Get-MiseInstallMethod
     }
