@@ -58,5 +58,94 @@
         "X-Goog-Api-Key": "$GOOGLE_MCP_DEV_SERVER_API_KEY"
       }
     }
+  },
+  "hooksConfig": {
+    "notifications": false
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "name": "agent-harness-session-start",
+            "type": "command",
+            "command": "/Users/benjaminwestern/.agent-harnesses/bin/agent_harness --runtime gemini --success-json \\{\\} --socket-env AGENT_HARNESS_SOCKET"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "name": "agent-harness-session-end",
+            "type": "command",
+            "command": "/Users/benjaminwestern/.agent-harnesses/bin/agent_harness --runtime gemini --success-json \\{\\} --socket-env AGENT_HARNESS_SOCKET"
+          }
+        ]
+      }
+    ],
+    "BeforeAgent": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "name": "agent-harness-before-agent",
+            "type": "command",
+            "command": "/Users/benjaminwestern/.agent-harnesses/bin/agent_harness --runtime gemini --success-json \\{\\} --socket-env AGENT_HARNESS_SOCKET"
+          }
+        ]
+      }
+    ],
+    "AfterAgent": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "name": "agent-harness-after-agent",
+            "type": "command",
+            "command": "/Users/benjaminwestern/.agent-harnesses/bin/agent_harness --runtime gemini --success-json \\{\\} --socket-env AGENT_HARNESS_SOCKET"
+          }
+        ]
+      }
+    ],
+    "BeforeTool": [
+      {
+        "matcher": "run_shell_command|write_file|replace",
+        "hooks": [
+          {
+            "name": "agent-harness-before-tool",
+            "type": "command",
+            "command": "/Users/benjaminwestern/.agent-harnesses/bin/agent_harness --runtime gemini --success-json \\{\\} --socket-env AGENT_HARNESS_SOCKET"
+          }
+        ]
+      }
+    ],
+    "AfterTool": [
+      {
+        "matcher": "run_shell_command|write_file|replace",
+        "hooks": [
+          {
+            "name": "agent-harness-after-tool",
+            "type": "command",
+            "command": "/Users/benjaminwestern/.agent-harnesses/bin/agent_harness --runtime gemini --success-json \\{\\} --socket-env AGENT_HARNESS_SOCKET"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "name": "agent-harness-notification",
+            "type": "command",
+            "command": "/Users/benjaminwestern/.agent-harnesses/bin/agent_harness --runtime gemini --success-json \\{\\} --socket-env AGENT_HARNESS_SOCKET"
+          }
+        ]
+      }
+    ]
   }
 }

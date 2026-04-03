@@ -40,6 +40,7 @@ pnpm = "latest" # Node Package Manager
 "npm:opencode-ai" = "latest"
 "npm:@playwright/cli" = "latest"
 "npm:@googleworkspace/cli" = "latest"
+"npm:markit-ai" = "latest"
 # "npm:@openai/codex" = "latest"
 # "npm:@sourcegraph/amp" = "latest"
 # "npm:@google/gemini-cli" = "nightly"
