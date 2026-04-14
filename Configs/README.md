@@ -75,6 +75,7 @@ Each copy target is gated by an `ENABLE_*` environment variable (default:
 | `nvim` | `~/.config/nvim/` | macOS | Neovim configuration based on Kickstart.nvim, including `init.lua`, lazy-lock, and stylua config |
 | `opencode` | `~/.config/opencode/` | Both | Opencode AI assistant configuration (`opencode.json`) and plugins (mise integration) |
 | `pitchfork` | `~/.config/pitchfork/` | macOS | Pitchfork configuration (Caddyfile and config.toml) |
+| `podman` | Managed via Homebrew | macOS | Podman container runtime setup. Since Podman v5, Apple Hypervisor (`applehv`) and Rosetta 2 are enabled by default on Apple Silicon Macs. To start the background VM: `podman machine init` then `podman machine start`. |
 | `ssh` | `~/.ssh/config` | Both | SSH client configuration for hosts, identity files, and tunnels. Keys are **not** included in this repo |
 | `tmux` | `~/.tmux.conf` | macOS | Tmux terminal multiplexer configuration |
 | `worktrunk` | `~/.config/worktrunk/config.toml` | macOS | Worktrunk (`wt`) worktree manager configuration including worktree path template and post-start hooks |

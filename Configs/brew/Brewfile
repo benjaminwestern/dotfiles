@@ -67,7 +67,11 @@ if ENV['HOMEBREW_GUI']
   # Standard Apps
   cask "ghostty" # Terminal Emulator
   cask "google-chrome" # Web Browser
-  cask "docker-desktop" # Containerisation Platform
+  cask "t3-code" # T3 Code editor
+  brew "podman" # Container runtime
+  brew "podman-compose" # Docker Compose for Podman
+  cask "podman-desktop" # Containerisation GUI
+  brew "container" # Apple Native Container CLI
   cask "maccy" # Clipboard Manager
   cask "dbngin" # Database GUI
   cask "visual-studio-code" # Code Editor

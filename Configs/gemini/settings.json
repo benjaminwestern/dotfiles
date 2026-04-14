@@ -9,7 +9,7 @@
   },
   "security": {
     "auth": {
-      "selectedType": "oauth-personal"
+      "selectedType": "gemini-api-key"
     },
     "enablePermanentToolApproval": true,
     "autoAddToPolicyByDefault": true
