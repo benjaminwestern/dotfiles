@@ -79,3 +79,11 @@ Configs/ssh/.ssh/*.pub
 Configs/ssh/.ssh/id_*
 
 Configs/ssh/.ssh/known_hosts*
+
+# Pi auth/session state is machine-local, not dotfile-managed.
+Configs/pi/.pi/agent/auth.json
+Configs/pi/.pi/agent/sessions/
+Configs/pi/.pi/agent/*.bak
+
+# Codex authentication is machine-local, not dotfile-managed.
+Configs/codex/.codex/auth.json

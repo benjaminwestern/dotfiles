@@ -71,9 +71,11 @@ Each copy target is gated by an `ENABLE_*` environment variable (default:
 | `ghostty` | `~/.config/ghostty/config` | macOS | Ghostty terminal emulator configuration |
 | `git` | `~/.gitconfig` | Both | Git configuration (default branch, colour, push, pull, user, URL rewriting) |
 | `hypr` | `~/.config/hypr/hyprland.conf` | Linux | Hyprland Wayland compositor configuration (future) |
+| `mcporter` | `~/.mcporter/mcporter.jsonc` | macOS | Mcporter MCP server catalogue using environment-variable placeholders for credentials |
 | `mise` | `~/.config/mise/` | Both | Managed mise runtime config (`config.toml`), environment variables (`.env`), example env (`.example.env`), and task scripts (`scripts/`). This is separate from the repo-root `mise.toml` used for local contributor tasks |
 | `nvim` | `~/.config/nvim/` | macOS | Neovim configuration based on Kickstart.nvim, including `init.lua`, lazy-lock, and stylua config |
 | `opencode` | `~/.config/opencode/` | Both | Opencode AI assistant configuration (`opencode.json`) and plugins (mise integration) |
+| `pi` | `~/.pi/agent/` | macOS | Pi coding agent settings, model registry, prompt appendix, and extensions. `auth.json` and `sessions/` remain machine-local |
 | `pitchfork` | `~/.config/pitchfork/` | macOS | Pitchfork configuration (Caddyfile and config.toml) |
 | `podman` | Managed via Homebrew | macOS | Podman container runtime setup. Since Podman v5, Apple Hypervisor (`applehv`) and Rosetta 2 are enabled by default on Apple Silicon Macs. To start the background VM: `podman machine init` then `podman machine start`. |
 | `ssh` | `~/.ssh/config` | Both | SSH client configuration for hosts, identity files, and tunnels. Keys are **not** included in this repo |

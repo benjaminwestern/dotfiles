@@ -1,22 +1,11 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["file:///Users/benjaminwestern/.config/opencode/plugins/mise.ts"],
-  "model": "google/gemini-3-flash-preview",
+  "plugin": [
+    "file:///Users/benjaminwestern/.config/opencode/plugins/mise.ts"
+  ],
+  "model": "opencode-go/kimi-k2.6",
   "share": "disabled",
-  "provider": {
-    "mlx": {
-      "npm": "@ai-sdk/openai-compatible",
-      "name": "MLX (local)",
-      "options": {
-        "baseURL": "http://localhost:8080/v1"
-      },
-      "models": {
-        "google/gemma-3-1b-it": {
-          "name": "Gemma 3 1B Instruct"
-        }
-      }
-    }
-  },
+  "provider": {},
   "tools": {
     "bash": true,
     "edit": true,
@@ -35,47 +24,5 @@
     "bash": "allow",
     "webfetch": "allow"
   },
-  "mcp": {
-    "atlassian": {
-      /*https://github.com/sooperset/mcp-atlassian*/
-      "type": "local",
-      "command": ["uvx", "mcp-atlassian"],
-      "enabled": false,
-      "environment": {
-        "JIRA_URL": "{env:ATLASSIAN_JIRA_URL}",
-        "JIRA_USERNAME": "{env:ATLASSIAN_USERNAME}",
-        "JIRA_API_TOKEN": "{env:ATLASSIAN_API_TOKEN}",
-        "CONFLUENCE_URL": "{env:ATLASSIAN_CONFLUENCE_URL}",
-        "CONFLUENCE_USERNAME": "{env:ATLASSIAN_USERNAME}",
-        "CONFLUENCE_API_TOKEN": "{env:ATLASSIAN_API_TOKEN}"
-      }
-    },
-    "chrome-dev-tools": {
-      /*https://github.com/ChromeDevTools/chrome-devtools-mcp*/
-      "type": "local",
-      "command": ["bunx", "-y", "chrome-devtools-mcp@latest"],
-      "enabled": false
-    },
-    "firebase": {
-      /*https://firebase.google.com/docs/ai-assistance/mcp-server*/
-      "type": "local",
-      "command": ["bunx", "-y", "firebase-tools@latest", "experimental:mcp"],
-      "enabled": false
-    },
-    "terraform": {
-      /*https://github.com/hashicorp/terraform-mcp-server*/
-      "type": "local",
-      "command": ["terraform-mcp-server"],
-      "enabled": false
-    },
-    "google-developer-knowledge": {
-      /* https://developers.google.com/knowledge/mcp#gemini-code-assist */
-      "type": "remote",
-      "url": "https://developerknowledge.googleapis.com/mcp",
-      "headers": {
-        "X-Goog-Api-Key": "{env:GOOGLE_MCP_DEV_SERVER_API_KEY}"
-      },
-      "enabled": true
-    }
-  }
+  "mcp": {}
 }

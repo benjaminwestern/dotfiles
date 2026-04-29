@@ -1,0 +1,22 @@
+model = "gpt-5.5"
+model_reasoning_effort = "xhigh"
+plan_mode_reasoning_effort = "xhigh"
+personality = "pragmatic"
+
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+allow_login_shell = true
+web_search = "live"
+
+[shell_environment_policy]
+inherit = "all"
+ignore_default_excludes = false
+exclude = []
+include_only = []
+set = {}
+
+[tools]
+view_image = true
+
+[tui.model_availability_nux]
+"gpt-5.5" = 4

@@ -3,6 +3,7 @@
 [settings]
 experimental = true
 trusted_config_paths = [
+    "~/code/",
     "~/.config/mise/config.toml",
     "~/.dotfiles/Configs/mise/.config/mise/config.toml",
 ]
@@ -11,10 +12,12 @@ trusted_config_paths = [
 _.file = "~/.config/mise/.env"
 OPENCODE_ENABLE_EXPERIMENTAL_MODELS = "true"
 PITCHFORK_WEB_PORT=19876
+MCPORTER_CONFIG = "/Users/benjaminwestern/.mcporter/mcporter.jsonc"
 EDITOR = "nvim"
 
 [tools]
 go = "latest"
+"go:golang.org/x/tools/gopls" = { version = "latest" }
 
 "go:github.com/GoogleCloudPlatform/cloud-sql-proxy/v2" = { version = "latest" } 
 
@@ -30,11 +33,8 @@ go = "latest"
 "go:github.com/charmbracelet/freeze" = { version = "latest" }
 "go:github.com/charmbracelet/vhs" = { version = "latest" }
 
-# JS/TS... Do I REALLY need all of these?
 node = "latest"
-deno = "latest"
 bun = "latest"
-pnpm = "latest" # Node Package Manager
 
 "npm:@dataform/cli" = "latest" 
 "npm:opencode-ai" = "latest"
@@ -42,9 +42,7 @@ pnpm = "latest" # Node Package Manager
 "npm:@googleworkspace/cli" = "latest"
 "npm:markit-ai" = "latest"
 "npm:@mariozechner/pi-coding-agent" = "latest"
-# "npm:@openai/codex" = "latest"
-# "npm:@sourcegraph/amp" = "latest"
-# "npm:@google/gemini-cli" = "nightly"
+"npm:mcporter" = "latest"
 
 python = "latest"
 uv = "latest"
