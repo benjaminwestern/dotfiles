@@ -20,3 +20,6 @@ view_image = true
 
 [tui.model_availability_nux]
 "gpt-5.5" = 4
+
+[mcp_servers.solo]
+command = "/Applications/Solo.app/Contents/MacOS/mcp"

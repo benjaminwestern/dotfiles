@@ -1,0 +1,88 @@
+{
+  "servers": {
+    "exa": {
+      "type": "remote",
+      "url": "https://mcp.exa.ai/mcp",
+      "apiKeyEnv": "EXA_API_KEY",
+      "enabled": true,
+      "timeoutMs": 25000
+    },
+    "atlassian": {
+      "type": "stdio",
+      "description": "Access Jira and Confluence through Atlassian MCP. Use for searching issues/pages, reading project context, and updating Atlassian work items.",
+      "command": "uvx",
+      "args": ["mcp-atlassian"],
+      "env": {
+        "JIRA_URL": "$env:ATLASSIAN_JIRA_URL",
+        "JIRA_USERNAME": "$env:ATLASSIAN_USERNAME",
+        "JIRA_API_TOKEN": "$env:ATLASSIAN_API_TOKEN",
+        "CONFLUENCE_URL": "$env:ATLASSIAN_CONFLUENCE_URL",
+        "CONFLUENCE_USERNAME": "$env:ATLASSIAN_USERNAME",
+        "CONFLUENCE_API_TOKEN": "$env:ATLASSIAN_API_TOKEN"
+      },
+      "enabled": true
+    },
+    "chrome-dev-tools": {
+      "type": "stdio",
+      "description": "Control and inspect Chrome through DevTools MCP. Use for browser debugging, page inspection, console/network analysis, and UI verification.",
+      "command": "bunx",
+      "args": ["-y", "chrome-devtools-mcp@latest"],
+      "enabled": true
+    },
+    "firebase": {
+      "type": "stdio",
+      "description": "Use Firebase project and app tooling through Firebase MCP. Use for Firebase setup, app inspection, deployment help, and Firebase-specific operations.",
+      "command": "npx",
+      "args": ["-y", "firebase-tools@latest", "mcp"],
+      "enabled": true
+    },
+    "cloud-run": {
+      "type": "stdio",
+      "description": "Use Google Cloud Run MCP for Cloud Run service inspection, deployment support, and runtime operations.",
+      "command": "npx",
+      "args": ["-y", "@google-cloud/cloud-run-mcp"],
+      "enabled": true
+    },
+    "gcloud": {
+      "type": "stdio",
+      "description": "Run Google Cloud CLI workflows through gcloud MCP. Use for Google Cloud project, resource, and command-line operations.",
+      "command": "npx",
+      "args": ["-y", "@google-cloud/gcloud-mcp"],
+      "enabled": true
+    },
+    "terraform": {
+      "type": "stdio",
+      "description": "Search Terraform Registry providers, modules, policies, and documentation. Use for current Terraform resource/module details and version lookup.",
+      "command": "terraform-mcp-server",
+      "enabled": true
+    },
+    "gopls": {
+      "type": "stdio",
+      "description": "Go language intelligence via gopls MCP: workspace/package context, symbols, references, diagnostics, APIs, vuln checks, and refactors.",
+      "command": "gopls",
+      "args": ["mcp"],
+      "enabled": true
+    },
+    "agentic-interaction": {
+      "type": "remote",
+      "description": "Connect to the local agentic-interaction MCP service. Use for local workflow automation and agent coordination tools exposed by that server.",
+      "url": "http://127.0.0.1:8765/mcp",
+      "enabled": true
+    },
+    "google-developer-knowledge": {
+      "type": "remote",
+      "description": "Search and retrieve official Google developer documentation. Use for Google Cloud, Firebase, Android, Chrome, Go, Gemini, TensorFlow, and web.dev answers.",
+      "url": "https://developerknowledge.googleapis.com/mcp",
+      "headers": {
+        "X-Goog-Api-Key": "$env:GOOGLE_MCP_DEV_SERVER_API_KEY"
+      },
+      "enabled": true
+    },
+    "solo": {
+      "type": "stdio",
+      "description": "Connect to Solo's local MCP integration. Use for tools and workflows exposed by the Solo desktop app.",
+      "command": "/Applications/Solo.app/Contents/MacOS/mcp",
+      "enabled": true
+    }
+  }
+}

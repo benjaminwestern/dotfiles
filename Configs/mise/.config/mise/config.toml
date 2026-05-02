@@ -43,6 +43,7 @@ bun = "latest"
 "npm:markit-ai" = "latest"
 "npm:@mariozechner/pi-coding-agent" = "latest"
 "npm:mcporter" = "latest"
+"npm:@kitlangton/ghui" = "latest"
 
 python = "latest"
 uv = "latest"

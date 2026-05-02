@@ -1,25 +1,25 @@
 {
-  "lastChangelogVersion": "0.70.6",
-  "defaultProvider": "opencode-go",
-  "defaultModel": "deepseek-v4-pro",
+  "lastChangelogVersion": "0.72.1",
+  "defaultProvider": "fireworks",
+  "defaultModel": "accounts/fireworks/models/kimi-k2p6",
   "defaultThinkingLevel": "high",
   "enabledModels": [
     "fireworks/accounts/fireworks/models/kimi-k2p6",
-    "fireworks/accounts/fireworks/routers/kimi-k2p5-turbo",
     "google/gemini-3-flash-preview",
-    "google/gemini-3.1-flash-lite-preview",
-    "google/gemini-3.1-pro-preview",
-    "google/gemini-3.1-pro-preview-customtools",
-    "openai-codex/gpt-5.5",
-    "openai-codex/gpt-5.4",
     "opencode-go/deepseek-v4-flash",
     "opencode-go/deepseek-v4-pro",
-    "opencode-go/kimi-k2.5",
     "opencode-go/kimi-k2.6",
-    "opencode-go/mimo-v2.5",
-    "opencode-go/mimo-v2.5-pro",
     "opencode-go/minimax-m2.7",
     "opencode-go/qwen3.6-plus",
-    "openai-codex/gpt-5.4-mini"
+    "openai-codex/gpt-5.4-mini",
+    "google/gemma-4-31b-it",
+    "google/gemma-4-26b-a4b-it",
+    "google/gemini-3.1-pro-preview-customtools",
+    "google/gemini-3.1-pro-preview",
+    "google/gemini-3.1-flash-lite-preview",
+    "google/gemini-3-pro-preview",
+    "google/gemini-flash-latest",
+    "google/gemini-flash-lite-latest",
+    "openai-codex/gpt-5.5"
   ]
 }
