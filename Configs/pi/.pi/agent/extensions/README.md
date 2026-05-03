@@ -645,10 +645,11 @@ Supported project override:
 }
 ```
 
-The footer status shows current percentage and threshold, for example:
+The footer shows the ratio threshold inline after Pi's native context segment,
+for example:
 
 ```text
-ctx 42%/75%
+42.0%/272k (auto) ctx 42%/75%
 ```
 
 Useful command:

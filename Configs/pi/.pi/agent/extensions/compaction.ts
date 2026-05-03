@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
 
 const DEFAULT_RATIO = 0.75;
 const STATUS_ID = "compaction";
@@ -96,6 +97,13 @@ function ratioLabel(ratio: number): string {
 	return `${Math.round(ratio * 100)}%`;
 }
 
+function sanitizeStatusText(text: string): string {
+	return text
+		.replace(/[\r\n\t]/g, " ")
+		.replace(/ +/g, " ")
+		.trim();
+}
+
 function statusLabel(ctx: ExtensionContext, config: RatioConfig, compacting: boolean): string {
 	if (!config.enabled) return "ctx off";
 	const usage = ctx.getContextUsage();
@@ -103,9 +111,134 @@ function statusLabel(ctx: ExtensionContext, config: RatioConfig, compacting: boo
 	return `ctx ${current}/${ratioLabel(config.ratio)}${compacting ? " compacting" : ""}`;
 }
 
-function updateStatus(ctx: ExtensionContext, compacting: boolean) {
-	const config = loadRatioConfig(ctx.cwd);
-	ctx.ui.setStatus(STATUS_ID, statusLabel(ctx, config, compacting));
+function installFooter(pi: ExtensionAPI, ctx: ExtensionContext, isCompacting: () => boolean) {
+	ctx.ui.setStatus(STATUS_ID, undefined);
+	ctx.ui.setFooter((tui, theme, footerData) => {
+		const unsubscribeBranch = footerData.onBranchChange(() => tui.requestRender());
+
+		return {
+			dispose: unsubscribeBranch,
+			invalidate() {},
+			render(width: number): string[] {
+				let totalInput = 0;
+				let totalOutput = 0;
+				let totalCacheRead = 0;
+				let totalCacheWrite = 0;
+				let totalCost = 0;
+
+				for (const entry of ctx.sessionManager.getEntries()) {
+					if (entry.type === "message" && entry.message.role === "assistant") {
+						totalInput += entry.message.usage.input;
+						totalOutput += entry.message.usage.output;
+						totalCacheRead += entry.message.usage.cacheRead;
+						totalCacheWrite += entry.message.usage.cacheWrite;
+						totalCost += entry.message.usage.cost.total;
+					}
+				}
+
+				const model = ctx.model;
+				const usage = ctx.getContextUsage();
+				const contextWindow = usage?.contextWindow ?? model?.contextWindow ?? 0;
+				const contextPercentValue = usage?.percent ?? 0;
+				const contextPercent = usage?.percent !== null ? contextPercentValue.toFixed(1) : "?";
+
+				let pwd = ctx.sessionManager.getCwd();
+				const home = process.env.HOME || process.env.USERPROFILE;
+				if (home && pwd.startsWith(home)) {
+					pwd = `~${pwd.slice(home.length)}`;
+				}
+
+				const branch = footerData.getGitBranch();
+				if (branch) pwd = `${pwd} (${branch})`;
+
+				const sessionName = ctx.sessionManager.getSessionName();
+				if (sessionName) pwd = `${pwd} • ${sessionName}`;
+
+				const statsParts: string[] = [];
+				if (totalInput) statsParts.push(`↑${formatTokens(totalInput)}`);
+				if (totalOutput) statsParts.push(`↓${formatTokens(totalOutput)}`);
+				if (totalCacheRead) statsParts.push(`R${formatTokens(totalCacheRead)}`);
+				if (totalCacheWrite) statsParts.push(`W${formatTokens(totalCacheWrite)}`);
+
+				const usingSubscription = model ? ctx.modelRegistry.isUsingOAuth(model) : false;
+				if (totalCost || usingSubscription) {
+					statsParts.push(`$${totalCost.toFixed(3)}${usingSubscription ? " (sub)" : ""}`);
+				}
+
+				const contextPercentDisplay =
+					contextPercent === "?" ? `?/${formatTokens(contextWindow)} (auto)` : `${contextPercent}%/${formatTokens(contextWindow)} (auto)`;
+				let contextPercentStr: string;
+				if (contextPercentValue > 90) {
+					contextPercentStr = theme.fg("error", contextPercentDisplay);
+				} else if (contextPercentValue > 70) {
+					contextPercentStr = theme.fg("warning", contextPercentDisplay);
+				} else {
+					contextPercentStr = contextPercentDisplay;
+				}
+				statsParts.push(contextPercentStr);
+
+				const config = loadRatioConfig(ctx.cwd);
+				statsParts.push(statusLabel(ctx, config, isCompacting()));
+
+				const extensionStatuses = footerData.getExtensionStatuses();
+				if (extensionStatuses.size > 0) {
+					const sortedStatuses = Array.from(extensionStatuses.entries())
+						.filter(([key]) => key !== STATUS_ID)
+						.sort(([a], [b]) => a.localeCompare(b))
+						.map(([, text]) => sanitizeStatusText(text))
+						.filter(Boolean);
+					statsParts.push(...sortedStatuses);
+				}
+
+				let statsLeft = statsParts.join(" ");
+				let statsLeftWidth = visibleWidth(statsLeft);
+				if (statsLeftWidth > width) {
+					statsLeft = truncateToWidth(statsLeft, width, "...");
+					statsLeftWidth = visibleWidth(statsLeft);
+				}
+
+				const modelName = model?.id || "no-model";
+				let rightSideWithoutProvider = modelName;
+				if (model?.reasoning) {
+					const thinkingLevel = pi.getThinkingLevel() || "off";
+					rightSideWithoutProvider = thinkingLevel === "off" ? `${modelName} • thinking off` : `${modelName} • ${thinkingLevel}`;
+				}
+
+				const minPadding = 2;
+				let rightSide = rightSideWithoutProvider;
+				if (footerData.getAvailableProviderCount() > 1 && model) {
+					rightSide = `(${model.provider}) ${rightSideWithoutProvider}`;
+					if (statsLeftWidth + minPadding + visibleWidth(rightSide) > width) {
+						rightSide = rightSideWithoutProvider;
+					}
+				}
+
+				const rightSideWidth = visibleWidth(rightSide);
+				let statsLine: string;
+				if (statsLeftWidth + minPadding + rightSideWidth <= width) {
+					statsLine = statsLeft + " ".repeat(width - statsLeftWidth - rightSideWidth) + rightSide;
+				} else {
+					const availableForRight = width - statsLeftWidth - minPadding;
+					if (availableForRight > 0) {
+						const truncatedRight = truncateToWidth(rightSide, availableForRight, "");
+						const truncatedRightWidth = visibleWidth(truncatedRight);
+						statsLine = statsLeft + " ".repeat(Math.max(0, width - statsLeftWidth - truncatedRightWidth)) + truncatedRight;
+					} else {
+						statsLine = statsLeft;
+					}
+				}
+
+				const dimStatsLeft = theme.fg("dim", statsLeft);
+				const dimRemainder = theme.fg("dim", statsLine.slice(statsLeft.length));
+				const pwdLine = truncateToWidth(theme.fg("dim", pwd), width, theme.fg("dim", "..."));
+				return [pwdLine, dimStatsLeft + dimRemainder];
+			},
+		};
+	});
+}
+
+function updateStatus(ctx: ExtensionContext) {
+	ctx.ui.setStatus(STATUS_ID, undefined);
 }
 
 function triggerCompaction(
@@ -116,7 +249,7 @@ function triggerCompaction(
 	manual = false,
 ) {
 	const currentLabel = Number.isFinite(currentPercent) ? `${Math.round(currentPercent)}%` : "unknown";
-	ctx.ui.setStatus(STATUS_ID, `ctx ${currentLabel}/${ratioLabel(config.ratio)} compacting`);
+	updateStatus(ctx);
 	if (ctx.hasUI) {
 		const reason = manual
 			? "Manual context compaction started"
@@ -129,12 +262,12 @@ function triggerCompaction(
 		onComplete: () => {
 			onDone?.();
 			if (ctx.hasUI) ctx.ui.notify("Context compaction completed", "info");
-			updateStatus(ctx, false);
+			updateStatus(ctx);
 		},
 		onError: (error) => {
 			onDone?.();
 			if (ctx.hasUI) ctx.ui.notify(`Context compaction failed: ${error.message}`, "error");
-			updateStatus(ctx, false);
+			updateStatus(ctx);
 		},
 	});
 }
@@ -148,7 +281,7 @@ export default function compaction(pi: ExtensionAPI) {
 		const usage = ctx.getContextUsage();
 		const percent = usage?.percent ?? null;
 
-		ctx.ui.setStatus(STATUS_ID, statusLabel(ctx, config, compacting));
+		updateStatus(ctx);
 
 		if (!config.enabled || compacting || percent === null) {
 			previousPercent = percent;
@@ -170,12 +303,13 @@ export default function compaction(pi: ExtensionAPI) {
 
 	pi.on("session_start", (_event, ctx) => {
 		previousPercent = ctx.getContextUsage()?.percent ?? null;
-		updateStatus(ctx, false);
+		installFooter(pi, ctx, () => compacting);
+		updateStatus(ctx);
 	});
 
 	pi.on("model_select", (_event, ctx) => {
 		previousPercent = ctx.getContextUsage()?.percent ?? null;
-		updateStatus(ctx, compacting);
+		updateStatus(ctx);
 	});
 
 	pi.on("turn_end", (_event, ctx) => {
@@ -183,17 +317,18 @@ export default function compaction(pi: ExtensionAPI) {
 	});
 
 	pi.on("agent_end", (_event, ctx) => {
-		updateStatus(ctx, compacting);
+		updateStatus(ctx);
 	});
 
 	pi.on("session_compact", (_event, ctx) => {
 		compacting = false;
 		previousPercent = null;
-		updateStatus(ctx, false);
+		updateStatus(ctx);
 	});
 
 	pi.on("session_shutdown", (_event, ctx) => {
 		ctx.ui.setStatus(STATUS_ID, undefined);
+		ctx.ui.setFooter(undefined);
 	});
 
 	pi.registerCommand("compact-ratio", {
@@ -215,7 +350,7 @@ export default function compaction(pi: ExtensionAPI) {
 			}
 
 			ctx.ui.notify(message, "info");
-			updateStatus(ctx, compacting);
+			updateStatus(ctx);
 		},
 	});
 }
