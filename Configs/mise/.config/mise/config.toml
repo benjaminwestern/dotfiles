@@ -123,6 +123,31 @@ git commit --allow-empty -m ':sparkles: :rocket:'
 git push
 """
 
+# Ollama / Local Model Tasks
+[tasks.pull-hf]
+description = "Import a HuggingFace GGUF model into Ollama for use with Pi"
+usage = '''
+arg "<hf_repo>" "HuggingFace repo (e.g. bartowski/gemma-4-e4b-it-GGUF)"
+arg "<gguf_file>" "GGUF filename to download"
+arg "[ollama_name]" "Optional Ollama model name (defaults to filen. ame)"
+'''
+run = "$HOME/.config/mise/scripts/pull-hf.sh {{arg(name='hf_repo')}} {{arg(name='gguf_file')}} {{arg(name='ollama_name')}}"
+
+[tasks.ollama-serve]
+description = "Start Ollama server if not running, with Apple Silicon optimizations"
+run = """
+if ollama list > /dev/null 2>&1; then
+  echo "Ollama is already running"
+  ollama list
+else
+  echo "Starting Ollama..."
+  OLLAMA_FLASH_ATTENTION=1 OLLAMA_KV_CACHE_TYPE=q8_0 ollama serve &
+  sleep 2
+  echo "Ollama started"
+  ollama list
+fi
+"""
+
 # Terraform Tasks
 [tasks.terraform-init]
 description = "Runs Terraform fmt, init and validation"
@@ -208,6 +233,7 @@ git-pull = "mise run pull-all-repos"
 git-check = "mise run check-all-repos"
 banish = "mise run banish-ds-store"
 git-empty = "mise run empty-commit"
+hf-pull = "mise run pull-hf"
 ti = "mise run terraform-init"
 tc = "mise run terraform-console"
 taa = "mise run terraform-auto-apply"

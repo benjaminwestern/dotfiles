@@ -18,6 +18,8 @@ brew "mcp-toolbox" # Official GenAI Toolbox for Databases from Google
 brew "gemini-cli"
 cask "claude-code"
 cask "codex"
+brew "ollama" # Local LLM runtime with OpenAI-compatible API
+brew "hf" # HuggingFace CLI for model download/upload
 
 # Core Shell Utilities (moved from mise to break circular dependency)
 brew "jq" # JSON processor
