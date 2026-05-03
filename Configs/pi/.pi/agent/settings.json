@@ -1,8 +1,14 @@
 {
   "lastChangelogVersion": "0.72.1",
-  "defaultProvider": "fireworks",
-  "defaultModel": "accounts/fireworks/models/kimi-k2p6",
-  "defaultThinkingLevel": "high",
+  "defaultProvider": "openai-codex",
+  "defaultModel": "gpt-5.5",
+  "defaultThinkingLevel": "xhigh",
+  "compaction": {
+    "trigger": {
+      "type": "contextRatio",
+      "ratio": 0.75
+    }
+  },
   "enabledModels": [
     "fireworks/accounts/fireworks/models/kimi-k2p6",
     "google/gemini-3-flash-preview",
