@@ -1,6 +1,6 @@
 # Pi Agent Extensions
 
-This directory contains the local Pi extensions used to add web search, web fetch, MCP routing, client-credentials OAuth for provider gateways, ratio-based context compaction, inline bash expansion (`!{...}`), `/btw`, and small command utilities without forking Pi itself.
+This directory contains the local Pi extensions used to add web search, web fetch, MCP routing, client-credentials OAuth for provider gateways, ratio-based context compaction, background Pi jobs, inline bash expansion (`!{...}`), `/btw`, and small command utilities without forking Pi itself.
 
 The design goal is to stay close to Pi's native extension model. Extensions register Pi tools, slash commands, or lifecycle hooks, while the Pi runtime still owns sessions, model calls, rendering, and tool execution.
 
@@ -38,6 +38,7 @@ The sandbox may warn about a Pi lock file when this check is run from restricted
 | `bang.ts` | Inline expansion | Expands `!{command}` patterns inside user prompts before they reach the LLM (e.g. `What's in !{pwd}?`). |
 | `btw.ts` | `/btw` command | Runs a throw-away sidecar question that is not added to the current session context. |
 | `compaction.ts` | Status item, `/compact-ratio`, and compaction hook | Triggers compaction when context crosses a configured percentage of the active model context window. |
+| `jobs.ts` | `pi_job` tool, `/jobs`, and custom result messages | Runs isolated headless Pi child processes synchronously or as background jobs; completed jobs can auto-emit bounded output back into the parent session. |
 | `utils.ts` | Commands and hooks | Adds `/clear`, `/steer`, `/queue`, mise-aware bash hot reload, and documents Pi context-control hooks. |
 
 ## How Pi Prompt Exposure Works
