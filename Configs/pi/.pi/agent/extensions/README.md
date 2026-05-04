@@ -696,12 +696,12 @@ Operational boundaries:
 /btw -t <question>
 ```
 
-`/btw` is a throw-away sidecar. Its answer is shown to the user but is not added to the active session context.
+`/btw` is a throw-away sidecar. Its answer is shown to the user but is not added to the active session context. Both modes read a snapshot of the active parent session context, so status questions such as "what are we doing?" can be answered from the current conversation.
 
 Modes:
 
-- Direct mode uses the current selected model without tools.
-- Tool mode spawns a read-only child Pi process with `read`, `grep`, `find`, `ls`, `websearch`, `webfetch`, `mcp_search`, and `mcp_inspect`.
+- Direct mode uses the current selected model without tools and passes the parent session snapshot to the model call.
+- Tool mode writes a temporary snapshot of the current session branch, runs a read-only child Pi process against that snapshot, then deletes the temporary session. It enables `read`, `grep`, `find`, `ls`, `websearch`, `webfetch`, `mcp_search`, and `mcp_inspect`.
 
 Useful environment variable:
 
@@ -754,4 +754,3 @@ Keep extension behaviour boring and explicit.
 - Prefer global server definitions plus small project overrides over copying complete MCP server blocks into each repository.
 - Use `/mcp status` before debugging model behaviour. It shows config layers, server source, enabled state, inventory failures, and exposed direct tools.
 - Use `PI_CODING_AGENT_DIR=~/.pi/agent pi --offline --list-models` after editing extensions to catch load-time failures quickly.
-
