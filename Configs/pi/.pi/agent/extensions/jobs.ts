@@ -7,7 +7,7 @@ import { StringEnum, Type } from "@mariozechner/pi-ai";
 import { defineTool, type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { Box, Text } from "@mariozechner/pi-tui";
 
-const TOOL_NAME = "pi_job";
+const TOOL_NAME = "spawn_pi";
 const MESSAGE_TYPE = "pi-job-result";
 const STATUS_ID = "jobs";
 const CHILD_ENV = "PI_JOB_CHILD";
@@ -25,7 +25,7 @@ const MAX_RETAINED_JOBS = 50;
 const CHILD_SYSTEM_PROMPT = `You are a headless child Pi process spawned by a parent Pi session.
 Return compact, directly useful findings for the parent session.
 Include the answer, evidence paths or commands run, confidence, and the recommended next action when relevant.
-Do not start background jobs or nested orchestration. If a pi_job tool is available, do not use action=start.`;
+Do not start background jobs or nested orchestration. If a spawn_pi tool is available, do not use action=start.`;
 
 type JobStatus = "running" | "done" | "failed" | "cancelled";
 
@@ -99,6 +99,7 @@ type PiJob = {
 let jobCounter = 0;
 let sessionAlive = false;
 let lastContext: ExtensionContext | undefined;
+let lastPromptAllowsSpawnPi = false;
 const jobs = new Map<string, PiJob>();
 
 function textResult(text: string, details: Record<string, unknown> = {}) {
@@ -208,6 +209,22 @@ function defaultToolNames(pi: ExtensionAPI): string[] {
 		const source = byName.get(name)?.sourceInfo?.source;
 		return source !== "sdk";
 	});
+}
+
+function promptMentionsSpawnPi(text: string): boolean {
+	const normalized = text.toLowerCase();
+	return (
+		/\bspawn(?:ing)?\s+(?:another\s+)?pi\b/.test(normalized) ||
+		/\b(?:spawn|launch|start|spin up|run)\s+(?:a\s+)?(?:another|child|headless|background|parallel|second)?\s*(?:pi|agent|subagent|sub-agent)\b/.test(normalized) ||
+		/\b(?:another|child|headless|background|parallel|sidecar|second)\s+(?:pi|agent)\b/.test(normalized) ||
+		/\b(?:subagent|sub-agent|sidecar)\b/.test(normalized) ||
+		/\b(?:delegate|ask)\b.*\b(?:another\s+)?(?:agent|pi)\b/.test(normalized) ||
+		/\b(?:background|parallel)\s+(?:job|task|agent|process)\b/.test(normalized) ||
+		/\bstart\s+(?:a\s+)?(?:background\s+)?(?:pi\s+)?job\b/.test(normalized) ||
+		/\bspawn_pi\b/.test(normalized) ||
+		/\bpi[-_ ]?jobs?\b/.test(normalized) ||
+		/\bpi-\d+\b/.test(normalized)
+	);
 }
 
 function parseToolNames(value: unknown, defaults: string[]): string[] {
@@ -444,14 +461,14 @@ function buildJobEvent(job: PiJob, maxChars = AUTO_EMIT_MAX_CHARS): PiJobEvent {
 function formatJobEventContent(event: PiJobEvent): string {
 	return `Automatic background Pi job output. This message was emitted by the ${TOOL_NAME} extension, not typed by the user. Use it as context for the current task.
 
-<pi_job_result id=${JSON.stringify(event.jobId)} status=${JSON.stringify(event.status)} exitCode=${JSON.stringify(event.exitCode)} elapsedSeconds=${JSON.stringify(event.elapsedSeconds)}>
+<spawn_pi_result id=${JSON.stringify(event.jobId)} status=${JSON.stringify(event.status)} exitCode=${JSON.stringify(event.exitCode)} elapsedSeconds=${JSON.stringify(event.elapsedSeconds)}>
 <prompt>
 ${event.prompt}
 </prompt>
 <output>
 ${event.output || "(no output)"}
 </output>
-</pi_job_result>`;
+</spawn_pi_result>`;
 }
 
 function formatJobEventDisplay(event: PiJobEvent, maxOutput = 1200): string {
@@ -820,16 +837,16 @@ async function handleJobsCommand(pi: ExtensionAPI, args: string, ctx: ExtensionC
 function createPiJobTool(pi: ExtensionAPI) {
 	return defineTool({
 		name: TOOL_NAME,
-		label: "Pi Job",
+		label: "Spawn Pi",
 		description:
-			"Run an isolated headless Pi process, or manage explicit background Pi jobs. Outputs are bounded; completed background jobs can queue a result message for the parent's next prompt without interrupting scrollback.",
+			"Spawn an isolated headless Pi process only when the user explicitly asks for another Pi/agent, a subagent, parallel/background side work, or Pi job management. Do not use for ordinary file reads, shell commands, searches, tests, edits, or normal repository work.",
 		promptSnippet:
-			"pi_job: run an isolated headless Pi process; use action=start only when the user explicitly wants background side-work.",
+			"spawn_pi: spawn another headless Pi process only when explicitly requested; do not route normal work through it.",
 		promptGuidelines: [
-			"Use pi_job for isolated exploration or side work that would add noise to the parent context.",
-			"Default to pi_job action=run so the user gets one clean result; use action=start only when the user asks to keep working while it runs.",
-			"After starting a pi_job background job, report the job id and stop polling unless the user explicitly asks you to wait or inspect it.",
-			"Do not start nested pi_job background jobs from child or one-shot contexts; child Pi processes force background requests to run synchronously.",
+			"Use spawn_pi only when the user explicitly asks to spawn another Pi process, child agent, subagent, background job, parallel side task, or to inspect/cancel a Pi job.",
+			"Do not use spawn_pi for normal repository work. Use read, bash, edit, write, grep, find, ls, websearch, webfetch, or MCP tools directly instead.",
+			"After starting a spawn_pi background job, report the job id and stop polling unless the user explicitly asks you to wait or inspect it.",
+			"Do not start nested spawn_pi background jobs from child or one-shot contexts; child Pi processes force background requests to run synchronously.",
 		],
 		parameters: Type.Object({
 			action: Type.Optional(
@@ -847,7 +864,7 @@ function createPiJobTool(pi: ExtensionAPI) {
 				Type.Boolean({ description: "For action=start, queue the completed job result into the parent session on the next user prompt. Default: true." }),
 			),
 			tools: Type.Optional(
-				Type.String({ description: "Advanced override: none, all/default, or comma-separated tool names. Omitted uses parent active tools minus pi_job." }),
+				Type.String({ description: "Advanced override: none, all/default, or comma-separated tool names. Omitted uses parent active tools minus spawn_pi." }),
 			),
 			appendSystemPrompt: Type.Optional(Type.String({ description: "Extra system prompt for the child process" })),
 			cwd: Type.Optional(Type.String({ description: "Working directory for the child process" })),
@@ -908,7 +925,23 @@ export default function jobsExtension(pi: ExtensionAPI) {
 	pi.on("session_start", (_event, ctx) => {
 		sessionAlive = true;
 		lastContext = ctx;
+		lastPromptAllowsSpawnPi = false;
 		updateStatus(ctx);
+	});
+
+	pi.on("before_agent_start", (event) => {
+		lastPromptAllowsSpawnPi = promptMentionsSpawnPi(event.prompt);
+	});
+
+	pi.on("tool_call", (event) => {
+		if (event.toolName !== TOOL_NAME) return;
+		if (lastPromptAllowsSpawnPi) return;
+
+		return {
+			block: true,
+			reason:
+				"Blocked spawn_pi: this tool is only for explicitly requested child Pi/subagent/background/parallel jobs or Pi job management. Use normal tools directly for this request.",
+		};
 	});
 
 	pi.on("session_shutdown", async (_event, ctx) => {
