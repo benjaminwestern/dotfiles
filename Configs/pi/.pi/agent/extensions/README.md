@@ -38,7 +38,7 @@ The sandbox may warn about a Pi lock file when this check is run from restricted
 | `bang.ts` | Inline expansion | Expands `!{command}` patterns inside user prompts before they reach the LLM (e.g. `What's in !{pwd}?`). |
 | `btw.ts` | `/btw` command | Runs a throw-away sidecar question that is not added to the current session context. |
 | `compaction.ts` | Status item, `/compact-ratio`, and compaction hook | Triggers compaction when context crosses a configured percentage of the active model context window. |
-| `jobs.ts` | `pi_job` tool, `/jobs`, and custom result messages | Runs isolated headless Pi child processes synchronously or as background jobs; completed jobs can auto-emit bounded output back into the parent session. |
+| `jobs.ts` | `pi_job` tool, `/jobs`, and custom result messages | Runs isolated headless Pi child processes synchronously or as background jobs; completed jobs queue bounded output for the next user prompt without interrupting scrollback. |
 | `utils.ts` | Commands and hooks | Adds `/clear`, `/steer`, `/queue`, mise-aware bash hot reload, and documents Pi context-control hooks. |
 
 ## How Pi Prompt Exposure Works

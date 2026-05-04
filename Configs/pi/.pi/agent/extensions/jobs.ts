@@ -541,12 +541,12 @@ function maybeAutoEmit(pi: ExtensionAPI, job: PiJob) {
 			display: true,
 			details: event,
 		},
-		{ deliverAs: "followUp", triggerTurn: true },
+		// Do not use followUp+triggerTurn here. That starts the parent agent as soon
+		// as a background job finishes, which steals focus and snaps the TUI back to
+		// the bottom while the user may be reading scrollback. nextTurn keeps the
+		// result silent until the user's next prompt, where it is included as context.
+		{ deliverAs: "nextTurn" },
 	);
-
-	if (lastContext?.hasUI) {
-		lastContext.ui.notify(`Pi job ${job.id} ${event.status}; result queued for the agent`, event.status === "failed" ? "warning" : "info");
-	}
 }
 
 function finalizeJob(pi: ExtensionAPI, job: PiJob, code: number | null, signal: NodeJS.Signals | null) {
@@ -667,23 +667,11 @@ async function runSynchronousJob(
 	ctx: ExtensionContext,
 	params: any,
 	signal: AbortSignal | undefined,
-	onUpdate: ((result: ReturnType<typeof textResult>) => void) | undefined,
+	_onUpdate: ((result: ReturnType<typeof textResult>) => void) | undefined,
 ): Promise<ReturnType<typeof textResult>> {
 	const timeoutSeconds = clampNumber(params.timeoutSeconds, DEFAULT_SYNC_TIMEOUT_SECONDS, 1, MAX_SYNC_TIMEOUT_SECONDS);
 	const maxChars = clampNumber(params.maxCharacters, DEFAULT_MAX_CHARS, 1_000, MAX_TOOL_CHARS);
 	const job = await launchJob(pi, ctx, launchOptions(pi, ctx, params, false));
-	let lastUpdate = 0;
-
-	const update = () => {
-		if (!onUpdate) return;
-		const now = Date.now();
-		if (now - lastUpdate < 750) return;
-		lastUpdate = now;
-		onUpdate(textResult(formatJobStatus(job, true, 6_000), { action: "run", jobId: job.id, status: jobStatus(job) }));
-	};
-
-	const interval = setInterval(update, 1000);
-	interval.unref?.();
 
 	const timeout = setTimeout(() => {
 		job.timedOut = true;
@@ -703,7 +691,6 @@ async function runSynchronousJob(
 	try {
 		await job.done;
 	} finally {
-		clearInterval(interval);
 		clearTimeout(timeout);
 		signal?.removeEventListener("abort", abort);
 	}
@@ -801,7 +788,7 @@ async function handleJobsCommand(pi: ExtensionAPI, args: string, ctx: ExtensionC
 			return;
 		}
 		const job = await startBackgroundJob(pi, ctx, { prompt, autoEmit: true });
-		ctx.ui.notify(`Started Pi job ${job.id} (pid ${job.proc.pid ?? "unknown"}). It will auto-emit when complete.`, "info");
+		ctx.ui.notify(`Started Pi job ${job.id} (pid ${job.proc.pid ?? "unknown"}). Its result will be queued silently for your next prompt.`, "info");
 		return;
 	}
 
@@ -835,7 +822,7 @@ function createPiJobTool(pi: ExtensionAPI) {
 		name: TOOL_NAME,
 		label: "Pi Job",
 		description:
-			"Run an isolated headless Pi process, or manage explicit background Pi jobs. Outputs are bounded; completed background jobs can auto-emit a result message back into the parent session.",
+			"Run an isolated headless Pi process, or manage explicit background Pi jobs. Outputs are bounded; completed background jobs can queue a result message for the parent's next prompt without interrupting scrollback.",
 		promptSnippet:
 			"pi_job: run an isolated headless Pi process; use action=start only when the user explicitly wants background side-work.",
 		promptGuidelines: [
@@ -857,7 +844,7 @@ function createPiJobTool(pi: ExtensionAPI) {
 				Type.Boolean({ description: "When action is omitted, true starts a background job; otherwise prompt defaults to synchronous run." }),
 			),
 			autoEmit: Type.Optional(
-				Type.Boolean({ description: "For action=start, automatically inject the completed job result into the parent session. Default: true." }),
+				Type.Boolean({ description: "For action=start, queue the completed job result into the parent session on the next user prompt. Default: true." }),
 			),
 			tools: Type.Optional(
 				Type.String({ description: "Advanced override: none, all/default, or comma-separated tool names. Omitted uses parent active tools minus pi_job." }),
@@ -910,7 +897,7 @@ function createPiJobTool(pi: ExtensionAPI) {
 
 			const job = await startBackgroundJob(pi, ctx, { ...params, prompt });
 			return textResult(
-				`Started Pi job ${job.id} (pid ${job.proc.pid ?? "unknown"}).\nIt will ${job.autoEmit ? "auto-emit its result into the parent session" : "not auto-emit"} when it finishes. Tell the user the job id. Later use action=status jobId=${job.id}, action=read, or action=cancel if needed. Do not poll repeatedly in the same response unless the user asked you to wait.`,
+				`Started Pi job ${job.id} (pid ${job.proc.pid ?? "unknown"}).\nIt will ${job.autoEmit ? "queue its result silently for the user's next prompt" : "not auto-emit"} when it finishes. Tell the user the job id. Later use action=status jobId=${job.id}, action=read, or action=cancel if needed. Do not poll repeatedly in the same response unless the user asked you to wait.`,
 				{ action, jobId: job.id, pid: job.proc.pid, status: jobStatus(job), autoEmit: job.autoEmit },
 			);
 		},
