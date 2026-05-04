@@ -18,7 +18,7 @@ brew "mcp-toolbox" # Official GenAI Toolbox for Databases from Google
 brew "gemini-cli"
 cask "claude-code"
 cask "codex"
-brew "ollama" # Local LLM runtime with OpenAI-compatible API
+brew "ollama", restart_service: true # Local LLM runtime with OpenAI-compatible API
 brew "hf" # HuggingFace CLI for model download/upload
 
 # Core Shell Utilities (moved from mise to break circular dependency)
@@ -65,6 +65,8 @@ brew "tlrc" # TLDR for common terminal commands
 if ENV['HOMEBREW_GUI']
   # Fonts
   cask "font-symbols-only-nerd-font" # Symbols Nerd Font
+  # psudoFont Liga Mono — manually installed from https://github.com/psudo-dev/psudofont-liga-mono (v2.2.0)
+  # Not available as a brew cask; install: download .zip from releases, copy .ttf files to ~/Library/Fonts/
 
   # Standard Apps
   cask "ghostty" # Terminal Emulator

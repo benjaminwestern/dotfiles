@@ -7,8 +7,10 @@ theme = Dracula
 
 # Fonts
 # ghostty +list-fonts
-font-family = "JetBrainsMono Nerd Font Mono"
-window-title-font-family = "JetBrainsMono Nerd Font Mono"
+# font-family = "JetBrainsMono Nerd Font Mono"
+font-family = "psudoFont Liga Mono"
+# window-title-font-family = "JetBrainsMono Nerd Font Mono"
+window-title-font-family = "psudoFont Liga Mono"
 font-size = 16
 
 # MacOS Settings

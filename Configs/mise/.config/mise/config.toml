@@ -124,27 +124,73 @@ git push
 """
 
 # Ollama / Local Model Tasks
+# Daemon ownership: Homebrew owns starting/stopping/restarting the Ollama server.
+# Use native commands for daemon lifecycle:
+#   brew services start ollama
+#   brew services stop ollama
+#   brew services restart ollama
+# Mise tasks below only manage model workflows against that server.
 [tasks.pull-hf]
 description = "Import a HuggingFace GGUF model into Ollama for use with Pi"
 usage = '''
 arg "<hf_repo>" "HuggingFace repo (e.g. bartowski/gemma-4-e4b-it-GGUF)"
 arg "<gguf_file>" "GGUF filename to download"
-arg "[ollama_name]" "Optional Ollama model name (defaults to filen. ame)"
+arg "[ollama_name]" "Optional Ollama model name (defaults to filename)"
 '''
 run = "$HOME/.config/mise/scripts/pull-hf.sh {{arg(name='hf_repo')}} {{arg(name='gguf_file')}} {{arg(name='ollama_name')}}"
 
-[tasks.ollama-serve]
-description = "Start Ollama server if not running, with Apple Silicon optimizations"
+[tasks.ollama-pull-local-models]
+description = "Pull configured models; assumes the Homebrew-managed Ollama daemon is running"
 run = """
-if ollama list > /dev/null 2>&1; then
-  echo "Ollama is already running"
+ollama pull "${OLLAMA_GEMMA4_MODEL:-gemma4:e2b-it-q4_K_M}"
+ollama pull "${OLLAMA_EMBED_MODEL:-embeddinggemma:300m}"
+"""
+
+[tasks.ollama-warm-local-models]
+description = "Load configured models; assumes the Homebrew-managed Ollama daemon is running"
+run = """
+ollama run "${OLLAMA_GEMMA4_MODEL:-gemma4:e2b-it-q4_K_M}" "Reply with OK." --keepalive "${OLLAMA_KEEP_ALIVE:-24h}"
+ollama run "${OLLAMA_EMBED_MODEL:-embeddinggemma:300m}" "warmup" --keepalive "${OLLAMA_KEEP_ALIVE:-24h}" >/dev/null
+"""
+
+[tasks.ollama-unload-local-models]
+description = "Unload the configured local Ollama models"
+run = """
+ollama stop "${OLLAMA_GEMMA4_MODEL:-gemma4:e2b-it-q4_K_M}" || true
+ollama stop "${OLLAMA_EMBED_MODEL:-embeddinggemma:300m}" || true
+"""
+
+[tasks.ollama-up]
+description = "Pull, warm, and show model status; daemon lifecycle stays with Homebrew"
+run = """
+ollama pull "${OLLAMA_GEMMA4_MODEL:-gemma4:e2b-it-q4_K_M}"
+ollama pull "${OLLAMA_EMBED_MODEL:-embeddinggemma:300m}"
+ollama run "${OLLAMA_GEMMA4_MODEL:-gemma4:e2b-it-q4_K_M}" "Reply with OK." --keepalive "${OLLAMA_KEEP_ALIVE:-24h}"
+ollama run "${OLLAMA_EMBED_MODEL:-embeddinggemma:300m}" "warmup" --keepalive "${OLLAMA_KEEP_ALIVE:-24h}" >/dev/null
+echo ""
+echo "Installed models:"
+ollama list
+echo ""
+echo "Loaded models:"
+ollama ps
+"""
+
+[tasks.ollama-status]
+description = "Show configured, installed, and loaded Ollama models"
+run = """
+echo "Chat model:      ${OLLAMA_GEMMA4_MODEL:-gemma4:e2b-it-q4_K_M}"
+echo "Embedding model: ${OLLAMA_EMBED_MODEL:-embeddinggemma:300m}"
+echo "Ollama host:     ${OLLAMA_HOST:-127.0.0.1:11434}"
+echo "Daemon owner:    Homebrew (brew services start/stop/restart ollama)"
+echo ""
+if ollama list >/dev/null 2>&1; then
+  echo "Installed models:"
   ollama list
+  echo ""
+  echo "Loaded models:"
+  ollama ps
 else
-  echo "Starting Ollama..."
-  OLLAMA_FLASH_ATTENTION=1 OLLAMA_KV_CACHE_TYPE=q8_0 ollama serve &
-  sleep 2
-  echo "Ollama started"
-  ollama list
+  echo "Ollama API is not reachable. Start the daemon with: brew services start ollama"
 fi
 """
 
@@ -234,6 +280,11 @@ git-check = "mise run check-all-repos"
 banish = "mise run banish-ds-store"
 git-empty = "mise run empty-commit"
 hf-pull = "mise run pull-hf"
+ollama-pull = "mise run ollama-pull-local-models"
+ollama-up = "mise run ollama-up"
+ollama-warm = "mise run ollama-warm-local-models"
+ollama-unload = "mise run ollama-unload-local-models"
+ollama-status = "mise run ollama-status"
 ti = "mise run terraform-init"
 tc = "mise run terraform-console"
 taa = "mise run terraform-auto-apply"
