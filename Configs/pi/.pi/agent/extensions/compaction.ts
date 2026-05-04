@@ -275,8 +275,9 @@ function triggerCompaction(
 export default function compaction(pi: ExtensionAPI) {
 	let previousPercent: number | null | undefined;
 	let compacting = false;
+	let pendingIdleCompaction = false;
 
-	const maybeCompact = (ctx: ExtensionContext) => {
+	const maybeCompact = (ctx: ExtensionContext, options: { force?: boolean; defer?: boolean } = {}) => {
 		const config = loadRatioConfig(ctx.cwd);
 		const usage = ctx.getContextUsage();
 		const percent = usage?.percent ?? null;
@@ -285,15 +286,32 @@ export default function compaction(pi: ExtensionAPI) {
 
 		if (!config.enabled || compacting || percent === null) {
 			previousPercent = percent;
+			if (options.force) pendingIdleCompaction = false;
 			return;
 		}
 
 		const thresholdPercent = config.ratio * 100;
-		const crossed = previousPercent === undefined || previousPercent === null || previousPercent <= thresholdPercent;
+		const crossed =
+			options.force || previousPercent === undefined || previousPercent === null || previousPercent <= thresholdPercent;
 		previousPercent = percent;
 
-		if (!crossed || percent <= thresholdPercent) return;
+		if (!crossed || percent <= thresholdPercent) {
+			if (options.force) pendingIdleCompaction = false;
+			return;
+		}
 
+		if (options.defer) {
+			if (!pendingIdleCompaction && ctx.hasUI) {
+				ctx.ui.notify(
+					`Context ${Math.round(percent)}% crossed ${ratioLabel(config.ratio)}; compaction queued until Pi is idle`,
+					"info",
+				);
+			}
+			pendingIdleCompaction = true;
+			return;
+		}
+
+		pendingIdleCompaction = false;
 		compacting = true;
 		triggerCompaction(ctx, config, percent, () => {
 			compacting = false;
@@ -313,15 +331,24 @@ export default function compaction(pi: ExtensionAPI) {
 	});
 
 	pi.on("turn_end", (_event, ctx) => {
-		maybeCompact(ctx);
+		// ctx.compact() uses Pi's manual compaction path, which aborts the current
+		// agent operation. Running it from turn_end can stop the tool loop and force
+		// the user to type "continue". Queue threshold compaction until agent_end,
+		// so normal tool execution can continue.
+		maybeCompact(ctx, { defer: true });
 	});
 
 	pi.on("agent_end", (_event, ctx) => {
+		if (pendingIdleCompaction) {
+			maybeCompact(ctx, { force: true });
+			return;
+		}
 		updateStatus(ctx);
 	});
 
 	pi.on("session_compact", (_event, ctx) => {
 		compacting = false;
+		pendingIdleCompaction = false;
 		previousPercent = null;
 		updateStatus(ctx);
 	});
