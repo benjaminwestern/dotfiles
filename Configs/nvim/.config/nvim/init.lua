@@ -1,38 +1,51 @@
 -- https://learnxinyminutes.com/docs/lua/
 -- https://neovim.io/doc/user/lua-guide.html
 
--- Disable netrw
--- vim.g.loaded_netrw          = 1
--- vim.g.loaded_netrwPlugin    = 1
+-- Disable netrw so yazi.nvim can handle directory opening
+vim.g.loaded_netrw          = 1
+vim.g.loaded_netrwPlugin    = 1
 
 -- See `:help mapleader`
 vim.g.mapleader             = ' '
 vim.g.maplocalleader        = ' '
-vim.g.copilot_assume_mapped = true
 
 -- Set to true if you have a Nerd Font installed and selected in the terminal
 vim.g.have_nerd_font        = true
 
 -- Vim Line numbers
-vim.opt.number              = true
-vim.opt.relativenumber      = true
-vim.opt.signcolumn          = "number"
+vim.o.number                = true
+vim.o.relativenumber        = true
+vim.o.signcolumn            = 'number'
+
+-- Indentation: 4 spaces, insert spaces for tabs
+vim.o.tabstop               = 4
+vim.o.shiftwidth            = 4
+vim.o.softtabstop           = 4
+vim.o.expandtab             = true
+vim.o.smartindent           = true
 
 -- [[ Setting options ]]
 -- See `:help vim.o`
 
--- Set highlight on search
-vim.o.hlsearch              = false
+-- Highlight current line for easy tracking
+vim.o.cursorline            = true
 
--- Make line numbers default
-vim.wo.number               = true
+-- Keep 8 lines visible above/below cursor (don't hug screen edge)
+vim.o.scrolloff             = 8
+vim.o.sidescrolloff         = 8
+
+-- Highlight search matches, press <Esc> to clear highlights when done
+vim.o.hlsearch              = true
 
 -- Enable mouse mode
 vim.o.mouse                 = 'a'
 
--- Sync clipboard between OS and Neovim.
--- See `:help 'clipboard'`
-vim.o.clipboard             = 'unnamedplus'
+-- Don't show mode in command line (already in statusline)
+vim.o.showmode              = false
+
+-- NOTE: clipboard is NOT synced by default. We explicitly map yank keys
+-- to the + register so only intentional yanks go to the system clipboard.
+-- Deletes (d/x/c) stay internal-only and are recoverable with p.
 
 -- Enable break indent
 vim.o.breakindent           = true
@@ -44,9 +57,6 @@ vim.o.undofile              = true
 vim.o.ignorecase            = true
 vim.o.smartcase             = true
 
--- Keep signcolumn on by default
-vim.wo.signcolumn           = 'yes'
-
 -- Decrease update time
 vim.o.updatetime            = 250
 vim.o.timeoutlen            = 300
@@ -54,8 +64,35 @@ vim.o.timeoutlen            = 300
 -- Set completeopt to have a better completion experience
 vim.o.completeopt           = 'menuone,noselect'
 
+-- Command-line tab completion with menu (like bash/zsh)
+vim.o.wildmenu              = true
+vim.o.wildmode              = 'longest:full,full'
+vim.o.wildignorecase        = true
+
+-- Configure how new splits should open
+vim.o.splitright            = true
+vim.o.splitbelow            = true
+
+-- Show whitespace characters: tabs as » and trailing spaces as ·
+vim.o.list                  = true
+vim.opt.listchars           = { tab = '» ', trail = '·', nbsp = '␣' }
+
+-- Live preview substitutions as you type (:s/foo/bar shows split)
+vim.o.inccommand            = 'split'
+
+-- Confirm dialog instead of error when quitting unsaved buffer
+vim.o.confirm               = true
+
 -- Set better colors for the command line
 vim.o.termguicolors         = true
+
+-- [[ Folds — collapse/expand code blocks ]]
+-- Treesitter-powered folds. zc to close, zo to open, za to toggle.
+vim.o.foldmethod            = 'expr'
+vim.o.foldexpr              = 'v:lua.vim.treesitter.foldexpr()'
+vim.o.foldenable            = true
+vim.o.foldlevel             = 99
+vim.o.foldlevelstart        = 99
 
 -- [[ Configure LSP Diagnostics ]]
 vim.diagnostic.config {
@@ -80,7 +117,7 @@ vim.diagnostic.config {
 
 -- `:help lazy.nvim.txt` for more info
 local lazypath = vim.fn.stdpath 'data' .. '/lazy/lazy.nvim'
-if not vim.loop.fs_stat(lazypath) then
+if not vim.uv.fs_stat(lazypath) then
   vim.fn.system {
     'git',
     'clone',
@@ -95,44 +132,20 @@ vim.opt.rtp:prepend(lazypath)
 -- Prepend mise shims to PATH
 vim.env.PATH = vim.env.HOME .. "/.local/share/mise/shims:" .. vim.env.PATH
 
+-- Unset GOBIN so Mason's `go install` builds place binaries in the temp
+-- GOPATH/bin where Mason expects them, instead of the mise Go directory.
+-- Mise shims remain on PATH, so running Go binaries is unaffected.
+vim.env.GOBIN = nil
+
 -- Add mise predicate for Treesitter TOML injection queries
 vim.treesitter.query.add_predicate("is-mise?", function(match, pattern, bufnr, predicate, metadata)
   local filename = vim.api.nvim_buf_get_name(bufnr)
   return filename:match("mise") ~= nil
 end, { force = true })
 
+-- Load global keymaps (not plugin-specific)
+require('keymaps')
+
 require('lazy').setup({
   { import = 'plugins' },
 }, {})
-
--- [[ Basic Keymaps ]]
-
--- Keymaps for better default experience
--- See `:help vim.keymap.set()`
-vim.keymap.set({ 'n', 'v' }, '<Space>', '<Nop>', { silent = true })
-
--- Remap for dealing with word wrap
-vim.keymap.set('n', 'k', "v:count == 0 ? 'gk' : 'k'", { expr = true, silent = true })
-vim.keymap.set('n', 'j', "v:count == 0 ? 'gj' : 'j'", { expr = true, silent = true })
-
--- Diagnostic keymaps
-vim.keymap.set('n', '[d', vim.diagnostic.goto_prev, { desc = 'Go to previous diagnostic message' })
-vim.keymap.set('n', ']d', vim.diagnostic.goto_next, { desc = 'Go to next diagnostic message' })
-vim.keymap.set('n', '<leader>e', vim.diagnostic.open_float, { desc = 'Open floating diagnostic message' })
-vim.keymap.set('n', '<leader>q', vim.diagnostic.setloclist, { desc = 'Open diagnostics list' })
-
--- Replace :Ex with Yazi
--- vim.api.nvim_create_user_command('Ex', function()
---   vim.cmd('Yazi')
--- end, { desc = 'Open Yazi file manager' })
-
--- [[ Highlight on yank ]]
--- See `:help vim.highlight.on_yank()`
-local highlight_group = vim.api.nvim_create_augroup('YankHighlight', { clear = true })
-vim.api.nvim_create_autocmd('TextYankPost', {
-  callback = function()
-    vim.highlight.on_yank()
-  end,
-  group = highlight_group,
-  pattern = '*',
-})

@@ -2,82 +2,66 @@ return {
   {
     -- Highlight, edit, and navigate code
     'nvim-treesitter/nvim-treesitter',
-    dependencies = {
-      'nvim-treesitter/nvim-treesitter-textobjects',
-    },
+    -- NOTE: The `main` branch is a full rewrite for Neovim 0.12+.
+    -- The `master` branch is locked for backward compatibility.
+    -- Kickstart and modern configs use `main`.
+    branch = 'main',
+    lazy = false,
     build = ':TSUpdate',
     config = function()
-      -- See `:help nvim-treesitter`
-      -- Defer Treesitter setup after first render to improve startup time of 'nvim {filename}'
-      vim.defer_fn(function()
-        require('nvim-treesitter.configs').setup {
-          -- Add languages to be installed here that you want installed for treesitter
-          ensure_installed = { 'c', 'cpp', 'go', 'lua', 'python', 'rust', 'terraform', 'tsx', 'javascript', 'typescript', 'vimdoc', 'vim', 'bash', 'json', 'http', 'xml', 'graphql' },
-          -- Autoinstall languages that are not installed. Defaults to false (but you can change for yourself!)
-          auto_install = false,
-          -- Install languages synchronously (only applied to `ensure_installed`)
-          sync_install = false,
-          -- List of parsers to ignore installing
-          ignore_install = {},
-          -- You can specify additional Treesitter modules here: -- For example: -- playground = {--enable = true,-- },
-          modules = {},
-          highlight = { enable = true },
-          indent = { enable = true },
-          incremental_selection = {
-            enable = true,
-            keymaps = {
-              init_selection = '<c-space>',
-              node_incremental = '<c-space>',
-              scope_incremental = '<c-s>',
-              node_decremental = '<M-space>',
-            },
-          },
-          textobjects = {
-            select = {
-              enable = true,
-              lookahead = true, -- Automatically jump forward to textobj, similar to targets.vim
-              keymaps = {
-                -- You can use the capture groups defined in textobjects.scm
-                ['aa'] = '@parameter.outer',
-                ['ia'] = '@parameter.inner',
-                ['af'] = '@function.outer',
-                ['if'] = '@function.inner',
-                ['ac'] = '@class.outer',
-                ['ic'] = '@class.inner',
-              },
-            },
-            move = {
-              enable = true,
-              set_jumps = true, -- whether to set jumps in the jumplist
-              goto_next_start = {
-                [']m'] = '@function.outer',
-                [']]'] = '@class.outer',
-              },
-              goto_next_end = {
-                [']M'] = '@function.outer',
-                [']['] = '@class.outer',
-              },
-              goto_previous_start = {
-                ['[m'] = '@function.outer',
-                ['[['] = '@class.outer',
-              },
-              goto_previous_end = {
-                ['[M'] = '@function.outer',
-                ['[]'] = '@class.outer',
-              },
-            },
-            swap = {
-              enable = true,
-              swap_next = {
-                ['<leader>a'] = '@parameter.inner',
-              },
-              swap_previous = {
-                ['<leader>A'] = '@parameter.inner',
-              },
-            },
-          },
-        }
-      end, 0)
-    end
+      -- Ensure basic parsers are installed.
+      -- Add any languages you use regularly to this list.
+      local parsers = {
+        'bash', 'c', 'cpp', 'go', 'lua', 'luadoc', 'markdown', 'markdown_inline',
+        'python', 'rust', 'terraform', 'tsx', 'javascript', 'typescript',
+        'vim', 'vimdoc', 'json', 'http', 'xml', 'graphql', 'query', 'diff', 'html',
+      }
+      require('nvim-treesitter').install(parsers)
+
+      ---Try to attach treesitter to a buffer for a given language.
+      ---@param buf integer
+      ---@param language string
+      local function treesitter_try_attach(buf, language)
+        -- Check if a parser exists and load it
+        if not vim.treesitter.language.add(language) then
+          return
+        end
+        -- Enable syntax highlighting and other treesitter features
+        vim.treesitter.start(buf, language)
+
+        -- Enable treesitter based indentation if available
+        local has_indent_query = vim.treesitter.query.get(language, 'indents') ~= nil
+        if has_indent_query then
+          vim.bo[buf].indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
+        end
+      end
+
+      local available_parsers = require('nvim-treesitter').get_available()
+      vim.api.nvim_create_autocmd('FileType', {
+        callback = function(args)
+          local buf, filetype = args.buf, args.match
+
+          local language = vim.treesitter.language.get_lang(filetype)
+          if not language then
+            return
+          end
+
+          local installed_parsers = require('nvim-treesitter').get_installed 'parsers'
+
+          if vim.tbl_contains(installed_parsers, language) then
+            -- Enable the parser if it is already installed
+            treesitter_try_attach(buf, language)
+          elseif vim.tbl_contains(available_parsers, language) then
+            -- If a parser is available in nvim-treesitter, auto-install it and enable it after installation
+            require('nvim-treesitter').install(language):await(function()
+              treesitter_try_attach(buf, language)
+            end)
+          else
+            -- Try to enable treesitter features in case the parser exists but is not available from nvim-treesitter
+            treesitter_try_attach(buf, language)
+          end
+        end,
+      })
+    end,
   },
 }

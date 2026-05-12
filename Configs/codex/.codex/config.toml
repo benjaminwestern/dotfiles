@@ -20,3 +20,32 @@ view_image = true
 
 [tui.model_availability_nux]
 "gpt-5.5" = 4
+
+[marketplaces.openai-bundled]
+last_updated = "2026-05-09T11:40:25Z"
+source_type = "local"
+source = "/Users/benjaminwestern/.codex/.tmp/bundled-marketplaces/openai-bundled"
+
+[marketplaces.openai-primary-runtime]
+last_updated = "2026-05-07T07:09:56Z"
+source_type = "local"
+source = "/Users/benjaminwestern/.cache/codex-runtimes/codex-primary-runtime/plugins/openai-primary-runtime"
+
+[plugins."documents@openai-primary-runtime"]
+enabled = true
+
+[plugins."spreadsheets@openai-primary-runtime"]
+enabled = true
+
+[plugins."presentations@openai-primary-runtime"]
+enabled = true
+
+[plugins."browser-use@openai-bundled"]
+enabled = true
+
+[mcp_servers.solo]
+command = "/Applications/Solo.app/Contents/MacOS/mcp"
+
+[features]
+terminal_resize_reflow = true
+goals = true

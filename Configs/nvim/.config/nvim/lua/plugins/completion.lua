@@ -4,7 +4,7 @@ return {
     'saghen/blink.cmp',
     lazy = false,
     dependencies = 'rafamadriz/friendly-snippets',
-    version = 'v0.*',
+    version = 'v1.*',
     opts = {
       keymap = { preset = 'default' },
       appearance = {

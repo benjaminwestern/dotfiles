@@ -47,7 +47,38 @@ return {
         go = { 'goimports', 'gofmt' },
         terraform = { 'terraform_fmt' },
         sql = { 'sqlfmt' },
+        sh = { 'shfmt' },
+        bash = { 'shfmt' },
+        zsh = { 'shfmt' },
+        rust = { 'rustfmt' },
+        swift = { 'swiftformat' },
+        zig = { 'zigfmt' },
+      },
+      -- Define custom formatter for zig since it uses `zig fmt`
+      formatters = {
+        zigfmt = {
+          command = 'zig',
+          args = { 'fmt', '--stdin' },
+          stdin = true,
+        },
       },
     },
+    config = function(_, opts)
+      require('conform').setup(opts)
+
+      -- [[ Indent / unindent whole file or selection ]]
+      -- Indent entire file (auto-indent based on syntax / LSP)
+      vim.keymap.set('n', '<leader>=', function()
+        local save_cursor = vim.api.nvim_win_get_cursor(0)
+        vim.cmd('normal! gg=G')
+        vim.api.nvim_win_set_cursor(0, save_cursor)
+      end, { desc = '[=] Auto-indent entire file' })
+      -- Shift entire file right / left
+      vim.keymap.set('n', '<leader>>', 'gg>G', { desc = 'Indent entire file right' })
+      vim.keymap.set('n', '<leader><', 'gg<G', { desc = 'Unindent entire file left' })
+      -- Visual mode: single-step indent / unindent with Tab / Shift-Tab
+      vim.keymap.set('v', '<Tab>', '>gv', { desc = 'Indent selection' })
+      vim.keymap.set('v', '<S-Tab>', '<gv', { desc = 'Unindent selection' })
+    end,
   },
 }

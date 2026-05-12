@@ -2,7 +2,7 @@ return {
   {
     -- LSP for embedded languages in code blocks (useful for mise files)
     'jmbuhr/otter.nvim',
-    ft = { 'toml' },
+    ft = { 'toml', 'markdown' },
     dependencies = {
       'nvim-treesitter/nvim-treesitter',
     },
@@ -33,6 +33,14 @@ return {
           if filename:match('%.toml$') and filename:match('mise') then
             otter.activate({ 'bash', 'sh', 'python', 'javascript', 'typescript' }, true, true)
           end
+        end,
+      })
+
+      -- Auto-activate otter for markdown code blocks
+      vim.api.nvim_create_autocmd({ 'BufEnter', 'BufWritePost' }, {
+        pattern = { '*.md', '*.markdown' },
+        callback = function()
+          otter.activate({ 'bash', 'sh', 'python', 'javascript', 'typescript', 'go', 'rust', 'lua' }, true, true)
         end,
       })
 
