@@ -25,6 +25,7 @@ import {
 import { goalController } from "./workflow-core/controllers/goal.js";
 import { reviewController } from "./workflow-core/controllers/review.js";
 import { autoresearchController } from "./workflow-core/controllers/autoresearch.js";
+import { loadExtensionConfig } from "./extension-config.js";
 
 const WORKFLOW_TOOL_NAMES = [
 	"create_goal",
@@ -46,6 +47,7 @@ const AUTORESEARCH_TOOL_NAMES = ["init_experiment", "research_probe", "run_prefl
 const AUTO_CONTINUE_CONTROLLERS = new Set(["goal", "autoresearch"]);
 const AUTO_CONTINUE_SETTLED_MS = 800;
 const DEFAULT_MAX_AUTO_TURNS = 20;
+const WORKFLOW_CONFIG_FILE = "workflow.json";
 const EXPERIMENT_MAX_LINES = 20;
 const EXPERIMENT_TIMEOUT_SECONDS = 600;
 const HOOK_TIMEOUT_MS = 30_000;
@@ -55,6 +57,14 @@ type AutoRuntime = {
 	turns: number;
 	timer: ReturnType<typeof setTimeout> | null;
 	lastWorkflowId?: string;
+};
+
+type WorkflowConfig = Record<string, unknown> & {
+	maxAutoTurns?: number;
+};
+
+const DEFAULT_WORKFLOW_CONFIG: WorkflowConfig = {
+	maxAutoTurns: DEFAULT_MAX_AUTO_TURNS,
 };
 
 const autoRuntimes = new Map<string, AutoRuntime>();
@@ -119,9 +129,18 @@ function runtimeFor(ctx: ExtensionContext): AutoRuntime {
 	return runtime;
 }
 
-function maxAutoTurns(): number {
-	const configured = Number(process.env.PI_WORKFLOW_MAX_AUTO_TURNS);
-	return Number.isFinite(configured) && configured > 0 ? Math.trunc(configured) : DEFAULT_MAX_AUTO_TURNS;
+function positiveNumber(value: unknown): number | undefined {
+	const number = Number(value);
+	return Number.isFinite(number) && number > 0 ? Math.trunc(number) : undefined;
+}
+
+function workflowConfig(cwd: string): WorkflowConfig {
+	return loadExtensionConfig<WorkflowConfig>(WORKFLOW_CONFIG_FILE, cwd, DEFAULT_WORKFLOW_CONFIG).config;
+}
+
+function maxAutoTurns(cwd: string): number {
+	const envOverride = positiveNumber(process.env.PI_WORKFLOW_MAX_AUTO_TURNS);
+	return envOverride ?? positiveNumber(workflowConfig(cwd).maxAutoTurns) ?? DEFAULT_MAX_AUTO_TURNS;
 }
 
 function ensureToolsActive(pi: ExtensionAPI, names: string[]) {
@@ -1569,9 +1588,10 @@ function scheduleAutoContinue(pi: ExtensionAPI, ctx: ExtensionContext) {
 		runtime.lastWorkflowId = workflow.id;
 		runtime.turns = 0;
 	}
-	if (runtime.turns >= maxAutoTurns()) {
-		changeWorkflowStatus(pi, workflow, "budget_limited", `Auto-continue limit reached (${maxAutoTurns()} turns).`, "Use /goal resume or /autoresearch resume to continue.");
-		ctx.ui.notify(`Workflow auto-continue limit reached (${maxAutoTurns()} turns).`, "info");
+	const maxTurns = maxAutoTurns(ctx.cwd);
+	if (runtime.turns >= maxTurns) {
+		changeWorkflowStatus(pi, workflow, "budget_limited", `Auto-continue limit reached (${maxTurns} turns).`, "Use /goal resume or /autoresearch resume to continue.");
+		ctx.ui.notify(`Workflow auto-continue limit reached (${maxTurns} turns).`, "info");
 		return;
 	}
 	if (runtime.timer) clearTimeout(runtime.timer);

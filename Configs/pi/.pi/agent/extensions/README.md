@@ -27,6 +27,24 @@ PI_CODING_AGENT_DIR=~/.pi/agent pi --offline --list-models
 
 The sandbox may warn about a Pi lock file when this check is run from restricted tooling. That warning is not an extension load failure.
 
+## Extension Config Files
+
+Keep Pi's core `settings.json` boring and valid for a no-extension Pi runner. Extension-owned configuration belongs in a sibling `<extension>.json` file instead of custom keys in `settings.json`.
+
+Current extension-owned files:
+
+| File | Owner | Purpose |
+| --- | --- | --- |
+| `mcp.json` | `mcp.ts` | Global MCP server catalogue and direct-tool selections. |
+| `oauth.json` | `oauth.ts` | Optional two-legged OAuth / client-credentials provider config. |
+| `side.json` | `side.ts` | `/side --tools` timeout, output limit, and read-only child-tool list. |
+| `git-status-widget.json` | `git-status-widget.ts` | Git widget enable flag and refresh/time-out budgets. |
+| `workflow.json` | `workflow.ts` | Durable workflow controller limits such as auto-continue turns. |
+
+Global config lives at `~/.pi/agent/<extension>.json`. Project overrides live at `.pi/<extension>.json` and are discovered upward from the current working directory by extensions that support project layers. Merge semantics are: objects deep-merge, arrays and scalars replace, and `null` removes inherited object keys.
+
+Use `settings.json` only for Pi-native settings such as model defaults, transport, packages, resource paths, theme, sessions, retry, and compaction.
+
 ## Extension Map
 
 | File | Surface | Purpose |
@@ -150,7 +168,7 @@ friendly.
 
 ## Client Credentials OAuth
 
-`oauth.ts` supports non-interactive OAuth 2.0 `client_credentials` authentication for model providers that sit behind an OAuth-protected gateway.
+`oauth.ts` supports non-interactive two-legged OAuth 2.0 `client_credentials` authentication for model providers that sit behind an OAuth-protected gateway. It uses a client ID and client secret to get access tokens from `tokenUrl`; it does not require or use refresh tokens or a refresh endpoint.
 
 It does not register a model-facing tool. Instead, it patches `globalThis.fetch` at extension load time and intercepts outgoing provider HTTP requests whose URL starts with a configured `baseUrls` prefix:
 
@@ -160,15 +178,20 @@ provider serializer / SDK -> globalThis.fetch -> OAuth interceptor -> gateway
 
 The extension then:
 
-1. Reads `~/.pi/agent/client-credentials.json` first.
-2. Falls back to `.pi/client-credentials.json` in the current working directory for project-local setups outside this dotfiles repo.
+1. Reads `~/.pi/agent/oauth.json` first.
+2. Falls back to `.pi/oauth.json` in the current working directory for project-local setups outside this dotfiles repo.
 3. Requests a token from the configured `tokenUrl` using `grant_type=client_credentials`.
 4. Replaces the matching provider request's auth header with `Bearer <access_token>`.
 5. Clears the cached token and retries once when the gateway reports an invalid token.
 
-Keep `client-credentials.json` machine-local. It contains credential references and should not be committed.
+Keep `oauth.json` machine-local when it contains real client ID / client secret references.
 
-Example `~/.pi/agent/client-credentials.json`:
+Reference examples live next to the real config files and are intentionally named so Pi does not load them automatically:
+
+- `~/.pi/agent/example.oauth.json` — copy to `oauth.json`, then set provider URLs and environment variable names.
+- `~/.pi/agent/example.model.json` — copy or merge into `models.json`, then set model IDs and metadata.
+
+Example `~/.pi/agent/oauth.json`:
 
 ```jsonc
 {
@@ -177,8 +200,8 @@ Example `~/.pi/agent/client-credentials.json`:
       "name": "corp-openai",
       "baseUrls": ["https://gateway.example.com/openai/v1"],
       "tokenUrl": "https://auth.example.com/oauth2/token",
-      "clientId": "${APIGEE_CLIENT_ID}",
-      "clientSecret": "${APIGEE_CLIENT_SECRET}",
+      "clientId": "${CORP_OAUTH_CLIENT_ID}",
+      "clientSecret": "${CORP_OAUTH_CLIENT_SECRET}",
       "clientAuthMethod": "client_secret_basic",
       "scope": "llm.invoke",
       "audience": "https://gateway.example.com"
@@ -187,7 +210,7 @@ Example `~/.pi/agent/client-credentials.json`:
 }
 ```
 
-Example provider configuration using the OAuth-managed gateway:
+Example provider configuration using the OAuth-managed gateway, as in `example.model.json`:
 
 ```jsonc
 {
@@ -656,11 +679,18 @@ Modes:
 - Direct mode uses the current selected model without tools and passes the parent session snapshot to the model call.
 - Tool mode writes a temporary snapshot of the current session branch, runs a read-only child Pi process against that snapshot, then deletes the temporary session. It enables `read`, `grep`, `find`, `ls`, `websearch`, `webfetch`, `mcp_search`, and `mcp_inspect`.
 
-Useful environment variable:
+Config lives in `~/.pi/agent/side.json`, with project overrides at `.pi/side.json`:
 
-```sh
-PI_SIDE_TIMEOUT_MS=120000
+```jsonc
+{
+  "timeoutMs": 60000,
+  "maxOutputChars": 18000,
+  "tools": ["read", "grep", "find", "ls", "websearch", "webfetch", "mcp_search", "mcp_inspect"],
+  "transport": "sse"
+}
 ```
+
+`transport` is optional; when omitted, direct/no-tools side turns still honour Pi's native `transport` setting. `PI_SIDE_TIMEOUT_MS=120000` remains supported as an environment override for compatibility.
 
 The side channel is intentionally read-only. It should not edit files, mutate sessions, or run shell commands.
 
@@ -681,6 +711,18 @@ git  main ↑1 +2 ~3 ?1
 ```
 
 Legend: `↑/↓` ahead/behind, `+` staged, `~` unstaged, `?` untracked. Clean repositories show `clean`; non-git directories hide the widget.
+
+`git-status-widget.ts` reads `~/.pi/agent/git-status-widget.json`, with project overrides at `.pi/git-status-widget.json`:
+
+```jsonc
+{
+  "enabled": true,
+  "intervalMs": 2500,
+  "gitTimeoutMs": 2000
+}
+```
+
+`PI_GIT_STATUS_INTERVAL_MS` remains supported as an environment override for compatibility.
 
 `tps-tracker.ts` publishes a `speed` footer status. During streaming it estimates output speed from deltas until provider usage arrives; at agent end it leaves the final tokens/second value. The existing custom footer automatically includes this status alongside other extension statuses.
 
@@ -743,6 +785,16 @@ Commands:
 /workflow status
 /workflow clear [controller]
 ```
+
+Config lives in `~/.pi/agent/workflow.json`, with project overrides at `.pi/workflow.json`:
+
+```jsonc
+{
+  "maxAutoTurns": 20
+}
+```
+
+`PI_WORKFLOW_MAX_AUTO_TURNS` remains supported as an environment override for compatibility.
 
 Model-facing tools:
 
@@ -869,5 +921,6 @@ Keep extension behaviour boring and explicit.
 - Prefer Pi model tools only when the model should call the capability autonomously.
 - Keep MCP direct tool exposure small by using `selectedTools` only for tools that deserve to appear in every turn's model tool surface.
 - Prefer global server definitions plus small project overrides over copying complete MCP server blocks into each repository.
+- Do not add extension-only keys to `settings.json`; use `<extension>.json` so `pi --no-extensions` can still consume core settings cleanly.
 - Use `/mcp status` before debugging model behaviour. It shows config layers, server source, enabled state, inventory failures, and exposed direct tools.
 - Use `PI_CODING_AGENT_DIR=~/.pi/agent pi --offline --list-models` after editing extensions to catch load-time failures quickly.

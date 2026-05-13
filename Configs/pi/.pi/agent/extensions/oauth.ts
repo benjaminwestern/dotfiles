@@ -7,9 +7,9 @@
  *
  * ## How it works
  *
- * 1. Reads client-credentials config at extension load time and again on
- *    `/reload`. Search order is `~/.pi/agent/client-credentials.json`, then
- *    `.pi/client-credentials.json` in the Pi process cwd.
+ * 1. Reads client-credentials OAuth config at extension load time and again
+ *    on `/reload`. Search order is `~/.pi/agent/oauth.json`, then
+ *    `.pi/oauth.json` in the Pi process cwd.
  * 2. Patches `globalThis.fetch` to intercept requests whose full URL starts
  *    with a configured `baseUrls` prefix. First matching provider wins.
  * 3. Acquires OAuth tokens via the configured token endpoint using the original,
@@ -39,9 +39,12 @@
  *
  * ## Configuration
  *
- * Create `~/.pi/agent/client-credentials.json` for global config, or
- * `.pi/client-credentials.json` in the Pi process cwd as a project-local
- * fallback when no global config is present:
+ * Create `~/.pi/agent/oauth.json` for global config, or `.pi/oauth.json` in
+ * the Pi process cwd as a project-local fallback when no global config is
+ * present. This file configures two-legged OAuth / client credentials only:
+ * client ID + client secret are exchanged at `tokenUrl` with
+ * `grant_type=client_credentials`; no refresh token or refresh endpoint is
+ * required or used.
  *
  * ```json
  * {
@@ -73,8 +76,8 @@
  * ## Usage
  *
  * 1. Place this file in `~/.pi/agent/extensions/oauth.ts`
- * 2. Create `~/.pi/agent/client-credentials.json` or `.pi/client-credentials.json`
- *    with your provider configs
+ * 2. Create `~/.pi/agent/oauth.json` or `.pi/oauth.json` with your provider
+ *    configs
  * 3. Configure the corresponding provider in `~/.pi/agent/models.json`; set
  *    `apiKey` to any dummy value (the extension replaces the header):
  *
@@ -99,9 +102,9 @@
  * - `/cc-refresh` — Force immediate token re-acquisition (clears cache first).
  */
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { getAgentDir, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -235,13 +238,11 @@ function cacheKey(cfg: OAuthProviderConfig): string {
 
 /** Safely read and parse the config file.  Returns null on any error. */
 function loadConfig(): ClientCredentialsConfig | null {
+  const agentDir = getAgentDir();
   const paths = [
-    resolve(
-      process.env.HOME ?? process.env.USERPROFILE ?? "/tmp",
-      ".pi/agent/client-credentials.json",
-    ),
+    join(agentDir, "oauth.json"),
     // Also check project-local for monorepo-style setups.
-    resolve(process.cwd(), ".pi/client-credentials.json"),
+    resolve(process.cwd(), ".pi/oauth.json"),
   ];
 
   for (const path of paths) {
@@ -547,7 +548,7 @@ export default function (pi: ExtensionAPI) {
       const currentCfg = loadConfig();
       if (!currentCfg?.providers?.length) {
         ctx.ui.notify(
-          "No client-credentials config found at ~/.pi/agent/client-credentials.json or .pi/client-credentials.json",
+          "No OAuth config found at ~/.pi/agent/oauth.json or .pi/oauth.json",
           "warning",
         );
         return;
@@ -580,7 +581,7 @@ export default function (pi: ExtensionAPI) {
       const currentCfg = loadConfig();
       if (!currentCfg?.providers?.length) {
         ctx.ui.notify(
-          "No client-credentials config found at ~/.pi/agent/client-credentials.json or .pi/client-credentials.json",
+          "No OAuth config found at ~/.pi/agent/oauth.json or .pi/oauth.json",
           "warning",
         );
         return;

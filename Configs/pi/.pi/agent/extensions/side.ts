@@ -13,10 +13,12 @@ import {
 	type FileEntry,
 	type SessionHeader,
 } from "@earendil-works/pi-coding-agent";
+import { loadExtensionConfig } from "./extension-config.js";
 
-const SIDE_CAR_TOOLS = "read,grep,find,ls,websearch,webfetch,mcp_search,mcp_inspect";
+const SIDE_CONFIG_FILE = "side.json";
+const DEFAULT_SIDE_CAR_TOOLS = ["read", "grep", "find", "ls", "websearch", "webfetch", "mcp_search", "mcp_inspect"];
 const DEFAULT_TIMEOUT_MS = 60_000;
-const MAX_OUTPUT_CHARS = 18_000;
+const DEFAULT_MAX_OUTPUT_CHARS = 18_000;
 const DEFAULT_TRANSPORT: Transport = "sse";
 
 type TemporarySessionSnapshot = {
@@ -29,10 +31,40 @@ type SideRequest = {
 	useTools: boolean;
 };
 
-function timeoutMs(): number {
-	const configured = Number(process.env.PI_SIDE_TIMEOUT_MS);
-	if (Number.isFinite(configured) && configured > 0) return Math.trunc(configured);
-	return DEFAULT_TIMEOUT_MS;
+type SideConfig = Record<string, unknown> & {
+	timeoutMs?: number;
+	maxOutputChars?: number;
+	tools?: string[];
+	transport?: Transport;
+};
+
+const DEFAULT_SIDE_CONFIG: SideConfig = {
+	timeoutMs: DEFAULT_TIMEOUT_MS,
+	maxOutputChars: DEFAULT_MAX_OUTPUT_CHARS,
+	tools: DEFAULT_SIDE_CAR_TOOLS,
+};
+
+function sideConfig(cwd: string): SideConfig {
+	return loadExtensionConfig<SideConfig>(SIDE_CONFIG_FILE, cwd, DEFAULT_SIDE_CONFIG).config;
+}
+
+function positiveNumber(value: unknown): number | undefined {
+	const number = Number(value);
+	return Number.isFinite(number) && number > 0 ? Math.trunc(number) : undefined;
+}
+
+function timeoutMs(config: SideConfig): number {
+	const envOverride = positiveNumber(process.env.PI_SIDE_TIMEOUT_MS);
+	return envOverride ?? positiveNumber(config.timeoutMs) ?? DEFAULT_TIMEOUT_MS;
+}
+
+function maxOutputChars(config: SideConfig): number {
+	return positiveNumber(config.maxOutputChars) ?? DEFAULT_MAX_OUTPUT_CHARS;
+}
+
+function sideCarTools(config: SideConfig): string {
+	const tools = Array.isArray(config.tools) ? config.tools.filter((tool): tool is string => typeof tool === "string" && tool.trim().length > 0) : DEFAULT_SIDE_CAR_TOOLS;
+	return tools.length ? tools.join(",") : DEFAULT_SIDE_CAR_TOOLS.join(",");
 }
 
 function modelArg(ctxModel: { provider: string; id: string } | undefined): string | undefined {
@@ -40,7 +72,7 @@ function modelArg(ctxModel: { provider: string; id: string } | undefined): strin
 	return `${ctxModel.provider}/${ctxModel.id}`;
 }
 
-function truncateMiddle(text: string, maxChars = MAX_OUTPUT_CHARS): string {
+function truncateMiddle(text: string, maxChars: number): string {
 	if (text.length <= maxChars) return text;
 	const head = Math.floor(maxChars * 0.65);
 	const tail = Math.max(0, maxChars - head - 120);
@@ -69,8 +101,8 @@ function agentDir(): string {
 	return expandHome(process.env.PI_CODING_AGENT_DIR || join(homedir(), ".pi", "agent"));
 }
 
-function configuredTransport(cwd: string): Transport {
-	return readTransport(join(cwd, ".pi", "settings.json")) ?? readTransport(join(agentDir(), "settings.json")) ?? DEFAULT_TRANSPORT;
+function configuredTransport(cwd: string, config: SideConfig): Transport {
+	return isTransport(config.transport) ? config.transport : readTransport(join(cwd, ".pi", "settings.json")) ?? readTransport(join(agentDir(), "settings.json")) ?? DEFAULT_TRANSPORT;
 }
 
 function parseRequest(args: string): SideRequest {
@@ -127,6 +159,9 @@ async function createTemporarySessionSnapshot(ctx: ExtensionCommandContext): Pro
 }
 
 async function runSide(pi: ExtensionAPI, ctx: ExtensionCommandContext, request: SideRequest, signal?: AbortSignal): Promise<string> {
+	const config = sideConfig(ctx.cwd);
+	const outputLimit = maxOutputChars(config);
+
 	if (!request.useTools) {
 		if (!ctx.model) {
 			return "No model selected for Side turn.";
@@ -147,7 +182,7 @@ async function runSide(pi: ExtensionAPI, ctx: ExtensionCommandContext, request: 
 		const response = await complete(
 			ctx.model,
 			{ systemPrompt: buildPrompt(request), messages },
-			{ apiKey: auth.apiKey, headers: auth.headers, signal, transport: configuredTransport(ctx.cwd) },
+			{ apiKey: auth.apiKey, headers: auth.headers, signal, transport: configuredTransport(ctx.cwd, config) },
 		);
 
 		if (response.stopReason === "aborted") {
@@ -161,7 +196,7 @@ async function runSide(pi: ExtensionAPI, ctx: ExtensionCommandContext, request: 
 			.trim();
 
 		const suffix = response.stopReason && response.stopReason !== "stop" ? `\n\n[stop reason: ${response.stopReason}]` : "";
-		return truncateMiddle(`${text || "(no output)"}${suffix}`);
+		return truncateMiddle(`${text || "(no output)"}${suffix}`, outputLimit);
 	}
 
 	const model = modelArg(ctx.model);
@@ -171,14 +206,14 @@ async function runSide(pi: ExtensionAPI, ctx: ExtensionCommandContext, request: 
 		snapshot = await createTemporarySessionSnapshot(ctx);
 		const piArgs = ["-p", "--session", snapshot.path, "--session-dir", snapshot.dir];
 
-		piArgs.push("--tools", SIDE_CAR_TOOLS);
+		piArgs.push("--tools", sideCarTools(config));
 		if (model) piArgs.push("--model", model);
 		piArgs.push("--append-system-prompt", buildPrompt(request));
 		piArgs.push(request.question);
 
 		const result = await pi.exec("pi", piArgs, {
 			cwd: ctx.cwd,
-			timeout: timeoutMs(),
+			timeout: timeoutMs(config),
 			signal,
 		});
 
@@ -187,14 +222,14 @@ async function runSide(pi: ExtensionAPI, ctx: ExtensionCommandContext, request: 
 		const output = stdout || stderr;
 
 		if (result.killed) {
-			return truncateMiddle(output || `Side turn timed out after ${timeoutMs()}ms`);
+			return truncateMiddle(output || `Side turn timed out after ${timeoutMs(config)}ms`, outputLimit);
 		}
 
 		if (result.code !== 0) {
-			return truncateMiddle(output || `Side turn exited with code ${result.code}`);
+			return truncateMiddle(output || `Side turn exited with code ${result.code}`, outputLimit);
 		}
 
-		return truncateMiddle(output || "(no output)");
+		return truncateMiddle(output || "(no output)", outputLimit);
 	} finally {
 		if (snapshot) {
 			await rm(snapshot.dir, { recursive: true, force: true }).catch(() => undefined);

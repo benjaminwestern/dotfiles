@@ -80,8 +80,11 @@ Configs/ssh/.ssh/id_*
 
 Configs/ssh/.ssh/known_hosts*
 
-# Pi auth/session state is machine-local, not dotfile-managed.
+# Pi auth/session/cache/OAuth secret state is machine-local, not dotfile-managed.
 Configs/pi/.pi/agent/auth.json
+Configs/pi/.pi/agent/oauth.json
+Configs/pi/.pi/agent/client-credentials.json*
+Configs/pi/.pi/agent/mcp-inventory-cache.json
 Configs/pi/.pi/agent/sessions/
 Configs/pi/.pi/agent/*.bak
 

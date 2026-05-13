@@ -70,8 +70,6 @@ type McpServerConfig = {
 type McpConfig = {
 	servers?: Record<string, McpServerConfig>;
 	imports?: ImportKind[];
-	/** Deprecated compatibility cache. Prefer servers.<name>.selectedTools. */
-	toolSurfaces?: Record<string, McpToolSurfaceConfig>;
 };
 
 type McpToolSurfaceConfig = {
@@ -162,23 +160,15 @@ function emptyConfig(): McpConfig {
 
 function normalizeServerConfig(raw: unknown): McpServerConfig | null {
 	if (!isPlainObject(raw)) return null;
-	const entry = cloneConfigValue(raw) as McpServerConfig & {
-		directTools?: boolean | string[];
-		excludeTools?: string[];
-	};
+	const entry = cloneConfigValue(raw) as McpServerConfig;
 
 	if (!entry.type) entry.type = entry.command ? "stdio" : "remote";
-	if (!entry.apiKeyEnv && typeof entry.bearerTokenEnv === "string") entry.apiKeyEnv = entry.bearerTokenEnv;
-	if (!entry.selectedTools && Array.isArray(entry.directTools)) entry.selectedTools = entry.directTools.filter((tool) => typeof tool === "string");
-	if (!entry.disabledTools && Array.isArray(entry.excludeTools)) entry.disabledTools = entry.excludeTools.filter((tool) => typeof tool === "string");
-	delete entry.directTools;
-	delete entry.excludeTools;
 	return entry;
 }
 
 function normalizeConfig(config: McpConfig | undefined): McpConfig {
-	const normalized = cloneConfigValue(config ?? emptyConfig()) as McpConfig & { mcpServers?: Record<string, unknown>; "mcp-servers"?: Record<string, unknown> };
-	const rawServers = normalized.servers ?? normalized.mcpServers ?? normalized["mcp-servers"] ?? {};
+	const normalized = cloneConfigValue(config ?? emptyConfig()) as McpConfig;
+	const rawServers = normalized.servers ?? {};
 	const servers: Record<string, McpServerConfig> = {};
 	if (isPlainObject(rawServers)) {
 		for (const [serverName, rawServer] of Object.entries(rawServers)) {
@@ -188,8 +178,6 @@ function normalizeConfig(config: McpConfig | undefined): McpConfig {
 		}
 	}
 	normalized.servers = servers;
-	delete normalized.mcpServers;
-	delete normalized["mcp-servers"];
 	return normalized;
 }
 
@@ -288,9 +276,7 @@ function readConfigFile(path: string, cwdForImports = dirname(path)): McpConfig 
 }
 
 function configForWrite(config: McpConfig): McpConfig {
-	const copy = cloneConfigValue(normalizeConfig(config)) as McpConfig;
-	if (copy.toolSurfaces && Object.keys(copy.toolSurfaces).length === 0) delete copy.toolSurfaces;
-	return copy;
+	return cloneConfigValue(normalizeConfig(config)) as McpConfig;
 }
 
 function writeConfigFile(path: string, config: McpConfig) {
@@ -663,12 +649,12 @@ function routerToolsExposed(config: McpConfig): boolean {
 	return enabledServers(config).length > 0;
 }
 
-function toolSurfacesExposed(config: McpConfig): boolean {
+function directToolsExposed(config: McpConfig): boolean {
 	return enabledServers(config).some(([, server]) => selectedModelTools(server).length > 0);
 }
 
 function directToolHydrationNeeded(config: McpConfig): boolean {
-	return toolSurfacesExposed(config);
+	return directToolsExposed(config);
 }
 
 function timeoutFor(server: McpServerConfig): number {
@@ -992,13 +978,6 @@ function minimalSurface(serverName: string, toolName: string): McpToolSurfaceCon
 	};
 }
 
-function legacySurface(config: McpConfig, serverName: string, toolName: string): McpToolSurfaceConfig | undefined {
-	const directName = directMcpToolName(serverName, toolName);
-	const direct = config.toolSurfaces?.[directName];
-	if (direct?.server === serverName && direct.tool === toolName) return direct;
-	return Object.values(config.toolSurfaces ?? {}).find((surface) => surface.server === serverName && surface.tool === toolName);
-}
-
 function schemaForSurface(surface: McpToolSurfaceConfig): any {
 	const schema = surface.inputSchema;
 	if (schema && typeof schema === "object" && !Array.isArray(schema)) {
@@ -1066,7 +1045,7 @@ function selectedDirectTools(config: McpConfig): Array<{ serverName: string; ser
 }
 
 function activeSurfaceToolNames(config: McpConfig): string[] {
-	if (!toolSurfacesExposed(config)) return [];
+	if (!directToolsExposed(config)) return [];
 	return selectedDirectTools(config)
 		.map((selection) => selection.directName)
 		.filter((name) => registeredSurfaceTools.has(name))
@@ -1091,10 +1070,8 @@ async function hydrateDirectToolSurfaces(pi: ExtensionAPI, cwd: string, signal: 
 
 	for (const selection of selectedDirectTools(config)) {
 		const inventoryTool = inventory.tools.find((tool) => tool.server === selection.serverName && tool.name === selection.toolName);
-		const surface = inventoryTool
-			? surfaceFromInventoryTool(inventoryTool)
-			: legacySurface(config, selection.serverName, selection.toolName);
-		if (!surface) continue;
+		if (!inventoryTool) continue;
+		const surface = surfaceFromInventoryTool(inventoryTool);
 		hydratedSurfaceTools.set(selection.directName, surface);
 		registerSurfaceTool(pi, surface);
 	}
@@ -1427,7 +1404,7 @@ async function loadServerInventory(cwd: string, serverName: string, signal: Abor
 
 function selectorSurfaceEntries(config: McpConfig): McpToolSurfaceConfig[] {
 	return selectedDirectTools(config)
-		.map((selection) => hydratedSurfaceTools.get(selection.directName) ?? legacySurface(config, selection.serverName, selection.toolName) ?? minimalSurface(selection.serverName, selection.toolName))
+		.map((selection) => hydratedSurfaceTools.get(selection.directName) ?? minimalSurface(selection.serverName, selection.toolName))
 		.sort((left, right) => `${left.server}.${left.tool}`.localeCompare(`${right.server}.${right.tool}`));
 }
 
@@ -1797,7 +1774,7 @@ function formatConfigServerLine(state: McpState, serverName: string, server: Mcp
 }
 
 function hydratedSurfaceCount(config: McpConfig): number {
-	return selectedDirectTools(config).filter((selection) => hydratedSurfaceTools.has(selection.directName) || legacySurface(config, selection.serverName, selection.toolName)).length;
+	return selectedDirectTools(config).filter((selection) => hydratedSurfaceTools.has(selection.directName)).length;
 }
 
 function envPlaceholderName(value: string): string | undefined {
@@ -1993,8 +1970,6 @@ function formatMcpHelp(): string {
 		"}",
 		"```",
 		"",
-		"Compatibility aliases are also accepted: `mcpServers`/`mcp-servers`, `directTools: [..]` → `selectedTools`, and `excludeTools` → `disabledTools`.",
-		"",
 		"## Transports and Auth",
 		"- Local stdio: `command`, `args`, `cwd`, `env`.",
 		"- Remote JSON-RPC HTTP/SSE-ish endpoints: `url` or `baseUrl`, `headers`, `envHeaders`, `apiKeyEnv`, `bearerToken`, `bearerTokenEnv`.",
@@ -2048,7 +2023,7 @@ function formatMcpStatus(state: McpState, inventory: Inventory): string {
 	lines.push("");
 	lines.push("## Exposure");
 	lines.push(`- model can use mcp_search/mcp_inspect/mcp_call: ${routerToolsExposed(config) ? "yes, across all enabled servers" : "no, no servers enabled"}`);
-	lines.push(`- model can use direct MCP tools: ${toolSurfacesExposed(config) ? "selectedTools only" : "no selectedTools configured"}`);
+	lines.push(`- model can use direct MCP tools: ${directToolsExposed(config) ? "selectedTools only" : "no selectedTools configured"}`);
 	lines.push(`- manual /mcp search/inspect/call: yes`);
 	lines.push(`Loaded: ${inventory.loadedAt}`);
 	lines.push(`Inventory cache: ${formatLayerPath(INVENTORY_CACHE_PATH)} (${existsSync(INVENTORY_CACHE_PATH) ? "present" : "empty"}; use refresh=true or /mcp status to refresh)`);
@@ -2072,8 +2047,8 @@ function formatMcpStatus(state: McpState, inventory: Inventory): string {
 		lines.push("(none)");
 	} else {
 		for (const selection of selected) {
-			const surface = hydratedSurfaceTools.get(selection.directName) ?? legacySurface(config, selection.serverName, selection.toolName) ?? minimalSurface(selection.serverName, selection.toolName);
-			const hydrated = hydratedSurfaceTools.has(selection.directName) || !!legacySurface(config, selection.serverName, selection.toolName) ? "hydrated" : "pending discovery";
+			const surface = hydratedSurfaceTools.get(selection.directName) ?? minimalSurface(selection.serverName, selection.toolName);
+			const hydrated = hydratedSurfaceTools.has(selection.directName) ? "hydrated" : "pending discovery";
 			lines.push(`- ${surface.name || selection.directName}: loaded, ${hydrated} -> ${surface.server}.${surface.tool}`);
 			if (surface.description) lines.push(`  ${surface.description}`);
 		}

@@ -1,0 +1,14 @@
+{
+  "timeoutMs": 60000,
+  "maxOutputChars": 18000,
+  "tools": [
+    "read",
+    "grep",
+    "find",
+    "ls",
+    "websearch",
+    "webfetch",
+    "mcp_search",
+    "mcp_inspect"
+  ]
+}

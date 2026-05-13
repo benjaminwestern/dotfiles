@@ -1,11 +1,13 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { loadExtensionConfig } from "./extension-config.js";
 
 const execFileAsync = promisify(execFile);
 const WIDGET_ID = "git-status";
+const CONFIG_FILE = "git-status-widget.json";
 const DEFAULT_INTERVAL_MS = 2_500;
-const GIT_TIMEOUT_MS = 2_000;
+const DEFAULT_GIT_TIMEOUT_MS = 2_000;
 
 type GitCounts = {
 	staged: number;
@@ -19,27 +21,52 @@ type GitSnapshot = GitCounts & {
 	behind: number;
 };
 
-function intervalMs() {
-	const configured = Number(process.env.PI_GIT_STATUS_INTERVAL_MS);
-	return Number.isFinite(configured) && configured >= 500 ? configured : DEFAULT_INTERVAL_MS;
+type GitStatusConfig = Record<string, unknown> & {
+	enabled?: boolean;
+	intervalMs?: number;
+	gitTimeoutMs?: number;
+};
+
+const DEFAULT_CONFIG: GitStatusConfig = {
+	enabled: true,
+	intervalMs: DEFAULT_INTERVAL_MS,
+	gitTimeoutMs: DEFAULT_GIT_TIMEOUT_MS,
+};
+
+function gitStatusConfig(cwd: string): GitStatusConfig {
+	return loadExtensionConfig<GitStatusConfig>(CONFIG_FILE, cwd, DEFAULT_CONFIG).config;
+}
+
+function minimumNumber(value: unknown, minimum: number): number | undefined {
+	const number = Number(value);
+	return Number.isFinite(number) && number >= minimum ? Math.trunc(number) : undefined;
+}
+
+function intervalMs(config: GitStatusConfig) {
+	const envOverride = minimumNumber(process.env.PI_GIT_STATUS_INTERVAL_MS, 500);
+	return envOverride ?? minimumNumber(config.intervalMs, 500) ?? DEFAULT_INTERVAL_MS;
+}
+
+function gitTimeoutMs(config: GitStatusConfig) {
+	return minimumNumber(config.gitTimeoutMs, 100) ?? DEFAULT_GIT_TIMEOUT_MS;
 }
 
 function currentCwd(ctx: ExtensionContext) {
 	return ctx.sessionManager.getCwd?.() ?? ctx.cwd;
 }
 
-async function git(args: string[], cwd: string) {
+async function git(args: string[], cwd: string, config: GitStatusConfig) {
 	const { stdout } = await execFileAsync("git", args, {
 		cwd,
-		timeout: GIT_TIMEOUT_MS,
+		timeout: gitTimeoutMs(config),
 		maxBuffer: 1024 * 1024,
 	});
 	return stdout.trimEnd();
 }
 
-async function isGitWorktree(cwd: string) {
+async function isGitWorktree(cwd: string, config: GitStatusConfig) {
 	try {
-		return (await git(["rev-parse", "--is-inside-work-tree"], cwd)) === "true";
+		return (await git(["rev-parse", "--is-inside-work-tree"], cwd, config)) === "true";
 	} catch {
 		return false;
 	}
@@ -75,10 +102,11 @@ function parseCounts(lines: string[]): GitCounts {
 	return { staged, unstaged, untracked };
 }
 
-async function readSnapshot(cwd: string): Promise<GitSnapshot | undefined> {
-	if (!(await isGitWorktree(cwd))) return undefined;
+async function readSnapshot(cwd: string, config: GitStatusConfig): Promise<GitSnapshot | undefined> {
+	if (config.enabled === false) return undefined;
+	if (!(await isGitWorktree(cwd, config))) return undefined;
 
-	const status = await git(["status", "--porcelain=v1", "--branch", "--untracked-files=normal"], cwd);
+	const status = await git(["status", "--porcelain=v1", "--branch", "--untracked-files=normal"], cwd, config);
 	const lines = status.split("\n").filter(Boolean);
 	const branchLine = lines.find((line) => line.startsWith("##")) ?? "## unknown";
 	return {
@@ -110,7 +138,8 @@ function formatSnapshot(ctx: ExtensionContext, snapshot: GitSnapshot) {
 async function update(ctx: ExtensionContext) {
 	if (!ctx.hasUI) return;
 	try {
-		const snapshot = await readSnapshot(currentCwd(ctx));
+		const cwd = currentCwd(ctx);
+		const snapshot = await readSnapshot(cwd, gitStatusConfig(cwd));
 		ctx.ui.setWidget(WIDGET_ID, snapshot ? [formatSnapshot(ctx, snapshot)] : undefined, { placement: "belowEditor" });
 	} catch {
 		ctx.ui.setWidget(WIDGET_ID, undefined);
@@ -134,7 +163,7 @@ export default function gitStatusWidget(pi: ExtensionAPI) {
 	pi.on("session_start", async (_event, ctx) => {
 		if (timer) clearInterval(timer);
 		await refresh(ctx);
-		timer = setInterval(() => void refresh(ctx), intervalMs());
+		timer = setInterval(() => void refresh(ctx), intervalMs(gitStatusConfig(currentCwd(ctx))));
 	});
 
 	pi.on("input", async (_event, ctx) => {

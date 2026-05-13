@@ -7,7 +7,34 @@
       "models": [
         {
           "id": "gemma4:e2b-it-q4_K_M",
-          "input": ["text", "image"]
+          "input": [
+            "text",
+            "image"
+          ]
+        }
+      ]
+    },
+    "fireworks": {
+      "baseUrl": "https://api.fireworks.ai/inference",
+      "api": "anthropic-messages",
+      "apiKey": "FIREWORKS_API_KEY",
+      "models": [
+        {
+          "id": "accounts/fireworks/routers/kimi-k2p6-turbo",
+          "name": "Kimi K2.6 Turbo",
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 256000,
+          "maxTokens": 256000,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          }
         }
       ]
     }
