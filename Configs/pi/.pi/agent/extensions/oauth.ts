@@ -99,7 +99,7 @@
  * - `/cc-refresh` — Force immediate token re-acquisition (clears cache first).
  */
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 

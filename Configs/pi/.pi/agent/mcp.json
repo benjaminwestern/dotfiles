@@ -84,7 +84,7 @@
       "type": "remote",
       "description": "Connect to the local agentic-interaction MCP service. Use for local workflow automation and agent coordination tools exposed by that server.",
       "url": "http://127.0.0.1:8765/mcp",
-      "enabled": true
+      "enabled": false
     },
     "google-developer-knowledge": {
       "type": "remote",
@@ -100,7 +100,7 @@
       "type": "stdio",
       "description": "Connect to Solo's local MCP integration. Use for tools and workflows exposed by the Solo desktop app.",
       "command": "/Applications/Solo.app/Contents/MacOS/mcp",
-      "enabled": true
+      "enabled": false
     }
   }
 }

@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { complete, type Message, type Transport, type UserMessage } from "@mariozechner/pi-ai";
+import { complete, type Message, type Transport, type UserMessage } from "@earendil-works/pi-ai";
 import {
 	BorderedLoader,
 	CURRENT_SESSION_VERSION,
@@ -12,7 +12,7 @@ import {
 	type ExtensionCommandContext,
 	type FileEntry,
 	type SessionHeader,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 
 const SIDE_CAR_TOOLS = "read,grep,find,ls,websearch,webfetch,mcp_search,mcp_inspect";
 const DEFAULT_TIMEOUT_MS = 60_000;
@@ -24,13 +24,13 @@ type TemporarySessionSnapshot = {
 	dir: string;
 };
 
-type BtwRequest = {
+type SideRequest = {
 	question: string;
 	useTools: boolean;
 };
 
 function timeoutMs(): number {
-	const configured = Number(process.env.PI_BTW_TIMEOUT_MS);
+	const configured = Number(process.env.PI_SIDE_TIMEOUT_MS);
 	if (Number.isFinite(configured) && configured > 0) return Math.trunc(configured);
 	return DEFAULT_TIMEOUT_MS;
 }
@@ -44,7 +44,7 @@ function truncateMiddle(text: string, maxChars = MAX_OUTPUT_CHARS): string {
 	if (text.length <= maxChars) return text;
 	const head = Math.floor(maxChars * 0.65);
 	const tail = Math.max(0, maxChars - head - 120);
-	return `${text.slice(0, head)}\n\n[btw truncated ${text.length - head - tail} chars from the middle]\n\n${text.slice(text.length - tail)}`;
+	return `${text.slice(0, head)}\n\n[side truncated ${text.length - head - tail} chars from the middle]\n\n${text.slice(text.length - tail)}`;
 }
 
 function isTransport(value: unknown): value is Transport {
@@ -73,25 +73,25 @@ function configuredTransport(cwd: string): Transport {
 	return readTransport(join(cwd, ".pi", "settings.json")) ?? readTransport(join(agentDir(), "settings.json")) ?? DEFAULT_TRANSPORT;
 }
 
-function parseRequest(args: string): BtwRequest {
+function parseRequest(args: string): SideRequest {
 	const raw = args.trim();
 	if (raw.startsWith("--tools ")) return { useTools: true, question: raw.slice("--tools ".length).trim() };
 	if (raw.startsWith("-t ")) return { useTools: true, question: raw.slice("-t ".length).trim() };
 	return { useTools: false, question: raw };
 }
 
-function buildPrompt(request: BtwRequest): string {
+function buildPrompt(request: SideRequest): string {
 	const toolLine = request.useTools
 		? "You may use the provided read-only tools if they materially help."
 		: "Do not use tools. Answer from the supplied session context only.";
 
-	return `You are a throw-away read-only sidecar in the same workspace as the parent Pi session.
+	return `You are a throw-away side channel in the same workspace as the parent Pi session.
 
-Answer the user's BTW question directly and briefly. ${toolLine}
+Answer the user's side question directly and briefly. ${toolLine}
 
 Context:
 - The previous messages are a snapshot of the parent Pi session's current context.
-- The final user message is the BTW question.
+- The final user message is the side question.
 - Use the parent session context to answer status questions like "what are we doing?".
 
 Rules:
@@ -100,7 +100,7 @@ Rules:
 - Do not attempt session changes.
 - Keep the final answer compact and useful.
 
-BTW question:
+Side question:
 ${request.question}`;
 }
 
@@ -109,7 +109,7 @@ function parentContextMessages(ctx: ExtensionCommandContext): Message[] {
 }
 
 async function createTemporarySessionSnapshot(ctx: ExtensionCommandContext): Promise<TemporarySessionSnapshot> {
-	const dir = await mkdtemp(join(tmpdir(), "pi-btw-"));
+	const dir = await mkdtemp(join(tmpdir(), "pi-side-"));
 	const path = join(dir, "session.jsonl");
 	const parentHeader = ctx.sessionManager.getHeader();
 	const header: SessionHeader = {
@@ -126,10 +126,10 @@ async function createTemporarySessionSnapshot(ctx: ExtensionCommandContext): Pro
 	return { path, dir };
 }
 
-async function runBtw(pi: ExtensionAPI, ctx: ExtensionCommandContext, request: BtwRequest, signal?: AbortSignal): Promise<string> {
+async function runSide(pi: ExtensionAPI, ctx: ExtensionCommandContext, request: SideRequest, signal?: AbortSignal): Promise<string> {
 	if (!request.useTools) {
 		if (!ctx.model) {
-			return "No model selected for BTW sidecar.";
+			return "No model selected for Side turn.";
 		}
 
 		const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
@@ -151,7 +151,7 @@ async function runBtw(pi: ExtensionAPI, ctx: ExtensionCommandContext, request: B
 		);
 
 		if (response.stopReason === "aborted") {
-			return "BTW sidecar aborted.";
+			return "Side turn aborted.";
 		}
 
 		const text = response.content
@@ -187,11 +187,11 @@ async function runBtw(pi: ExtensionAPI, ctx: ExtensionCommandContext, request: B
 		const output = stdout || stderr;
 
 		if (result.killed) {
-			return truncateMiddle(output || `BTW sidecar timed out after ${timeoutMs()}ms`);
+			return truncateMiddle(output || `Side turn timed out after ${timeoutMs()}ms`);
 		}
 
 		if (result.code !== 0) {
-			return truncateMiddle(output || `BTW sidecar exited with code ${result.code}`);
+			return truncateMiddle(output || `Side turn exited with code ${result.code}`);
 		}
 
 		return truncateMiddle(output || "(no output)");
@@ -202,11 +202,11 @@ async function runBtw(pi: ExtensionAPI, ctx: ExtensionCommandContext, request: B
 	}
 }
 
-function formatResult(request: BtwRequest, answer: string): string {
-	return `BTW sidecar result
-Not added to session context.
+function formatResult(request: SideRequest, answer: string): string {
+	return `Side result
+Not added to the main session context.
 Mode: ${request.useTools ? "read-only tools enabled" : "direct/no tools"}
-Context: current parent session snapshot
+Context: current main session snapshot
 
 Question:
 ${request.question}
@@ -216,42 +216,42 @@ ${answer}`;
 }
 
 export default function (pi: ExtensionAPI) {
-	pi.registerCommand("btw", {
-		description: "Ask a throw-away read-only sidecar question without adding it to the session context",
+	pi.registerCommand("side", {
+		description: "Ask a one-shot side question without adding it to the main session context",
 		handler: async (args, ctx) => {
 			const request = parseRequest(args);
 			if (!request.question) {
-				ctx.ui.notify("Usage: /btw <question>", "warning");
+				ctx.ui.notify("Usage: /side [-t|--tools] <question>", "warning");
 				return;
 			}
 
 			if (!ctx.hasUI) {
-				const answer = await runBtw(pi, ctx, request, ctx.signal);
+				const answer = await runSide(pi, ctx, request, ctx.signal);
 				console.log(formatResult(request, answer));
 				return;
 			}
 
 			const answer = await ctx.ui.custom<string | null>((tui, theme, _keybindings, done) => {
 				const mode = request.useTools ? "read-only tools" : "direct";
-				const loader = new BorderedLoader(tui, theme, `BTW sidecar (${mode}): ${request.question}`);
+				const loader = new BorderedLoader(tui, theme, `Side turn (${mode}): ${request.question}`);
 				loader.onAbort = () => done(null);
 
-				runBtw(pi, ctx, request, loader.signal)
+				runSide(pi, ctx, request, loader.signal)
 					.then(done)
 					.catch((error) => {
 						const message = error instanceof Error ? error.message : String(error);
-						done(`BTW sidecar failed: ${message}`);
+						done(`Side turn failed: ${message}`);
 					});
 
 				return loader;
 			});
 
 			if (answer === null) {
-				ctx.ui.notify("BTW cancelled", "info");
+				ctx.ui.notify("Side cancelled", "info");
 				return;
 			}
 
-			await ctx.ui.editor("BTW sidecar result (not added to context)", formatResult(request, answer));
+			await ctx.ui.editor("Side result (not added to main context)", formatResult(request, answer));
 		},
 	});
 }

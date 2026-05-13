@@ -1,22 +1,11 @@
-import { Type } from "@mariozechner/pi-ai";
-import { defineTool, type ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { Type } from "@earendil-works/pi-ai";
+import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { clampNumber, decodeEntities, linkedSignal, textResult } from "./common-core/core.js";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_TIMEOUT_MS = 120_000;
 const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
 const DEFAULT_MAX_CHARS = 30_000;
-
-function textResult(text: string, details: Record<string, unknown> = {}) {
-	return {
-		content: [{ type: "text" as const, text }],
-		details,
-	};
-}
-
-function clampNumber(value: unknown, fallback: number, min: number, max: number): number {
-	if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
-	return Math.max(min, Math.min(max, Math.trunc(value)));
-}
 
 function ensureHttpUrl(raw: string): URL {
 	const url = new URL(raw);
@@ -24,25 +13,6 @@ function ensureHttpUrl(raw: string): URL {
 		throw new Error(`webfetch only supports http and https URLs, got ${url.protocol}`);
 	}
 	return url;
-}
-
-function linkedSignal(parent: AbortSignal | undefined, timeoutMs: number) {
-	const controller = new AbortController();
-	const timer = setTimeout(() => controller.abort(new Error(`Timed out after ${timeoutMs}ms`)), timeoutMs);
-	const abort = () => controller.abort(parent?.reason ?? new Error("Aborted"));
-
-	if (parent) {
-		if (parent.aborted) abort();
-		else parent.addEventListener("abort", abort, { once: true });
-	}
-
-	return {
-		signal: controller.signal,
-		cleanup: () => {
-			clearTimeout(timer);
-			parent?.removeEventListener("abort", abort);
-		},
-	};
 }
 
 async function readLimited(response: Response, maxBytes: number): Promise<Buffer> {
@@ -65,30 +35,6 @@ async function readLimited(response: Response, maxBytes: number): Promise<Buffer
 	}
 
 	return Buffer.concat(chunks);
-}
-
-function decodeEntities(input: string): string {
-	const named: Record<string, string> = {
-		amp: "&",
-		lt: "<",
-		gt: ">",
-		quot: "\"",
-		apos: "'",
-		nbsp: " ",
-		ndash: "-",
-		mdash: "-",
-		hellip: "...",
-	};
-
-	return input.replace(/&(#x?[0-9a-f]+|[a-z][a-z0-9]+);/gi, (_match, entity: string) => {
-		if (entity[0] === "#") {
-			const radix = entity[1]?.toLowerCase() === "x" ? 16 : 10;
-			const digits = radix === 16 ? entity.slice(2) : entity.slice(1);
-			const codepoint = Number.parseInt(digits, radix);
-			return Number.isFinite(codepoint) ? String.fromCodePoint(codepoint) : _match;
-		}
-		return named[entity.toLowerCase()] ?? _match;
-	});
 }
 
 function stripTags(html: string): string {
@@ -186,7 +132,7 @@ const webfetchTool = defineTool({
 				headers: {
 					accept: "text/html,application/xhtml+xml,text/plain,application/json;q=0.9,*/*;q=0.8",
 					"user-agent":
-						"Mozilla/5.0 (compatible; pi-webfetch/1.0; +https://github.com/mariozechner/pi)",
+						"Mozilla/5.0 (compatible; pi-webfetch/1.0; +https://github.com/earendil-works/pi/tree/main)",
 				},
 			});
 

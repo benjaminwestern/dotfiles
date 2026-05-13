@@ -1,15 +1,46 @@
-import { Type } from "@mariozechner/pi-ai";
-import { DynamicBorder, defineTool, getAgentDir, getSettingsListTheme, type ExtensionAPI, type ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
-import { Container, type SettingItem, SettingsList, Text } from "@mariozechner/pi-tui";
+import { Type } from "@earendil-works/pi-ai";
+import { defineTool, getAgentDir, type ExtensionAPI, type ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { SettingItem } from "@earendil-works/pi-tui";
+import { extractMcpText as extractCallText, linkedSignal, parseJsonOrSse, textResult } from "./common-core/core.js";
+import {
+	color,
+	keyMatches,
+	fitText,
+	padRight,
+	panelBlank,
+	panelContentLine,
+	panelRule,
+	panelTopRule,
+	showHud,
+	strong,
+	withPanelShadow,
+	type ThemeLike,
+} from "./modal-core/core.js";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const GLOBAL_CONFIG_PATH = join(getAgentDir(), "mcp.json");
+const SHARED_GLOBAL_CONFIG_PATH = join(homedir(), ".config", "mcp", "mcp.json");
 const PROJECT_CONFIG_DIR = ".pi";
 const PROJECT_CONFIG_FILE = "mcp.json";
+const SHARED_PROJECT_CONFIG_FILE = ".mcp.json";
+const INVENTORY_CACHE_PATH = join(getAgentDir(), "mcp-inventory-cache.json");
+const INVENTORY_CACHE_VERSION = 1;
 const ROUTER_TOOL_NAMES = ["mcp_search", "mcp_inspect", "mcp_call"];
+
+type ImportKind = "cursor" | "claude-code" | "claude-desktop" | "codex" | "windsurf" | "vscode";
+
+const IMPORT_PATHS: Record<ImportKind, string[]> = {
+	cursor: [join(homedir(), ".cursor", "mcp.json")],
+	"claude-code": [join(homedir(), ".claude", "mcp.json"), join(homedir(), ".claude.json"), join(homedir(), ".claude", "claude_desktop_config.json")],
+	"claude-desktop": [join(homedir(), "Library", "Application Support", "Claude", "claude_desktop_config.json")],
+	codex: [join(homedir(), ".codex", "config.json")],
+	windsurf: [join(homedir(), ".windsurf", "mcp.json")],
+	vscode: [join(".vscode", "mcp.json")],
+};
 
 type McpServerConfig = {
 	type?: "remote" | "http" | "streamable-http" | "sse" | "stdio";
@@ -24,16 +55,21 @@ type McpServerConfig = {
 	env?: Record<string, string | null>;
 	headers?: Record<string, string | null>;
 	envHeaders?: Record<string, string | null>;
+	auth?: "bearer" | "oauth" | false;
+	bearerToken?: string;
+	bearerTokenEnv?: string;
 	apiKeyEnv?: string;
 	timeoutMs?: number;
 	protocolVersion?: string;
 	enabledTools?: string[];
 	allowedTools?: string[];
 	disabledTools?: string[];
+	exposeResources?: boolean;
 };
 
 type McpConfig = {
 	servers?: Record<string, McpServerConfig>;
+	imports?: ImportKind[];
 	/** Deprecated compatibility cache. Prefer servers.<name>.selectedTools. */
 	toolSurfaces?: Record<string, McpToolSurfaceConfig>;
 };
@@ -53,6 +89,8 @@ type InventoryTool = {
 	name: string;
 	description: string;
 	inputSchema: unknown;
+	kind?: "tool" | "resource";
+	resourceUri?: string;
 };
 
 type Inventory = {
@@ -65,6 +103,7 @@ type McpProjectLayer = {
 	path: string;
 	root: string;
 	config: McpConfig;
+	shared: boolean;
 };
 
 type McpWriteTarget = {
@@ -88,6 +127,7 @@ type McpState = {
 	effectiveConfig: McpConfig;
 	serverSources: Record<string, string>;
 	diagnostics: McpDiagnostic[];
+	importedServerSources: Record<string, string[]>;
 };
 
 type InventoryCache = {
@@ -95,31 +135,15 @@ type InventoryCache = {
 	inventory: Inventory;
 };
 
+type DiskInventoryCache = {
+	version: typeof INVENTORY_CACHE_VERSION;
+	entries: Record<string, Inventory>;
+};
+
 const stdioClients = new Map<string, StdioMcpClient>();
 const hydratedSurfaceTools = new Map<string, McpToolSurfaceConfig>();
 let inventoryCache: InventoryCache | undefined;
 const registeredSurfaceTools = new Map<string, string>();
-
-function textResult(text: string, details: Record<string, unknown> = {}) {
-	return {
-		content: [{ type: "text" as const, text }],
-		details,
-	};
-}
-
-function parseJsonOrSse(raw: string): any {
-	const trimmed = raw.trim();
-	if (trimmed.startsWith("{")) return JSON.parse(trimmed);
-
-	for (const line of trimmed.split(/\r?\n/)) {
-		if (!line.startsWith("data:")) continue;
-		const payload = line.slice("data:".length).trim();
-		if (!payload || payload === "[DONE]") continue;
-		return JSON.parse(payload);
-	}
-
-	throw new Error("MCP response was not JSON or SSE");
-}
 
 function stripJsonComments(raw: string): string {
 	return raw
@@ -136,9 +160,36 @@ function emptyConfig(): McpConfig {
 	return { servers: {} };
 }
 
+function normalizeServerConfig(raw: unknown): McpServerConfig | null {
+	if (!isPlainObject(raw)) return null;
+	const entry = cloneConfigValue(raw) as McpServerConfig & {
+		directTools?: boolean | string[];
+		excludeTools?: string[];
+	};
+
+	if (!entry.type) entry.type = entry.command ? "stdio" : "remote";
+	if (!entry.apiKeyEnv && typeof entry.bearerTokenEnv === "string") entry.apiKeyEnv = entry.bearerTokenEnv;
+	if (!entry.selectedTools && Array.isArray(entry.directTools)) entry.selectedTools = entry.directTools.filter((tool) => typeof tool === "string");
+	if (!entry.disabledTools && Array.isArray(entry.excludeTools)) entry.disabledTools = entry.excludeTools.filter((tool) => typeof tool === "string");
+	delete entry.directTools;
+	delete entry.excludeTools;
+	return entry;
+}
+
 function normalizeConfig(config: McpConfig | undefined): McpConfig {
-	const normalized = config ?? emptyConfig();
-	if (!normalized.servers) normalized.servers = {};
+	const normalized = cloneConfigValue(config ?? emptyConfig()) as McpConfig & { mcpServers?: Record<string, unknown>; "mcp-servers"?: Record<string, unknown> };
+	const rawServers = normalized.servers ?? normalized.mcpServers ?? normalized["mcp-servers"] ?? {};
+	const servers: Record<string, McpServerConfig> = {};
+	if (isPlainObject(rawServers)) {
+		for (const [serverName, rawServer] of Object.entries(rawServers)) {
+			const server = normalizeServerConfig(rawServer);
+			if (server) servers[serverName] = server;
+			else (servers as Record<string, unknown>)[serverName] = rawServer;
+		}
+	}
+	normalized.servers = servers;
+	delete normalized.mcpServers;
+	delete normalized["mcp-servers"];
 	return normalized;
 }
 
@@ -171,16 +222,27 @@ function mergeConfigValue(base: unknown, override: unknown): any {
 	return result;
 }
 
+function mergeImports(left: ImportKind[] | undefined, right: ImportKind[] | undefined): ImportKind[] | undefined {
+	const merged = [...(left ?? []), ...(right ?? [])].filter((kind): kind is ImportKind => typeof kind === "string" && kind in IMPORT_PATHS);
+	return merged.length ? [...new Set(merged)] : undefined;
+}
+
 function mergeConfigs(base: McpConfig, override: McpConfig | undefined): McpConfig {
-	return normalizeConfig(mergeConfigValue(base, override ?? emptyConfig()) as McpConfig);
+	const merged = normalizeConfig(mergeConfigValue(base, override ?? emptyConfig()) as McpConfig);
+	merged.imports = mergeImports(base.imports, override?.imports);
+	return merged;
 }
 
 function projectConfigPath(cwd: string): string {
 	return join(cwd, PROJECT_CONFIG_DIR, PROJECT_CONFIG_FILE);
 }
 
-function projectRootForConfigPath(path: string): string {
-	return dirname(dirname(path));
+function sharedProjectConfigPath(cwd: string): string {
+	return join(cwd, SHARED_PROJECT_CONFIG_FILE);
+}
+
+function projectRootForConfigPath(path: string, shared = false): string {
+	return shared ? dirname(path) : dirname(dirname(path));
 }
 
 function ancestorDirs(cwd: string): string[] {
@@ -195,9 +257,34 @@ function ancestorDirs(cwd: string): string[] {
 	return dirs.reverse();
 }
 
-function readConfigFile(path: string): McpConfig {
+function parseConfigFile(path: string): McpConfig {
 	const raw = readFileSync(path, "utf8");
 	return normalizeConfig(JSON.parse(stripJsonComments(raw)) as McpConfig);
+}
+
+function resolveImportPath(importKind: ImportKind, cwd: string): string | undefined {
+	for (const candidate of IMPORT_PATHS[importKind] ?? []) {
+		const fullPath = candidate.startsWith(".") ? resolve(cwd, candidate) : candidate;
+		if (existsSync(fullPath)) return fullPath;
+	}
+	return undefined;
+}
+
+function expandImports(config: McpConfig, cwd: string): McpConfig {
+	if (!config.imports?.length) return config;
+	let imported = emptyConfig();
+	for (const importKind of config.imports) {
+		const importPath = resolveImportPath(importKind, cwd);
+		if (!importPath) continue;
+		try {
+			imported = mergeConfigs(imported, parseConfigFile(importPath));
+		} catch {}
+	}
+	return mergeConfigs(imported, config);
+}
+
+function readConfigFile(path: string, cwdForImports = dirname(path)): McpConfig {
+	return expandImports(parseConfigFile(path), cwdForImports);
 }
 
 function configForWrite(config: McpConfig): McpConfig {
@@ -210,16 +297,33 @@ function writeConfigFile(path: string, config: McpConfig) {
 	writeFileSync(path, `${JSON.stringify(configForWrite(config), null, 2)}\n`, "utf8");
 }
 
-function loadGlobalConfig(): { exists: boolean; config: McpConfig } {
-	if (!existsSync(GLOBAL_CONFIG_PATH)) return { exists: false, config: defaultConfig() };
-	return { exists: true, config: readConfigFile(GLOBAL_CONFIG_PATH) };
+function loadGlobalConfig(cwd: string): { exists: boolean; config: McpConfig } {
+	let config = defaultConfig();
+	let exists = false;
+	if (existsSync(SHARED_GLOBAL_CONFIG_PATH) && SHARED_GLOBAL_CONFIG_PATH !== GLOBAL_CONFIG_PATH) {
+		config = mergeConfigs(config, readConfigFile(SHARED_GLOBAL_CONFIG_PATH, cwd));
+		exists = true;
+	}
+	if (existsSync(GLOBAL_CONFIG_PATH)) {
+		config = mergeConfigs(config, readConfigFile(GLOBAL_CONFIG_PATH, cwd));
+		exists = true;
+	}
+	return { exists, config };
 }
 
 function loadProjectLayers(cwd: string): McpProjectLayer[] {
-	return ancestorDirs(cwd)
-		.map((dir) => projectConfigPath(dir))
-		.filter((path) => existsSync(path))
-		.map((path) => ({ path, root: projectRootForConfigPath(path), config: readConfigFile(path) }));
+	const layers: McpProjectLayer[] = [];
+	for (const dir of ancestorDirs(cwd)) {
+		const sharedPath = sharedProjectConfigPath(dir);
+		if (existsSync(sharedPath) && sharedPath !== GLOBAL_CONFIG_PATH) {
+			layers.push({ path: sharedPath, root: projectRootForConfigPath(sharedPath, true), config: readConfigFile(sharedPath, dir), shared: true });
+		}
+		const piPath = projectConfigPath(dir);
+		if (existsSync(piPath) && piPath !== sharedPath && piPath !== GLOBAL_CONFIG_PATH) {
+			layers.push({ path: piPath, root: projectRootForConfigPath(piPath, false), config: readConfigFile(piPath, dir), shared: false });
+		}
+	}
+	return layers;
 }
 
 function mergeProjectLayers(layers: McpProjectLayer[]): McpConfig {
@@ -239,15 +343,49 @@ function formatLayerPath(path: string): string {
 	return compactMiddle(path, 100);
 }
 
-function sourceByServer(globalConfig: McpConfig, projectLayers: McpProjectLayer[], effectiveConfig: McpConfig, globalExists: boolean): Record<string, string> {
+function importedServerSourcesForConfig(config: McpConfig, cwd: string, label: string): Record<string, string[]> {
+	const sources: Record<string, string[]> = {};
+	for (const importKind of config.imports ?? []) {
+		const importPath = resolveImportPath(importKind, cwd);
+		if (!importPath) continue;
+		try {
+			const imported = parseConfigFile(importPath);
+			for (const serverName of Object.keys(imported.servers ?? {})) {
+				sources[serverName] = [...(sources[serverName] ?? []), `${label} import ${importKind} ${formatLayerPath(importPath)}`];
+			}
+		} catch {}
+	}
+	return sources;
+}
+
+function mergeServerSourceDetails(...sourceMaps: Record<string, string[]>[]): Record<string, string[]> {
+	const merged: Record<string, string[]> = {};
+	for (const sourceMap of sourceMaps) {
+		for (const [serverName, sources] of Object.entries(sourceMap)) {
+			merged[serverName] = [...(merged[serverName] ?? []), ...sources];
+		}
+	}
+	return merged;
+}
+
+function importedServerSources(globalConfig: McpConfig, projectLayers: McpProjectLayer[], cwd: string): Record<string, string[]> {
+	return mergeServerSourceDetails(
+		importedServerSourcesForConfig(globalConfig, cwd, "global"),
+		...projectLayers.map((layer, index) => importedServerSourcesForConfig(layer.config, layer.root, `project[${index}]`)),
+	);
+}
+
+function sourceByServer(globalConfig: McpConfig, projectLayers: McpProjectLayer[], effectiveConfig: McpConfig, globalExists: boolean, cwd: string): Record<string, string> {
 	const sources: Record<string, string> = {};
+	const importSources = importedServerSources(globalConfig, projectLayers, cwd);
 	for (const serverName of Object.keys(effectiveConfig.servers ?? {})) {
 		const inGlobal = !!globalConfig.servers?.[serverName];
 		const projectHits = projectLayers.filter((layer) => !!layer.config.servers?.[serverName]);
-		if (inGlobal && projectHits.length) sources[serverName] = `project override over ${globalExists ? "global" : "built-in"} (${projectHits.length} layer${projectHits.length === 1 ? "" : "s"})`;
-		else if (projectHits.length) sources[serverName] = `project (${projectHits.length} layer${projectHits.length === 1 ? "" : "s"})`;
-		else if (inGlobal) sources[serverName] = globalExists ? "global" : "built-in";
-		else sources[serverName] = "effective";
+		const importSuffix = importSources[serverName]?.length ? `; imported via ${importSources[serverName].length} source${importSources[serverName].length === 1 ? "" : "s"}` : "";
+		if (inGlobal && projectHits.length) sources[serverName] = `project override over ${globalExists ? "global" : "built-in"} (${projectHits.length} layer${projectHits.length === 1 ? "" : "s"})${importSuffix}`;
+		else if (projectHits.length) sources[serverName] = `project (${projectHits.length} layer${projectHits.length === 1 ? "" : "s"})${importSuffix}`;
+		else if (inGlobal) sources[serverName] = `${globalExists ? "global" : "built-in"}${importSuffix}`;
+		else sources[serverName] = importSources[serverName]?.length ? `imported via ${importSources[serverName].length} source${importSources[serverName].length === 1 ? "" : "s"}` : "effective";
 	}
 	return sources;
 }
@@ -276,6 +414,12 @@ function validateStringRecord(value: unknown, path: string, diagnostics: McpDiag
 
 function validateConfig(config: McpConfig, label: string, allowNull = true): McpDiagnostic[] {
 	const diagnostics: McpDiagnostic[] = [];
+	if (config.imports !== undefined) {
+		validateStringArray(config.imports, `${label}.imports`, diagnostics, allowNull);
+		for (const importKind of config.imports ?? []) {
+			if (!(importKind in IMPORT_PATHS)) diagnostics.push(diagnostic("warning", `${label}.imports`, `unknown import kind: ${importKind}`));
+		}
+	}
 	if (!isPlainObject(config.servers)) {
 		diagnostics.push(diagnostic("error", `${label}.servers`, "must be an object"));
 		return diagnostics;
@@ -294,6 +438,7 @@ function validateConfig(config: McpConfig, label: string, allowNull = true): Mcp
 		if (server.enabled !== undefined && !(allowNull && (server.enabled as any) === null) && typeof server.enabled !== "boolean") diagnostics.push(diagnostic("error", `${path}.enabled`, allowNull ? "must be a boolean or null" : "must be a boolean"));
 		if (server.timeoutMs !== undefined && !(allowNull && (server.timeoutMs as any) === null) && typeof server.timeoutMs !== "number") diagnostics.push(diagnostic("error", `${path}.timeoutMs`, allowNull ? "must be a number or null" : "must be a number"));
 		if (server.description !== undefined && !(allowNull && (server.description as any) === null) && typeof server.description !== "string") diagnostics.push(diagnostic("warning", `${path}.description`, allowNull ? "should be a string or null" : "should be a string"));
+		if (server.auth === "oauth") diagnostics.push(diagnostic("warning", `${path}.auth`, "oauth config is readable for compatibility but this lightweight extension does not run browser OAuth; use bearer headers/env or keep OAuth servers in the full adapter"));
 		if (!allowNull && kind === "stdio" && (typeof server.command !== "string" || !server.command.trim())) diagnostics.push(diagnostic("error", `${path}.command`, "is required for stdio servers"));
 		if (!allowNull && kind !== "stdio" && typeof server.url !== "string" && typeof server.baseUrl !== "string") diagnostics.push(diagnostic("error", `${path}.url`, "url or baseUrl is required for remote servers"));
 		if (server.command !== undefined && !(allowNull && (server.command as any) === null) && typeof server.command !== "string") diagnostics.push(diagnostic("error", `${path}.command`, allowNull ? "must be a string or null" : "must be a string"));
@@ -301,11 +446,14 @@ function validateConfig(config: McpConfig, label: string, allowNull = true): Mcp
 		if (server.url !== undefined && !(allowNull && (server.url as any) === null) && typeof server.url !== "string") diagnostics.push(diagnostic("error", `${path}.url`, allowNull ? "must be a string or null" : "must be a string"));
 		if (server.baseUrl !== undefined && !(allowNull && (server.baseUrl as any) === null) && typeof server.baseUrl !== "string") diagnostics.push(diagnostic("error", `${path}.baseUrl`, allowNull ? "must be a string or null" : "must be a string"));
 		if (server.apiKeyEnv !== undefined && !(allowNull && (server.apiKeyEnv as any) === null) && typeof server.apiKeyEnv !== "string") diagnostics.push(diagnostic("error", `${path}.apiKeyEnv`, allowNull ? "must be a string or null" : "must be a string"));
+		if (server.bearerToken !== undefined && !(allowNull && (server.bearerToken as any) === null) && typeof server.bearerToken !== "string") diagnostics.push(diagnostic("error", `${path}.bearerToken`, allowNull ? "must be a string or null" : "must be a string"));
+		if (server.bearerTokenEnv !== undefined && !(allowNull && (server.bearerTokenEnv as any) === null) && typeof server.bearerTokenEnv !== "string") diagnostics.push(diagnostic("error", `${path}.bearerTokenEnv`, allowNull ? "must be a string or null" : "must be a string"));
 		validateStringArray(server.args, `${path}.args`, diagnostics, allowNull);
 		validateStringArray(server.selectedTools, `${path}.selectedTools`, diagnostics, allowNull);
 		validateStringArray(server.enabledTools, `${path}.enabledTools`, diagnostics, allowNull);
 		validateStringArray(server.allowedTools, `${path}.allowedTools`, diagnostics, allowNull);
 		validateStringArray(server.disabledTools, `${path}.disabledTools`, diagnostics, allowNull);
+		if (server.exposeResources !== undefined && !(allowNull && (server.exposeResources as any) === null) && typeof server.exposeResources !== "boolean") diagnostics.push(diagnostic("error", `${path}.exposeResources`, allowNull ? "must be a boolean or null" : "must be a boolean"));
 		validateStringRecord(server.env, `${path}.env`, diagnostics, allowNull);
 		validateStringRecord(server.headers, `${path}.headers`, diagnostics, allowNull);
 		validateStringRecord(server.envHeaders, `${path}.envHeaders`, diagnostics, allowNull);
@@ -359,7 +507,7 @@ function validateEffectiveConfig(config: McpConfig): McpDiagnostic[] {
 }
 
 function loadMcpState(cwd: string): McpState {
-	const global = loadGlobalConfig();
+	const global = loadGlobalConfig(cwd);
 	const projectLayers = loadProjectLayers(cwd);
 	const projectConfig = mergeProjectLayers(projectLayers);
 	const effectiveConfig = mergeConfigs(global.config, projectLayers.length ? projectConfig : undefined);
@@ -376,8 +524,9 @@ function loadMcpState(cwd: string): McpState {
 		projectLayers,
 		projectConfig,
 		effectiveConfig,
-		serverSources: sourceByServer(global.config, projectLayers, effectiveConfig, global.exists),
+		serverSources: sourceByServer(global.config, projectLayers, effectiveConfig, global.exists, cwd),
 		diagnostics,
+		importedServerSources: importedServerSources(global.config, projectLayers, cwd),
 	};
 }
 
@@ -394,8 +543,9 @@ function safeLoadMcpState(cwd: string): McpState {
 			projectLayers: [],
 			projectConfig: emptyConfig(),
 			effectiveConfig,
-			serverSources: sourceByServer(effectiveConfig, [], effectiveConfig, false),
+			serverSources: sourceByServer(effectiveConfig, [], effectiveConfig, false, cwd),
 			diagnostics: [diagnostic("error", "config", error?.message ?? String(error))],
+			importedServerSources: {},
 		};
 	}
 }
@@ -453,8 +603,10 @@ function globalWriteTarget(): McpWriteTarget {
 }
 
 function nearestProjectWriteTarget(state: McpState): McpWriteTarget | undefined {
-	const nearest = state.projectLayers.at(-1);
-	return nearest ? { scope: "project", path: nearest.path } : undefined;
+	const nearestPiOwned = [...state.projectLayers].reverse().find((layer) => !layer.shared);
+	if (nearestPiOwned) return { scope: "project", path: nearestPiOwned.path };
+	const nearestReadableProject = state.projectLayers.at(-1);
+	return nearestReadableProject ? { scope: "project", path: projectConfigPath(nearestReadableProject.root) } : undefined;
 }
 
 function defaultWriteTarget(state: McpState): McpWriteTarget {
@@ -470,16 +622,16 @@ async function chooseWriteTarget(ctx: ExtensionCommandContext, state = safeLoadM
 
 	const targets = new Map<string, McpWriteTarget>();
 	const nearest = nearestProjectWriteTarget(state)!;
-	const nearestChoice = `[nearest] project ${formatLayerPath(nearest.path)}`;
+	const nearestChoice = `${existsSync(nearest.path) ? "[nearest]" : "[create nearest]"} project ${formatLayerPath(nearest.path)}`;
 	targets.set(nearestChoice, nearest);
 
 	const currentPath = projectConfigPath(ctx.cwd);
-	if (!state.projectLayers.some((layer) => layer.path === currentPath)) {
-		targets.set(`[create] project ${formatLayerPath(currentPath)}`, { scope: "project", path: currentPath });
+	if (currentPath !== nearest.path && !existsSync(currentPath)) {
+		targets.set(`[create cwd] project ${formatLayerPath(currentPath)}`, { scope: "project", path: currentPath });
 	}
 
 	for (const [index, layer] of [...state.projectLayers].reverse().entries()) {
-		if (layer.path === nearest.path) continue;
+		if (layer.shared || layer.path === nearest.path) continue;
 		targets.set(`[ancestor ${index + 1}] project ${formatLayerPath(layer.path)}`, { scope: "project", path: layer.path });
 	}
 
@@ -523,46 +675,41 @@ function timeoutFor(server: McpServerConfig): number {
 	return Math.max(1_000, Math.min(300_000, server.timeoutMs ?? DEFAULT_TIMEOUT_MS));
 }
 
-function resolveEnvPlaceholder(value: string): string | undefined {
-	const match = value.match(/^\$env:([A-Za-z_][A-Za-z0-9_]*)$/);
-	if (!match) return value;
-	return process.env[match[1]];
+function expandHome(value: string): string {
+	return value === "~" || value.startsWith("~/") ? join(homedir(), value.slice(2)) : value;
+}
+
+function interpolateEnv(value: string): string | undefined {
+	if (/^\$env:[A-Za-z_][A-Za-z0-9_]*$/.test(value)) {
+		return process.env[value.slice("$env:".length)];
+	}
+	return value
+		.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_match, name) => process.env[name] ?? "")
+		.replace(/\$env:([A-Za-z_][A-Za-z0-9_]*)/g, (_match, name) => process.env[name] ?? "");
+}
+
+function resolveConfigString(value: string): string | undefined {
+	const interpolated = interpolateEnv(value);
+	return interpolated === undefined ? undefined : expandHome(interpolated);
 }
 
 function resolveEnvRecord(record: Record<string, string | null> | undefined, omitMissing: boolean): Record<string, string> {
 	const resolved: Record<string, string> = {};
 	for (const [key, value] of Object.entries(record ?? {})) {
 		if (typeof value !== "string") continue;
-		const next = resolveEnvPlaceholder(value);
+		const next = resolveConfigString(value);
 		if (next === undefined && omitMissing) continue;
 		resolved[key] = next ?? "";
 	}
 	return resolved;
 }
 
-function linkedSignal(parent: AbortSignal | undefined, timeoutMs: number) {
-	const controller = new AbortController();
-	const timer = setTimeout(() => controller.abort(new Error(`Timed out after ${timeoutMs}ms`)), timeoutMs);
-	const abort = () => controller.abort(parent?.reason ?? new Error("Aborted"));
-
-	if (parent) {
-		if (parent.aborted) abort();
-		else parent.addEventListener("abort", abort, { once: true });
-	}
-
-	return {
-		signal: controller.signal,
-		cleanup: () => {
-			clearTimeout(timer);
-			parent?.removeEventListener("abort", abort);
-		},
-	};
-}
-
 function mcpUrl(server: McpServerConfig): string {
 	const rawUrl = server.url ?? server.baseUrl;
 	if (!rawUrl) throw new Error("remote MCP server is missing url/baseUrl");
-	const url = new URL(rawUrl);
+	const resolvedUrl = resolveConfigString(rawUrl);
+	if (!resolvedUrl) throw new Error("remote MCP server url/baseUrl resolved to an empty value");
+	const url = new URL(resolvedUrl);
 	const apiKey = server.apiKeyEnv ? process.env[server.apiKeyEnv] : undefined;
 	if (apiKey && url.hostname === "mcp.exa.ai" && !url.searchParams.has("exaApiKey")) {
 		url.searchParams.set("exaApiKey", apiKey);
@@ -583,9 +730,12 @@ function headersFor(server: McpServerConfig): Record<string, string> {
 		if (value) headers[header] = value;
 	}
 
+	const configuredBearer = server.bearerToken ? resolveConfigString(server.bearerToken) : undefined;
+	const envBearer = server.bearerTokenEnv ? process.env[server.bearerTokenEnv] : undefined;
 	const apiKey = server.apiKeyEnv ? process.env[server.apiKeyEnv] : undefined;
-	if (apiKey && !headers.authorization && !headers.Authorization) {
-		headers.authorization = `Bearer ${apiKey}`;
+	const bearer = configuredBearer ?? envBearer ?? apiKey;
+	if (bearer && !headers.authorization && !headers.Authorization) {
+		headers.authorization = `Bearer ${bearer}`;
 	}
 
 	return headers;
@@ -611,7 +761,7 @@ async function remoteRequest(serverName: string, server: McpServerConfig, method
 		const raw = await response.text();
 		if (!response.ok) throw new Error(`${serverName}: HTTP ${response.status}: ${raw.slice(0, 500)}`);
 
-		const payload = parseJsonOrSse(raw);
+		const payload = parseJsonOrSse(raw, "MCP response was not JSON or SSE");
 		if (payload.error) throw new Error(`${serverName}: ${payload.error.message ?? JSON.stringify(payload.error)}`);
 		return payload.result ?? payload;
 	} finally {
@@ -638,15 +788,29 @@ class StdioMcpClient {
 		return this.request("tools/call", { name: tool, arguments: args ?? {} }, signal);
 	}
 
+	async listResources(signal: AbortSignal | undefined): Promise<any> {
+		await this.initialize(signal);
+		return this.request("resources/list", {}, signal);
+	}
+
+	async readResource(uri: string, signal: AbortSignal | undefined): Promise<any> {
+		await this.initialize(signal);
+		return this.request("resources/read", { uri }, signal);
+	}
+
 	close() {
-		for (const pending of this.pending.values()) {
-			clearTimeout(pending.timer);
-			pending.reject(new Error(`${this.name}: MCP stdio client closed`));
-		}
-		this.pending.clear();
+		this.rejectPending(new Error(`${this.name}: MCP stdio client closed`));
 		this.process?.kill();
 		this.process = undefined;
 		this.initialized = undefined;
+	}
+
+	private rejectPending(error: Error) {
+		for (const pending of this.pending.values()) {
+			clearTimeout(pending.timer);
+			pending.reject(error);
+		}
+		this.pending.clear();
 	}
 
 	private async initialize(signal: AbortSignal | undefined) {
@@ -658,21 +822,22 @@ class StdioMcpClient {
 	private async startAndInitialize(signal: AbortSignal | undefined) {
 		if (!this.config.command) throw new Error(`${this.name}: stdio MCP server is missing command`);
 
-		this.process = spawn(this.config.command, this.config.args ?? [], {
-			cwd: this.config.cwd,
+		this.process = spawn(this.config.command, this.config.args?.map((arg) => resolveConfigString(arg) ?? "") ?? [], {
+			cwd: this.config.cwd ? resolveConfigString(this.config.cwd) : undefined,
 			env: { ...process.env, ...resolveEnvRecord(this.config.env, true) },
 			stdio: ["pipe", "pipe", "pipe"],
 		});
 
 		this.process.stdout.on("data", (chunk) => this.onStdout(chunk));
 		this.process.stderr.on("data", () => {});
+		this.process.on("error", (error) => {
+			this.rejectPending(new Error(`${this.name}: MCP stdio server failed to start: ${error.message}`));
+			this.process = undefined;
+			this.initialized = undefined;
+		});
 		this.process.on("exit", (code, signalName) => {
 			const error = new Error(`${this.name}: MCP stdio server exited (${code ?? signalName ?? "unknown"})`);
-			for (const pending of this.pending.values()) {
-				clearTimeout(pending.timer);
-				pending.reject(error);
-			}
-			this.pending.clear();
+			this.rejectPending(error);
 			this.process = undefined;
 			this.initialized = undefined;
 		});
@@ -811,6 +976,10 @@ function surfaceFromInventoryTool(tool: InventoryTool): McpToolSurfaceConfig {
 		enabled: true,
 		loadedAt: new Date().toISOString(),
 	};
+}
+
+function resourceToolName(resource: { name?: string; uri?: string }): string {
+	return `get_${sanitizeToolNamePart(resource.name || resource.uri || "resource")}`;
 }
 
 function minimalSurface(serverName: string, toolName: string): McpToolSurfaceConfig {
@@ -959,28 +1128,100 @@ function normalizeTools(serverName: string, server: McpServerConfig, result: any
 			name: tool.name,
 			description: typeof tool.description === "string" ? tool.description : "",
 			inputSchema: tool.inputSchema ?? tool.input_schema ?? tool.parameters ?? {},
+			kind: "tool" as const,
 		}));
+}
+
+function normalizeResources(serverName: string, server: McpServerConfig, result: any): InventoryTool[] {
+	if (server.exposeResources === false) return [];
+	const rawResources = Array.isArray(result?.resources) ? result.resources : Array.isArray(result) ? result : [];
+	return rawResources
+		.filter((resource) => typeof resource?.uri === "string")
+		.map((resource) => {
+			const name = resourceToolName(resource);
+			return {
+				server: serverName,
+				name,
+				description: typeof resource.description === "string" ? resource.description : `Read MCP resource ${resource.uri}`,
+				inputSchema: { type: "object", properties: {} },
+				kind: "resource" as const,
+				resourceUri: resource.uri,
+			};
+		})
+		.filter((resourceTool) => toolAllowed(server, resourceTool.name));
+}
+
+async function listServerResources(serverName: string, server: McpServerConfig, signal: AbortSignal | undefined): Promise<InventoryTool[]> {
+	if (server.exposeResources === false) return [];
+	try {
+		const kind = server.type ?? (server.command ? "stdio" : "remote");
+		const result = kind === "stdio"
+			? await clientFor(serverName, server).listResources(signal)
+			: await remoteRequest(serverName, server, "resources/list", {}, signal);
+		return normalizeResources(serverName, server, result);
+	} catch {
+		return [];
+	}
 }
 
 async function listServerTools(serverName: string, server: McpServerConfig, signal: AbortSignal | undefined): Promise<InventoryTool[]> {
 	const kind = server.type ?? (server.command ? "stdio" : "remote");
-	if (kind === "stdio") {
-		const result = await clientFor(serverName, server).listTools(signal);
-		return normalizeTools(serverName, server, result);
-	}
-
-	const result = await remoteRequest(serverName, server, "tools/list", {}, signal);
-	return normalizeTools(serverName, server, result);
+	const tools = kind === "stdio"
+		? normalizeTools(serverName, server, await clientFor(serverName, server).listTools(signal))
+		: normalizeTools(serverName, server, await remoteRequest(serverName, server, "tools/list", {}, signal));
+	const resources = await listServerResources(serverName, server, signal);
+	return [...tools, ...resources];
 }
 
 function inventoryCacheKey(cwd: string, config: McpConfig): string {
 	return `${cwd}:${JSON.stringify(config.servers ?? {})}`;
 }
 
+function readDiskInventoryCache(): DiskInventoryCache {
+	if (!existsSync(INVENTORY_CACHE_PATH)) return { version: INVENTORY_CACHE_VERSION, entries: {} };
+	try {
+		const parsed = JSON.parse(readFileSync(INVENTORY_CACHE_PATH, "utf8"));
+		if (parsed?.version === INVENTORY_CACHE_VERSION && isPlainObject(parsed.entries)) {
+			return parsed as DiskInventoryCache;
+		}
+	} catch {}
+	return { version: INVENTORY_CACHE_VERSION, entries: {} };
+}
+
+function writeDiskInventoryCache(key: string, inventory: Inventory): void {
+	try {
+		const cache = readDiskInventoryCache();
+		cache.entries[key] = inventory;
+		mkdirSync(dirname(INVENTORY_CACHE_PATH), { recursive: true });
+		writeFileSync(INVENTORY_CACHE_PATH, `${JSON.stringify(cache, null, 2)}\n`, "utf8");
+	} catch {}
+}
+
+function clearDiskInventoryCache(): void {
+	inventoryCache = undefined;
+	try {
+		mkdirSync(dirname(INVENTORY_CACHE_PATH), { recursive: true });
+		writeFileSync(INVENTORY_CACHE_PATH, `${JSON.stringify({ version: INVENTORY_CACHE_VERSION, entries: {} }, null, 2)}\n`, "utf8");
+	} catch {}
+}
+
+function readCachedInventory(key: string): Inventory | undefined {
+	const cached = readDiskInventoryCache().entries[key];
+	if (!cached || !Array.isArray(cached.tools) || !Array.isArray(cached.errors)) return undefined;
+	return cached;
+}
+
 async function loadInventory(cwd: string, signal: AbortSignal | undefined, refresh = false): Promise<Inventory> {
 	const config = loadConfig(cwd);
 	const key = inventoryCacheKey(cwd, config);
 	if (inventoryCache && inventoryCache.key === key && !refresh) return inventoryCache.inventory;
+	if (!refresh) {
+		const diskCached = readCachedInventory(key);
+		if (diskCached) {
+			inventoryCache = { key, inventory: diskCached };
+			return diskCached;
+		}
+	}
 
 	const errors: string[] = [];
 	const tools: InventoryTool[] = [];
@@ -1001,6 +1242,7 @@ async function loadInventory(cwd: string, signal: AbortSignal | undefined, refre
 
 	const inventory = { tools, errors, loadedAt: new Date().toISOString() };
 	inventoryCache = { key, inventory };
+	writeDiskInventoryCache(key, inventory);
 	return inventory;
 }
 
@@ -1030,7 +1272,8 @@ function formatInventory(inventory: Inventory, query: string | undefined, limit:
 	const filtered = query ? inventory.tools.filter((tool) => matchesQuery(tool, query)) : inventory.tools;
 	const lines = filtered.slice(0, limit).map((tool) => {
 		const description = tool.description ? ` - ${tool.description}` : "";
-		return `- ${tool.server}.${tool.name}${description}`;
+		const kind = tool.kind === "resource" ? " [resource]" : "";
+		return `- ${tool.server}.${tool.name}${kind}${description}`;
 	});
 
 	if (filtered.length > limit) lines.push(`... ${filtered.length - limit} more tool(s) omitted`);
@@ -1040,29 +1283,22 @@ function formatInventory(inventory: Inventory, query: string | undefined, limit:
 	return lines.join("\n");
 }
 
-function extractCallText(result: any): string {
-	const content = result?.content ?? result?.result?.content;
-	if (Array.isArray(content)) {
-		const text = content
-			.map((item) => {
-				if (typeof item?.text === "string") return item.text;
-				if (typeof item === "string") return item;
-				return "";
-			})
-			.filter(Boolean)
-			.join("\n\n");
-		if (text.trim()) return text.trim();
-	}
-
-	if (typeof result?.text === "string") return result.text;
-	if (typeof result === "string") return result;
-	return JSON.stringify(result, null, 2);
+async function readMcpResource(serverName: string, server: McpServerConfig, uri: string, signal: AbortSignal | undefined): Promise<any> {
+	const kind = server.type ?? (server.command ? "stdio" : "remote");
+	if (kind === "stdio") return clientFor(serverName, server).readResource(uri, signal);
+	return remoteRequest(serverName, server, "resources/read", { uri }, signal);
 }
 
 async function callMcpTool(cwd: string, serverName: string, toolName: string, args: unknown, signal: AbortSignal | undefined): Promise<any> {
 	const config = loadConfig(cwd);
 	const server = config.servers?.[serverName];
 	if (!server || server.enabled === false) throw new Error(`MCP server "${serverName}" is not configured or is disabled`);
+
+	if (server.exposeResources !== false) {
+		const inventory = await loadInventory(cwd, signal, false);
+		const resourceTool = inventory.tools.find((candidate) => candidate.server === serverName && candidate.name === toolName && candidate.kind === "resource" && candidate.resourceUri);
+		if (resourceTool?.resourceUri) return readMcpResource(serverName, server, resourceTool.resourceUri, signal);
+	}
 
 	const kind = server.type ?? (server.command ? "stdio" : "remote");
 	if (kind === "stdio") return clientFor(serverName, server).callTool(toolName, args, signal);
@@ -1073,7 +1309,7 @@ const mcpSearchTool = defineTool({
 	name: "mcp_search",
 	label: "MCP Search",
 	description: "Search configured MCP servers for available tools without calling them.",
-	promptSnippet: "mcp_search: find tools exposed by MCP servers from ~/.pi/agent/mcp.json layered with project .pi/mcp.json. Use refresh=true after config changes.",
+	promptSnippet: "mcp_search: find MCP tools from standard MCP files plus Pi override layers; uses a disk inventory cache unless refresh=true.",
 	promptGuidelines: [
 		"Prefer MCP over websearch when the request matches a configured MCP server domain.",
 		"For Google Cloud, Cloud Run, Firebase, Android, Chrome, Go, Gemini, TensorFlow, or web.dev documentation, prefer google-developer-knowledge MCP before websearch.",
@@ -1236,6 +1472,153 @@ function buildMcpSelectorItems(state: McpState): SettingItem[] {
 	return items;
 }
 
+function inputMatches(data: string, keyName: string, aliases: string[]): boolean {
+	return keyMatches(data, keyName, aliases);
+}
+
+function isUpInput(data: string): boolean {
+	return inputMatches(data, "up", ["k", "K", "\u001b[A", "\u001bOA", "\u001b[1A", "\u001b[1;1A"]);
+}
+
+function isDownInput(data: string): boolean {
+	return inputMatches(data, "down", ["j", "J", "\u001b[B", "\u001bOB", "\u001b[1B", "\u001b[1;1B"]);
+}
+
+function isToggleInput(data: string): boolean {
+	return inputMatches(data, "enter", [" ", "\r", "\n", "\r\n", "\u001bOM", "l", "L", "\u001b[C", "\u001bOC", "\u001b[1C", "\u001b[1;1C"]);
+}
+
+function isPreviousValueInput(data: string): boolean {
+	return inputMatches(data, "left", ["h", "H", "\u001b[D", "\u001bOD", "\u001b[1D", "\u001b[1;1D"]);
+}
+
+function isHomeInput(data: string): boolean {
+	return inputMatches(data, "home", ["g", "\u001b[H", "\u001bOH", "\u001b[1~", "\u001b[7~"]);
+}
+
+function isEndInput(data: string): boolean {
+	return inputMatches(data, "end", ["G", "\u001b[F", "\u001bOF", "\u001b[4~", "\u001b[8~"]);
+}
+
+function settingValueTone(value: string): "success" | "warning" | "muted" | "accent" {
+	if (["enabled", "loaded", "open"].includes(value)) return "success";
+	if (["disabled", "search-only"].includes(value)) return "warning";
+	return "accent";
+}
+
+function nextSettingValue(item: SettingItem, direction: 1 | -1): string {
+	const values = item.values?.length ? item.values : [item.currentValue];
+	if (values.length === 1) return values[0];
+	const index = Math.max(0, values.indexOf(item.currentValue));
+	return values[(index + direction + values.length) % values.length];
+}
+
+function settingModalMarkdown(title: string, lines: string[], items: SettingItem[]): string {
+	return [
+		`# ${title}`,
+		"",
+		...lines,
+		"",
+		"| Item | State | Description |",
+		"| --- | --- | --- |",
+		...items.map((item) => `| ${item.label.trim()} | ${item.currentValue} | ${(item.description ?? "").replace(/\|/g, "\\|")} |`),
+	].join("\n");
+}
+
+function settingKind(item: SettingItem): string {
+	if (item.id.startsWith("server:")) return "MCP";
+	if (item.id.startsWith("discover:")) return "Tools";
+	if (item.id.startsWith("surface:")) return "Direct";
+	return "Item";
+}
+
+function settingDisplayValue(value: string): string {
+	if (value === "enabled") return "on";
+	if (value === "disabled") return "off";
+	if (value === "loaded") return "direct";
+	if (value === "search-only") return "search";
+	return value;
+}
+
+function settingDisplayLabel(item: SettingItem): string {
+	return item.label.trim().replace(/^server\s+/, "");
+}
+
+function conciseWriteTarget(target: McpWriteTarget): string {
+	const scope = target.scope === "global" ? "global Pi override" : "project Pi override";
+	return `${scope}: ${compactMiddle(target.path, 58)}`;
+}
+
+function renderSettingRow(item: SettingItem, selected: boolean, theme: ThemeLike, width: number): string {
+	const inner = Math.max(24, width - 4);
+	const kindWidth = 7;
+	const stateWidth = 10;
+	const labelWidth = Math.max(18, inner - kindWidth - stateWidth - 8);
+	const marker = selected ? color(theme, "accent", "›") : " ";
+	const kind = color(theme, "muted", padRight(fitText(settingKind(item), kindWidth), kindWidth));
+	const labelText = fitText(settingDisplayLabel(item), labelWidth);
+	const label = selected ? strong(theme, labelText) : labelText;
+	const state = color(theme, settingValueTone(item.currentValue), padRight(fitText(settingDisplayValue(item.currentValue), stateWidth), stateWidth));
+	return `${marker} ${kind} ${padRight(label, labelWidth)} ${state}`;
+}
+
+function wrapDetail(text: string, width: number, maxLines = 2): string[] {
+	const words = text.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+	const lines: string[] = [];
+	let current = "";
+	for (const word of words) {
+		const next = current ? `${current} ${word}` : word;
+		if (next.length <= width) {
+			current = next;
+			continue;
+		}
+		if (current) lines.push(current);
+		current = word;
+		if (lines.length >= maxLines) break;
+	}
+	if (current && lines.length < maxLines) lines.push(current);
+	if (lines.length === maxLines && words.join(" ").length > lines.join(" ").length) {
+		lines[lines.length - 1] = `${lines[lines.length - 1].replace(/\s+$/, "")}…`;
+	}
+	return lines.length ? lines : ["No description"];
+}
+
+function renderSettingsModal(title: string, lines: string[], items: SettingItem[], selectedIndex: number, theme: ThemeLike, width: number): string[] {
+	const panelWidth = Math.max(60, Math.min(width - 8, 104));
+	const visibleRows = Math.min(Math.max(8, Math.floor((panelWidth - 24) / 5)), 12, items.length);
+	const start = Math.min(Math.max(0, selectedIndex - Math.floor(visibleRows / 2)), Math.max(0, items.length - visibleRows));
+	const shown = items.slice(start, start + visibleRows);
+	const selected = items[selectedIndex];
+	const output: string[] = [];
+
+	output.push(panelTopRule(theme, panelWidth, title, "↑↓/jk move • enter toggle • q close"));
+	for (const line of lines.slice(1)) output.push(panelContentLine(theme, color(theme, "dim", line), panelWidth));
+	const rangeText = items.length ? ` ${start + 1}-${start + shown.length}/${items.length}` : " 0/0";
+	output.push(panelRule(theme, panelWidth, `Servers${rangeText}`));
+	if (items.length === 0) {
+		output.push(panelContentLine(theme, "No MCP servers or direct tools configured.", panelWidth, "warning"));
+	} else {
+		for (const [offset, item] of shown.entries()) {
+			const index = start + offset;
+			const selectedRow = index === selectedIndex;
+			output.push(panelContentLine(theme, renderSettingRow(item, selectedRow, theme, panelWidth), panelWidth, selectedRow ? "accent" : "normal"));
+		}
+	}
+	output.push(panelRule(theme, panelWidth, "Selection"));
+	if (selected) {
+		output.push(panelContentLine(theme, `${color(theme, "accent", strong(theme, settingDisplayLabel(selected)))} ${color(theme, settingValueTone(selected.currentValue), `[${selected.currentValue}]`)}`, panelWidth));
+		for (const detailLine of wrapDetail(selected.description ?? "No description", Math.max(24, panelWidth - 8), 2)) {
+			output.push(panelContentLine(theme, color(theme, "muted", detailLine), panelWidth));
+		}
+	} else {
+		output.push(panelContentLine(theme, "No selection.", panelWidth, "muted"));
+	}
+	output.push(panelRule(theme, panelWidth, "Controls"));
+	output.push(panelContentLine(theme, color(theme, "dim", "Enter/Space toggle • h/l cycle • m markdown • Esc/q close"), panelWidth));
+	output.push(panelRule(theme, panelWidth, undefined, false, true));
+	return withPanelShadow(output, panelWidth, theme);
+}
+
 async function showSettingsSelector(
 	ctx: ExtensionCommandContext,
 	title: string,
@@ -1243,37 +1626,42 @@ async function showSettingsSelector(
 	items: SettingItem[],
 	onChange: (id: string, newValue: string, close: () => void) => void,
 ) {
-	await ctx.ui.custom<void>((tui, theme, _keybindings, done) => {
-		const container = new Container();
-		container.addChild(new DynamicBorder((text) => theme.fg("accent", text)));
-		container.addChild(new Text(theme.fg("accent", theme.bold(title))));
-		for (const line of lines) container.addChild(new Text(theme.fg("dim", line)));
-
-		const close = () => done(undefined);
-		const settingsList = new SettingsList(
-			items,
-			Math.min(Math.max(items.length, 8), 18),
-			getSettingsListTheme(),
-			(id, newValue) => onChange(id, newValue, close),
-			close,
-		);
-
-		container.addChild(settingsList);
-		container.addChild(new DynamicBorder((text) => theme.fg("accent", text)));
-
-		return {
-			render(width: number) {
-				return container.render(width);
-			},
-			invalidate() {
-				container.invalidate();
-			},
-			handleInput(data: string) {
-				settingsList.handleInput?.(data);
-				tui.requestRender();
-			},
-		};
+	let selectedIndex = 0;
+	const result = await showHud(ctx, {
+		render: (width, theme) => renderSettingsModal(title, lines, items, selectedIndex, theme, width),
+		handleInput: (data, controls) => {
+			if (isUpInput(data)) {
+				selectedIndex = Math.max(0, selectedIndex - 1);
+				controls.requestRender();
+				return true;
+			}
+			if (isDownInput(data)) {
+				selectedIndex = Math.min(items.length - 1, selectedIndex + 1);
+				controls.requestRender();
+				return true;
+			}
+			if (isHomeInput(data)) {
+				selectedIndex = 0;
+				controls.requestRender();
+				return true;
+			}
+			if (isEndInput(data)) {
+				selectedIndex = Math.max(0, items.length - 1);
+				controls.requestRender();
+				return true;
+			}
+			if (isToggleInput(data) || isPreviousValueInput(data)) {
+				const item = items[selectedIndex];
+				if (!item) return true;
+				const nextValue = nextSettingValue(item, isPreviousValueInput(data) ? -1 : 1);
+				item.currentValue = nextValue;
+				controls.requestRender();
+				onChange(item.id, nextValue, () => controls.done("close"));
+				return true;
+			}
+		},
 	});
+	if (result === "markdown") await ctx.ui.editor(title, settingModalMarkdown(title, lines, items));
 }
 
 async function syncAfterMutation(pi: ExtensionAPI, cwd: string, signal: AbortSignal | undefined, config: McpConfig) {
@@ -1289,19 +1677,14 @@ async function showMcpSelector(pi: ExtensionAPI, ctx: ExtensionCommandContext) {
 		return;
 	}
 
-	let writeTarget: McpWriteTarget | undefined;
-	const targetForMutation = async () => {
-		writeTarget ??= await chooseWriteTarget(ctx, state);
-		return writeTarget;
-	};
+	let writeTarget: McpWriteTarget = defaultWriteTarget(state);
 
 	await showSettingsSelector(
 		ctx,
 		"MCP Servers / Tool Surfaces",
 		[
-			"Enter toggles servers and selectedTools. Router tools can always reach enabled servers. Esc closes.",
-			`Layers: global ${state.globalExists ? "present" : "missing/default"}; project ${state.projectLayers.length ? `${state.projectLayers.length} found` : "not initialised"}`,
-			`Writes: ${state.projectLayers.length ? "ask on first change" : formatWriteTarget(globalWriteTarget())}`,
+			`Config: global ${state.globalExists ? "present" : "default"}; project ${state.projectLayers.length ? `${state.projectLayers.length} layer${state.projectLayers.length === 1 ? "" : "s"}` : "none"}`,
+			`Writes: ${conciseWriteTarget(writeTarget)}`,
 			configuredSurfaceText(state.effectiveConfig),
 		],
 		items,
@@ -1316,15 +1699,13 @@ async function showMcpSelector(pi: ExtensionAPI, ctx: ExtensionCommandContext) {
 					return;
 				}
 
-				const target = await targetForMutation();
-				if (!target) return;
 				state = safeLoadMcpState(ctx.cwd);
 
 				if (parsed.kind === "server") {
 					const enabled = newValue === "enabled";
-					state = saveServerEnabledOverride(ctx.cwd, target, parsed.server, enabled);
+					state = saveServerEnabledOverride(ctx.cwd, writeTarget, parsed.server, enabled);
 					await syncAfterMutation(pi, ctx.cwd, ctx.signal, state.effectiveConfig);
-					ctx.ui.notify(`MCP server ${parsed.server} ${enabled ? "enabled" : "disabled"} in ${formatWriteTarget(target)}`, "info");
+					ctx.ui.notify(`MCP server ${parsed.server} ${enabled ? "enabled" : "disabled"} in ${formatWriteTarget(writeTarget)}`, "info");
 					return;
 				}
 
@@ -1334,9 +1715,9 @@ async function showMcpSelector(pi: ExtensionAPI, ctx: ExtensionCommandContext) {
 				const next = newValue === "loaded"
 					? [...selected, parsed.tool]
 					: selected.filter((candidate) => candidate !== parsed.tool);
-				state = saveSelectedToolsOverride(ctx.cwd, target, parsed.server, next);
+				state = saveSelectedToolsOverride(ctx.cwd, writeTarget, parsed.server, next);
 				await syncAfterMutation(pi, ctx.cwd, ctx.signal, state.effectiveConfig);
-				ctx.ui.notify(`${newValue === "loaded" ? "Loaded" : "Unloaded"} ${directMcpToolName(parsed.server, parsed.tool)} in ${formatWriteTarget(target)}`, "info");
+				ctx.ui.notify(`${newValue === "loaded" ? "Loaded" : "Unloaded"} ${directMcpToolName(parsed.server, parsed.tool)} in ${formatWriteTarget(writeTarget)}`, "info");
 			})().catch((error: any) => ctx.ui.notify(`MCP update failed: ${error?.message ?? String(error)}`, "error"));
 		},
 	);
@@ -1372,8 +1753,8 @@ async function showServerToolSelector(pi: ExtensionAPI, ctx: ExtensionCommandCon
 		ctx,
 		`MCP Tools: ${serverName}`,
 		[
-			"Enter/Space toggles search-only vs loaded direct tool surface. Esc closes.",
-			`Writes: ${formatWriteTarget(writeTarget)}`,
+			"Enter/Space promotes a tool to a direct MCP surface; h/l cycles state.",
+			`Writes: ${conciseWriteTarget(writeTarget)}`,
 		],
 		items,
 		(id, newValue, _close) => {
@@ -1448,6 +1829,8 @@ function formatEnvHeaders(server: McpServerConfig): string[] {
 function formatServerRuntimeDiagnostics(server: McpServerConfig): string[] {
 	const lines: string[] = [];
 	if (server.apiKeyEnv) lines.push(`  apiKeyEnv: $env:${server.apiKeyEnv} (${process.env[server.apiKeyEnv] ? "present" : "missing"})`);
+	if (server.bearerTokenEnv) lines.push(`  bearerTokenEnv: $env:${server.bearerTokenEnv} (${process.env[server.bearerTokenEnv] ? "present" : "missing"})`);
+	if (server.bearerToken) lines.push("  bearerToken: literal configured");
 	lines.push(...formatEnvLikeRecord("env", server.env));
 	lines.push(...formatEnvLikeRecord("headers", server.headers));
 	lines.push(...formatEnvHeaders(server));
@@ -1467,13 +1850,175 @@ function formatServerLayerContributors(state: McpState, serverName: string): str
 		const server = layer.config.servers?.[serverName];
 		if (!server) continue;
 		const enabled = isPlainObject(server) && typeof server.enabled === "boolean" ? `, enabled=${server.enabled}` : "";
-		contributors.push(`project[${index}] ${formatLayerPath(layer.path)}${enabled}`);
+		contributors.push(`project[${index}] ${layer.shared ? "shared" : "Pi override"} ${formatLayerPath(layer.path)}${enabled}`);
 	}
+	const imports = state.importedServerSources[serverName] ?? [];
 	if (contributors.length) {
 		lines.push("  defined by:");
 		for (const contributor of contributors) lines.push(`    - ${contributor}`);
 	}
+	if (imports.length) {
+		lines.push("  imported from:");
+		for (const imported of imports) lines.push(`    - ${imported}`);
+	}
 	return lines;
+}
+
+function formatConfiguredImports(config: McpConfig, cwd: string): string[] {
+	const imports = config.imports ?? [];
+	if (imports.length === 0) return ["(none)"];
+	return imports.map((importKind) => {
+		const path = resolveImportPath(importKind, cwd);
+		return `- ${importKind}: ${path ? formatLayerPath(path) : "not found"}`;
+	});
+}
+
+function formatEnvReferenceWarnings(serverName: string, label: string, record: Record<string, string | null> | undefined): string[] {
+	const warnings: string[] = [];
+	for (const [key, value] of Object.entries(record ?? {})) {
+		if (typeof value !== "string") continue;
+		const envName = value.match(/^\$env:([A-Za-z_][A-Za-z0-9_]*)$/)?.[1];
+		if (envName && !process.env[envName]) warnings.push(`${serverName}.${label}.${key}: missing $env:${envName}`);
+	}
+	return warnings;
+}
+
+function collectRuntimeWarnings(config: McpConfig): string[] {
+	const warnings: string[] = [];
+	for (const [serverName, server] of enabledServers(config)) {
+		if (server.auth === "oauth") warnings.push(`${serverName}: OAuth configured but browser OAuth is intentionally unsupported by this lightweight bridge`);
+		if (server.apiKeyEnv && !process.env[server.apiKeyEnv]) warnings.push(`${serverName}.apiKeyEnv: missing $env:${server.apiKeyEnv}`);
+		if (server.bearerTokenEnv && !process.env[server.bearerTokenEnv]) warnings.push(`${serverName}.bearerTokenEnv: missing $env:${server.bearerTokenEnv}`);
+		for (const [header, envName] of Object.entries(server.envHeaders ?? {})) {
+			if (typeof envName === "string" && !process.env[envName]) warnings.push(`${serverName}.envHeaders.${header}: missing $env:${envName}`);
+		}
+		warnings.push(...formatEnvReferenceWarnings(serverName, "env", server.env));
+		warnings.push(...formatEnvReferenceWarnings(serverName, "headers", server.headers));
+	}
+	return warnings;
+}
+
+function formatMcpDoctor(state: McpState): string {
+	const config = state.effectiveConfig;
+	const diagnostics = state.diagnostics;
+	const errors = diagnostics.filter((item) => item.level === "error");
+	const warnings = diagnostics.filter((item) => item.level === "warning");
+	const runtimeWarnings = collectRuntimeWarnings(config);
+	const enabled = enabledServers(config);
+	const configured = configuredServers(config);
+	const selected = selectedDirectTools(config);
+	const hydrated = hydratedSurfaceCount(config);
+	const currentCacheKey = inventoryCacheKey(state.cwd, config);
+	const diskCache = readDiskInventoryCache();
+	const cacheEntries = Object.keys(diskCache.entries ?? {});
+	const currentCache = diskCache.entries[currentCacheKey];
+	const verdict = errors.length > 0 ? "FAIL" : (warnings.length || runtimeWarnings.length ? "WARN" : "PASS");
+
+	const lines: string[] = [];
+	lines.push("# MCP Doctor");
+	lines.push("");
+	lines.push(`Verdict: ${verdict}`);
+	lines.push(`CWD: ${state.cwd}`);
+	lines.push("");
+	lines.push("## Config");
+	lines.push(`- configured servers: ${configured.length}`);
+	lines.push(`- enabled servers: ${enabled.length}`);
+	lines.push(`- project layers: ${state.projectLayers.length}`);
+	lines.push(`- imports: ${(config.imports ?? []).length}`);
+	lines.push(`- diagnostics: ${errors.length} error(s), ${warnings.length} warning(s)`);
+	lines.push("");
+	lines.push("## Inventory Cache");
+	lines.push(`- path: ${INVENTORY_CACHE_PATH}`);
+	lines.push(`- entries: ${cacheEntries.length}`);
+	lines.push(`- current config cached: ${currentCache ? `yes (${currentCache.tools.length} item(s), loaded ${currentCache.loadedAt})` : "no"}`);
+	lines.push("- refresh with: `/mcp status` or `mcp_search({ refresh: true })`");
+	lines.push("- clear with: `/mcp cache clear`");
+	lines.push("");
+	lines.push("## Direct Tool Surfaces");
+	lines.push(`- selected tools/resources: ${selected.length}`);
+	lines.push(`- hydrated direct surfaces now: ${hydrated}`);
+	lines.push(`- active direct surfaces now: ${activeSurfaceToolNames(config).length}`);
+	lines.push("");
+	lines.push("## Compatibility Imports");
+	lines.push(...formatConfiguredImports(config, state.cwd));
+	lines.push("");
+	lines.push("## Config Diagnostics");
+	lines.push(...formatDiagnostics(diagnostics));
+	lines.push("");
+	lines.push("## Runtime Warnings");
+	if (runtimeWarnings.length === 0) lines.push("(none)");
+	else lines.push(...runtimeWarnings.map((warning) => `- ${warning}`));
+	lines.push("");
+	lines.push("## Next Actions");
+	if (errors.length > 0) lines.push("- Fix config errors above before using MCP tools.");
+	if (runtimeWarnings.length > 0) lines.push("- Populate missing environment variables or disable affected servers/tools.");
+	if (!currentCache && enabled.length > 0) lines.push("- Run `/mcp status` to populate inventory cache for the current config.");
+	if (errors.length === 0 && runtimeWarnings.length === 0 && currentCache) lines.push("- No immediate action required.");
+	return lines.join("\n");
+}
+
+function formatMcpHelp(): string {
+	return [
+		"# MCP Extension Help",
+		"",
+		"This is the lightweight Pi MCP bridge. It keeps the model surface small with three router tools:",
+		"- `mcp_search` — discover configured MCP tools/resources.",
+		"- `mcp_inspect` — inspect one tool schema before calling.",
+		"- `mcp_call` — call one configured MCP tool or exposed resource.",
+		"",
+		"## Config Layers",
+		"Read order is shared-first, then Pi overrides:",
+		`1. ${SHARED_GLOBAL_CONFIG_PATH}`,
+		`2. ${GLOBAL_CONFIG_PATH}`,
+		"3. ancestor/project `.mcp.json` files",
+		"4. ancestor/project `.pi/mcp.json` files",
+		"",
+		"Writes from `/mcp` go to Pi-owned files (`~/.pi/agent/mcp.json` or `.pi/mcp.json`) so shared MCP config remains portable across tools.",
+		"",
+		"## Config Shape",
+		"Preferred native shape:",
+		"```json",
+		"{",
+		"  \"servers\": {",
+		"    \"docs\": {",
+		"      \"type\": \"stdio\",",
+		"      \"command\": \"npx\",",
+		"      \"args\": [\"-y\", \"some-mcp-server\"],",
+		"      \"selectedTools\": [\"search\"],",
+		"      \"enabledTools\": [\"search\", \"read_doc\"],",
+		"      \"disabledTools\": [\"dangerous_tool\"],",
+		"      \"exposeResources\": true",
+		"    }",
+		"  }",
+		"}",
+		"```",
+		"",
+		"Compatibility aliases are also accepted: `mcpServers`/`mcp-servers`, `directTools: [..]` → `selectedTools`, and `excludeTools` → `disabledTools`.",
+		"",
+		"## Transports and Auth",
+		"- Local stdio: `command`, `args`, `cwd`, `env`.",
+		"- Remote JSON-RPC HTTP/SSE-ish endpoints: `url` or `baseUrl`, `headers`, `envHeaders`, `apiKeyEnv`, `bearerToken`, `bearerTokenEnv`.",
+		"- `$env:VAR`, `${VAR}`, and `~` are expanded in config strings where useful.",
+		"- OAuth configs are detected and warned about, but browser OAuth is intentionally out of scope for this lightweight bridge. Use bearer headers/env here, or the full pi-mcp-adapter for OAuth-heavy servers.",
+		"",
+		"## Direct Tools",
+		"Set `selectedTools` per server to promote specific MCP tools/resources to first-class Pi tool surfaces named `mcp__server__tool`.",
+		"Run `/mcp` to open the modal MCP control panel, where Enter/Space toggles server enabled state and selected direct tools.",
+		"Use `/mcp tools <server>`, `/mcp load <server> <tool>`, or `/mcp unload <mcp__server__tool>` to manage them interactively.",
+		"",
+		"## Resources",
+		"When `exposeResources` is not false, MCP resources are exposed as read-only `get_*` pseudo-tools, searchable through `mcp_search` and callable through `mcp_call`.",
+		"",
+		"## Cache and Commands",
+		`Inventory cache: ${INVENTORY_CACHE_PATH}`,
+		"- `/mcp doctor` runs a no-network config/cache/env self-test.",
+		"- `/mcp status` refreshes inventory and opens a status report.",
+		"- `/mcp search [query]` searches current cached inventory.",
+		"- `/mcp inspect <server> <tool>` shows schema/metadata.",
+		"- `/mcp call <server> <tool> [json]` manually calls a tool.",
+		"- `/mcp cache clear` clears the persistent inventory cache.",
+		"- `/mcp reload` reloads config and closes MCP clients.",
+	].join("\n");
 }
 
 function formatMcpStatus(state: McpState, inventory: Inventory): string {
@@ -1482,16 +2027,21 @@ function formatMcpStatus(state: McpState, inventory: Inventory): string {
 	lines.push("# MCP Status");
 	lines.push("");
 	lines.push("## Config Layers");
-	lines.push(`- global: ${formatLayerPath(state.globalPath)} (${state.globalExists ? "present" : "missing; built-in defaults active"})`);
+	lines.push(`- shared global: ${formatLayerPath(SHARED_GLOBAL_CONFIG_PATH)} (${existsSync(SHARED_GLOBAL_CONFIG_PATH) ? "present" : "missing"})`);
+	lines.push(`- Pi global override: ${formatLayerPath(state.globalPath)} (${existsSync(state.globalPath) ? "present" : "missing; built-in defaults active"})`);
 	if (state.projectLayers.length === 0) {
 		lines.push("- project: none found walking upward from cwd");
 	} else {
 		for (const [index, layer] of state.projectLayers.entries()) {
 			const nearest = index === state.projectLayers.length - 1 ? ", nearest" : "";
-			lines.push(`- project[${index}]: ${formatLayerPath(layer.path)} (root=${formatLayerPath(layer.root)}${nearest})`);
+			const kind = layer.shared ? "shared" : "Pi override";
+			lines.push(`- project[${index}]: ${formatLayerPath(layer.path)} (${kind}, root=${formatLayerPath(layer.root)}${nearest})`);
 		}
 	}
 	lines.push(`- effective write default: ${formatWriteTarget(defaultWriteTarget(state))}`);
+	lines.push("");
+	lines.push("## Compatibility Imports");
+	lines.push(...formatConfiguredImports(config, state.cwd));
 	lines.push("");
 	lines.push("## Config Diagnostics");
 	lines.push(...formatDiagnostics(state.diagnostics));
@@ -1501,7 +2051,9 @@ function formatMcpStatus(state: McpState, inventory: Inventory): string {
 	lines.push(`- model can use direct MCP tools: ${toolSurfacesExposed(config) ? "selectedTools only" : "no selectedTools configured"}`);
 	lines.push(`- manual /mcp search/inspect/call: yes`);
 	lines.push(`Loaded: ${inventory.loadedAt}`);
-	lines.push(`Searchable tools: ${inventory.tools.length}`);
+	lines.push(`Inventory cache: ${formatLayerPath(INVENTORY_CACHE_PATH)} (${existsSync(INVENTORY_CACHE_PATH) ? "present" : "empty"}; use refresh=true or /mcp status to refresh)`);
+	const resourceCount = inventory.tools.filter((tool) => tool.kind === "resource").length;
+	lines.push(`Searchable tools: ${inventory.tools.length} (${resourceCount} resource tool${resourceCount === 1 ? "" : "s"})`);
 	lines.push(`Selected direct tools: ${selectedDirectTools(config).length}`);
 	lines.push(`Hydrated direct tool surfaces: ${hydratedSurfaceCount(config)}`);
 	lines.push(`Exposed direct tool surfaces: ${activeSurfaceToolNames(config).length}`);
@@ -1537,8 +2089,12 @@ function formatMcpStatus(state: McpState, inventory: Inventory): string {
 	lines.push("## Inventory By Server");
 	const counts = new Map<string, number>();
 	for (const tool of inventory.tools) counts.set(tool.server, (counts.get(tool.server) ?? 0) + 1);
+	const resourceCounts = new Map<string, number>();
+	for (const tool of inventory.tools) if (tool.kind === "resource") resourceCounts.set(tool.server, (resourceCounts.get(tool.server) ?? 0) + 1);
 	for (const [serverName] of configuredServers(config).sort(([left], [right]) => left.localeCompare(right))) {
-		lines.push(`- ${serverName}: ${counts.get(serverName) ?? 0} tool(s)`);
+		const resources = resourceCounts.get(serverName) ?? 0;
+		const resourceText = resources ? `, ${resources} resource(s)` : "";
+		lines.push(`- ${serverName}: ${counts.get(serverName) ?? 0} item(s)${resourceText}`);
 	}
 	return lines.join("\n");
 }
@@ -1603,12 +2159,22 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("mcp", {
-		description: "Open MCP selector or manage inventory: /mcp | /mcp init | /mcp search [query] | /mcp status | /mcp tools <server> | /mcp reload",
+		description: "Open MCP selector or manage inventory: /mcp | /mcp help | /mcp doctor | /mcp init | /mcp search [query] | /mcp status | /mcp tools <server> | /mcp cache clear | /mcp reload",
 		handler: async (args, ctx) => {
 			const command = args.trim() || "status";
 
 			if (!args.trim()) {
 				await showMcpSelector(pi, ctx);
+				return;
+			}
+
+			if (command === "help" || command === "docs") {
+				await ctx.ui.editor("MCP help", formatMcpHelp());
+				return;
+			}
+
+			if (command === "doctor" || command === "check" || command === "self-test") {
+				await ctx.ui.editor("MCP doctor", formatMcpDoctor(safeLoadMcpState(ctx.cwd)));
 				return;
 			}
 
@@ -1618,6 +2184,15 @@ export default function (pi: ExtensionAPI) {
 				syncActiveMcpTools(pi, config);
 				if (directToolHydrationNeeded(config)) await hydrateDirectToolSurfaces(pi, ctx.cwd, ctx.signal, true);
 				ctx.ui.notify("MCP config layers and clients reloaded", "info");
+				return;
+			}
+
+			if (command === "cache clear" || command === "clear-cache") {
+				clearDiskInventoryCache();
+				resetRuntimeForConfigChange();
+				const config = safeLoadMcpState(ctx.cwd).effectiveConfig;
+				syncActiveMcpTools(pi, config);
+				ctx.ui.notify(`MCP inventory cache cleared: ${INVENTORY_CACHE_PATH}`, "info");
 				return;
 			}
 
@@ -1734,7 +2309,7 @@ export default function (pi: ExtensionAPI) {
 				return;
 			}
 
-			ctx.ui.notify("Usage: /mcp | /mcp init | /mcp status | /mcp search [query] | /mcp inspect <server> <tool> | /mcp call <server> <tool> [json] | /mcp tools <server> | /mcp load <server> <tool> | /mcp unload <mcp__server__tool> | /mcp reload", "warning");
+			ctx.ui.notify("Usage: /mcp | /mcp help | /mcp doctor | /mcp init | /mcp status | /mcp search [query] | /mcp inspect <server> <tool> | /mcp call <server> <tool> [json] | /mcp tools <server> | /mcp load <server> <tool> | /mcp unload <mcp__server__tool> | /mcp cache clear | /mcp reload", "warning");
 		},
 	});
 

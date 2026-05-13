@@ -1,6 +1,6 @@
 # Pi Agent Extensions
 
-This directory contains the local Pi extensions used to add web search, web fetch, MCP routing, client-credentials OAuth for provider gateways, ratio-based context compaction, inline bash expansion (`!{...}`), `/btw`, and small command utilities without forking Pi itself.
+This directory contains the local Pi extensions used to add web search, web fetch, MCP routing, client-credentials OAuth for provider gateways, inline bash expansion (`!{...}`), fish-backed user shell commands, `/side`, and small command utilities without forking Pi itself.
 
 The design goal is to stay close to Pi's native extension model. Extensions register Pi tools, slash commands, or lifecycle hooks, while the Pi runtime still owns sessions, model calls, rendering, and tool execution.
 
@@ -35,9 +35,18 @@ The sandbox may warn about a Pi lock file when this check is run from restricted
 | `mcp.ts` | Tools and `/mcp` command | Routes enabled MCP servers through search, inspect, and call tools. Can expose selected MCP tools directly to the model. |
 | `websearch.ts` | `websearch` tool | Searches current web content through Exa when available, with DuckDuckGo HTML search as a no-key fallback. |
 | `webfetch.ts` | `webfetch` tool | Fetches an HTTP(S) URL and returns markdown, text, or raw HTML with bounded output. |
+| `common-core/` | Shared helpers | Provides small shared tool-result, timeout, number clamp, entity decoding, and MCP JSON/SSE/text helpers used by web and MCP extensions. |
 | `bang.ts` | Inline expansion | Expands `!{command}` patterns inside user prompts before they reach the LLM (e.g. `What's in !{pwd}?`). |
-| `btw.ts` | `/btw` command | Runs a throw-away sidecar question that is not added to the current session context. |
-| `compaction.ts` | Status item, `/compact-ratio`, and compaction hook | Triggers compaction when context crosses a configured percentage of the active model context window. |
+| `inline-dollar.ts` | Inline command expansion | Adds `$:` autocomplete inside long prompts and expands `$:skill`, `$:prompt`, and `$:tool:<name>` markers before the prompt reaches the LLM. |
+| `fish-user-bash.ts` | `user_bash` hook | Runs user-triggered `!`/`!!` shell commands through fish and hot-reloads mise with `mise env -s fish`. |
+| `side.ts` | `/side` command | Runs a one-shot side question that is not added to the main session context. |
+| `status.ts` | `/status` command | Shows current Pi session, model, context, workflow, tools, commands, and git status. |
+| `usage.ts` + `usage-core/` | `/usage` command | Shows Pi and Codex usage/cost windows using the shared HUD overlay and markdown fallback. |
+| `ui-core/` | Shared TUI primitives | Provides the shared HUD overlay flow, close/markdown key handling, panel/table helpers, and default overlay placement used by `/status` and `/usage`. |
+| `workflow.ts` + `workflow-core/` | `/goal`, `/review`, `/autoresearch`, `/workflow`, workflow tools | Provides a shared durable workflow core with goal, review, and autoresearch controller layers. |
+| `git-status-widget.ts` | Below-editor widget | Shows live git branch, ahead/behind, staged, unstaged, and untracked counts without replacing the custom footer. |
+| `tps-tracker.ts` | Footer status item | Shows live and final assistant output speed as tokens/second through the existing footer status aggregation. |
+| `yeet.ts` | `/yeet` command | Adds all changes, commits them with a generated clear message, and pushes the current branch/upstream. |
 | `utils.ts` | Commands and hooks | Adds `/clear`, `/steer`, `/queue`, mise-aware bash hot reload, and documents Pi context-control hooks. |
 
 ## How Pi Prompt Exposure Works
@@ -79,7 +88,7 @@ The old pattern was:
 Minimal recreation:
 
 ```ts
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 function stripNativeSkillsBlock(prompt: string): string {
   return prompt
@@ -600,72 +609,16 @@ It fetches HTTP(S) URLs and returns bounded text:
 
 The extension refuses non-HTTP(S) URLs, caps response bytes, strips noisy HTML, and returns a clear message for non-text content.
 
-## Compaction Percentage
-
-`compaction.ts` backports the ratio-based compaction trigger while the core
-feature waits to be upstreamed.
-
-It uses Pi's native `ctx.getContextUsage()` and `ctx.compact()` extension
-surfaces. After each turn it compares current context usage with a model-relative
-ratio and starts compaction when the threshold is crossed.
-
-Default global setting:
-
-```jsonc
-{
-  "compaction": {
-    "trigger": {
-      "type": "contextRatio",
-      "ratio": 0.75
-    }
-  }
-}
-```
-
-`ratio` is relative to the active model's context window. `0.75` means compact
-at 75% whether the selected model has a 128k, 272k, or 1M token window. The
-extension clamps ratios to `0.01`-`0.99` and respects `compaction.enabled:
-false`.
-
-Configuration precedence:
-
-1. `PI_CONTEXT_COMPACTION_RATIO` or `PI_COMPACTION_RATIO`
-2. Project `.pi/settings.json`
-3. Global `~/.pi/agent/settings.json`
-4. Built-in extension default `0.75`
-
-Supported project override:
-
-```jsonc
-{
-  "compaction": {
-    "enabled": true,
-    "trigger": { "type": "contextRatio", "ratio": 0.70 }
-  }
-}
-```
-
-The footer shows the ratio threshold inline after Pi's native context segment,
-for example:
-
-```text
-42.0%/272k (auto) ctx 42%/75%
-```
-
-Useful command:
-
-```text
-/compact-ratio
-/compact-ratio now
-```
-
-`/compact-ratio` reports the active threshold, source, token estimate, and model
-context window. `/compact-ratio now` forces compaction immediately.
-
-When Pi core gains native `compaction.trigger` support, remove this extension and
-keep the same settings JSON.
-
 ## Inline Bang Expansion
+
+`inline-dollar.ts` adds a middle-of-prompt command lane. Type `$:` anywhere in the editor to open completions for prompt templates, skills, and tools without moving to the start of the prompt. On submit:
+
+- `$:skill:name` or `$:name` for a matching skill expands the skill file inline.
+- `$:template` expands a prompt template inline.
+- `$:tool:read` activates a registered tool and removes the marker.
+- `${:template arg one "arg two"}` supports template arguments using Pi's `$1`, `$@`, `$ARGUMENTS`, and `${@:N[:L]}` substitutions.
+
+Interactive slash commands that only make sense at the editor/UI level are represented as inline intent notes; run those as normal leading `/command` invocations when they need to mutate Pi UI state.
 
 `bang.ts` expands inline `!{command}` snippets in user prompts before the prompt reaches the model.
 
@@ -686,17 +639,17 @@ Operational boundaries:
 - Failed commands are replaced with a `[bang error: ...]` marker so the model sees that expansion failed.
 - Use this for small, read-style command substitutions. Avoid long-running, destructive, or noisy commands inside prompts.
 
-## BTW Sidecar
+## Side
 
-`btw.ts` adds:
+`side.ts` adds:
 
 ```text
-/btw <question>
-/btw --tools <question>
-/btw -t <question>
+/side <question>
+/side --tools <question>
+/side -t <question>
 ```
 
-`/btw` is a throw-away sidecar. Its answer is shown to the user but is not added to the active session context. Both modes read a snapshot of the active parent session context, so status questions such as "what are we doing?" can be answered from the current conversation.
+`/side` is a one-shot side channel. Its answer is shown to the user but is not added to the main session context. Both modes read a snapshot of the active parent session context, so status questions such as "what are we doing?" can be answered from the current conversation.
 
 Modes:
 
@@ -706,10 +659,173 @@ Modes:
 Useful environment variable:
 
 ```sh
-PI_BTW_TIMEOUT_MS=120000
+PI_SIDE_TIMEOUT_MS=120000
 ```
 
-The sidecar is intentionally read-only. It should not edit files, mutate sessions, or run shell commands.
+The side channel is intentionally read-only. It should not edit files, mutate sessions, or run shell commands.
+
+## Status
+
+`status.ts` adds:
+
+```text
+/status
+```
+
+`/status` opens a compact, read-only HUD without adding anything to the model context. It uses the shared `ui-core` HUD overlay and panel primitives, avoiding the multi-line editor dialog while rendering as a bordered, theme-backed panel with a small shadow, lower page position, fixed grid rows, and table-style model usage so it stands apart from the transcript without runover. Press `esc`, `ctrl+c`, or `q` to close it; press `m` or `e` to open the full markdown report. The HUD includes the current directory, session file, parent session, branch entry counts, model, thinking level, context usage, active workflow, active tools, command counts, and git branch / dirty state. It also computes live session stats from the active branch: start time, first/last activity, total elapsed time, idle/wall-gap time, inferred active time, approximate API/tool time, turn counts, message role counts, tool success counts, per-tool usage, and per-model token/cost totals.
+
+`git-status-widget.ts` adds a compact live widget below the editor. It intentionally does not replace the footer; it uses the existing status aggregation instead. The widget refreshes on session start, input, tool completion, turn end, and a short interval. It shows:
+
+```text
+git  main ↑1 +2 ~3 ?1
+```
+
+Legend: `↑/↓` ahead/behind, `+` staged, `~` unstaged, `?` untracked. Clean repositories show `clean`; non-git directories hide the widget.
+
+`tps-tracker.ts` publishes a `speed` footer status. During streaming it estimates output speed from deltas until provider usage arrives; at agent end it leaves the final tokens/second value. The existing custom footer automatically includes this status alongside other extension statuses.
+
+## Yeet
+
+`yeet.ts` adds:
+
+```text
+/yeet
+/yeet <commit subject override>
+```
+
+`/yeet` is the local "ship this small change" command. It runs the git workflow directly rather than asking the model to do it:
+
+1. verifies the current directory is inside a git worktree and on a branch,
+2. runs `git add -A`,
+3. inspects `git diff --cached --name-status --find-renames`,
+4. generates a clear commit subject and body from the staged file operations,
+5. commits with that message,
+6. pushes to the existing upstream, or `git push -u <remote> <branch>` when no upstream exists,
+7. reports the pushed URL, using a GitHub compare URL for non-`main` branches when possible.
+
+If there is no remote, it commits locally and reports that push was skipped. Passing text after `/yeet` uses that text as the commit subject while keeping the generated body that lists changed files.
+
+## Workflow core, Goal, Review, and Autoresearch
+
+`workflow.ts` plus `workflow-core/` add a shared durable workflow core with three controller layers: `goal`, `review`, and `autoresearch`.
+
+Commands:
+
+```text
+/goal <objective>
+/goal status
+/goal continue
+/goal pause [note]
+/goal resume [note]
+/goal edit <new objective>
+/goal complete [note]
+/goal clear [note]
+
+/review
+/review status
+/review continue
+/review --base <branch>
+/review --commit <sha>
+/review <custom instructions>
+/review clear [note]
+
+/autoresearch <objective>
+/autoresearch status
+/autoresearch pause [note]
+/autoresearch resume [note]
+/autoresearch export
+/autoresearch expand
+/autoresearch collapse
+/autoresearch fullscreen
+/autoresearch finalize
+/autoresearch clear
+
+/workflow status
+/workflow clear [controller]
+```
+
+Model-facing tools:
+
+```text
+create_goal
+update_goal
+stop_goal
+clear_goal
+create_review
+update_review
+stop_review
+clear_review
+create_autoresearch
+update_autoresearch
+stop_autoresearch
+clear_autoresearch
+workflow_status
+workflow_update
+init_experiment
+research_probe
+run_preflight
+run_experiment
+log_experiment
+finalize_autoresearch
+```
+
+The workflow core persists append-only events in the active session branch as custom entries, so state survives reloads and respects session branching. The `create_*`, `update_*`, `stop_*`, and `clear_*` tools let the agent start, revise, pause/complete/fail/budget-limit, and clear workflows itself from natural language requests. `stop_*` defaults to pausing so state is preserved; `clear_*` is for explicit removal.
+
+When a workflow exists, the footer shows a small status-line badge with white text on a 20%-blend coloured background: gold for `goal`, burgundy/purple for `review`, and aqua for `autoresearch`. The badge stays visible for the latest non-cleared workflow between updates, including paused/complete/failed states, and clears only when the workflow is explicitly cleared or no workflow exists. It is refreshed from workflow-core state on session/tree/turn changes and after workflow slash commands.
+
+Prompt sources:
+
+- `goal` follows Codex `/goal` continuation, objective-update, and completion-audit doctrine: preserve full objective, work from evidence, avoid redefining success, and only complete after requirement-by-requirement verification.
+- `review` follows Codex `/review` rubric: actionable bugs only, changed-line discipline, P0-P3 priorities, exact file/line locations, overall correctness, and no fixes unless requested.
+- `autoresearch` follows `pi-autoresearch`'s skill and extension doctrine: write/resume from `autoresearch.md`, use `research_probe` for throwaway evidence gathering, use `run_preflight` for smoke tests, run `autoresearch.sh`, emit `METRIC name=value`, use `init_experiment`/`run_experiment`/`log_experiment`, keep winners, revert losers, maintain ideas/checks files, and loop until interrupted.
+
+The `goal` controller keeps a durable objective visible in the main workflow and auto-continues while active until the model marks it complete, it is paused/cleared, or `PI_WORKFLOW_MAX_AUTO_TURNS` is reached. The `review` controller reviews current changes, base-branch diffs, commits, or custom instructions in the main session. The `autoresearch` controller runs measured experiment loops with `init_experiment`, `run_experiment`, and `log_experiment`; kept runs are committed when possible and failed/discarded runs are reverted while preserving autoresearch files.
+
+Autoresearch workflow extras now include:
+
+- live TUI widget sourced from `autoresearch.jsonl` and active workflow state,
+- compact/expanded widget modes via `/autoresearch expand`, `/autoresearch collapse`, and `Ctrl+Shift+T`,
+- fullscreen/editor dashboard via `/autoresearch fullscreen` and `Ctrl+Shift+F`,
+- `/autoresearch export` local browser dashboard,
+- confidence score using MAD-style noise estimation after enough runs,
+- executable hook scripts at `autoresearch.hooks/before.sh` and `autoresearch.hooks/after.sh`, receiving JSON on stdin,
+- hook log entries appended to `autoresearch.jsonl`,
+- before-hook output included in the experiment result, and after-hook output queued back as steering context,
+- autoresearch-specific compaction summary and post-compaction continuation,
+- `/autoresearch finalize` and `finalize_autoresearch` report generation at `autoresearch.finalize.md`,
+- `autoresearch.config.json` support for `workingDir`, `maxIterations`, `maxWallClockSeconds`, `maxExperimentSeconds`, `maxConsecutiveFailures`, `maxConsecutiveDiscards`, `maxConsecutiveCrashes`, `maxCommandRepeats`, and `requirePreflight`,
+- `autoresearch.checks.sh` support that blocks `keep` on check failure,
+- `autoresearch.preflight.sh` plus `run_preflight` for cheap smoke tests before expensive/batch/training runs,
+- `research_probe`, which launches a throwaway `pi --mode json -p --no-session` scout with read/search tools for compact evidence gathering outside the main context,
+- code-level anti-thrash guard that logs guard events and steers the model after repeated non-keeps, repeated descriptions, or repeated ASI hypotheses,
+- ML Intern-inspired benchmark/evidence hygiene in the workflow prompt: source-grounded reconnaissance for stale domains, benchmark/data audits, smoke-first batch runs, anti-thrash loop breaks, and structured actionable side information (`asi`) on `log_experiment` entries.
+
+Generic budget example:
+
+```jsonc
+// autoresearch.config.json
+{
+  "workingDir": ".",
+  "maxIterations": 50,
+  "maxWallClockSeconds": 14400,
+  "maxExperimentSeconds": 900,
+  "maxConsecutiveFailures": 5,
+  "maxConsecutiveDiscards": 4,
+  "maxConsecutiveCrashes": 2,
+  "maxCommandRepeats": 20,
+  "requirePreflight": false
+}
+```
+
+### ML Intern review notes carried forward
+
+Reviewing `huggingface/ml-intern` surfaced patterns worth keeping in Pi's autoresearch workflow without turning the extension into an ML-only agent:
+
+- Research before implementation when the domain is stale or fast-moving. ML Intern's prompt starts ML work from papers, citation graphs, current docs, and working examples before code; the autoresearch prompt now asks for source-grounded reconnaissance and an `Evidence / Recipes` section in `autoresearch.md`.
+- Benchmark and data audits should be explicit. ML Intern repeatedly validates dataset shape, current APIs, job preflights, and output persistence; autoresearch sessions now ask agents to record metric meaning, representative inputs, noise controls, and cheating risks.
+- Loops need anti-thrash pressure. ML Intern has doom-loop and unfinished-plan guards; autoresearch now has a code-level anti-thrash guard plus prompt guidance to break repeated command/tool/idea patterns instead of retrying the same failure.
+- Expensive fan-out should be smoke-tested first. ML Intern submits one job before a batch; autoresearch now has `run_preflight` and optional `autoresearch.preflight.sh`, with `requirePreflight` available in config.
+- Each run should leave machine-readable learning behind. `log_experiment` now accepts optional `asi` fields such as `hypothesis`, `evidence`, `changed`, `learned`, `next_focus`, and `risk`, which are persisted to `autoresearch.jsonl` and included in finalization notes.
 
 ## Utilities
 
@@ -729,11 +845,12 @@ Commands:
 
 `/queue` sends a follow-up message that waits until the active agent work finishes.
 
-The extension also hot-reloads mise for bash:
+The extension also hot-reloads mise for the model-facing bash tool:
 
 - On session start, it registers a bash tool with `eval "$(mise env -s bash)"` as the command prefix.
-- On user bash operations, it wraps execution with the same mise environment refresh.
 - Before agent start, it appends a short system prompt note so the model understands bash commands already run with the refreshed mise environment.
+
+`fish-user-bash.ts` handles user-triggered shell commands (`!`/`!!`). It is the local fish/mise version of the reference `zsh-user-bash` extension from `my-pi-setup`: it launches fish non-interactively, lets fish read the normal config, then runs `mise env -s fish | source` immediately before the user command so newly changed mise tools are available without restarting Pi.
 
 `utils.ts` also uses the Pi context-control hooks described in
 [Historical: Skills Context Reduction](#historical-skills-context-reduction):

@@ -1,5 +1,13 @@
-import { Type } from "@mariozechner/pi-ai";
-import { defineTool, type ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { Type } from "@earendil-works/pi-ai";
+import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import {
+	clampNumber,
+	decodeEntities,
+	extractMcpText,
+	linkedSignal,
+	parseJsonOrSse,
+	textResult,
+} from "./common-core/core.js";
 
 const EXA_MCP_URL = "https://mcp.exa.ai/mcp";
 const DUCKDUCKGO_HTML_URL = "https://html.duckduckgo.com/html/";
@@ -9,61 +17,6 @@ const MAX_RESULTS = 10;
 const DEFAULT_CONTEXT_CHARS = 10_000;
 
 type SearchProvider = "auto" | "exa" | "duckduckgo";
-
-function textResult(text: string, details: Record<string, unknown> = {}) {
-	return {
-		content: [{ type: "text" as const, text }],
-		details,
-	};
-}
-
-function clampNumber(value: unknown, fallback: number, min: number, max: number): number {
-	if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
-	return Math.max(min, Math.min(max, Math.trunc(value)));
-}
-
-function linkedSignal(parent: AbortSignal | undefined, timeoutMs: number) {
-	const controller = new AbortController();
-	const timer = setTimeout(() => controller.abort(new Error(`Timed out after ${timeoutMs}ms`)), timeoutMs);
-	const abort = () => controller.abort(parent?.reason ?? new Error("Aborted"));
-
-	if (parent) {
-		if (parent.aborted) abort();
-		else parent.addEventListener("abort", abort, { once: true });
-	}
-
-	return {
-		signal: controller.signal,
-		cleanup: () => {
-			clearTimeout(timer);
-			parent?.removeEventListener("abort", abort);
-		},
-	};
-}
-
-function decodeEntities(input: string): string {
-	const named: Record<string, string> = {
-		amp: "&",
-		lt: "<",
-		gt: ">",
-		quot: "\"",
-		apos: "'",
-		nbsp: " ",
-		ndash: "-",
-		mdash: "-",
-		hellip: "...",
-	};
-
-	return input.replace(/&(#x?[0-9a-f]+|[a-z][a-z0-9]+);/gi, (_match, entity: string) => {
-		if (entity[0] === "#") {
-			const radix = entity[1]?.toLowerCase() === "x" ? 16 : 10;
-			const digits = radix === 16 ? entity.slice(2) : entity.slice(1);
-			const codepoint = Number.parseInt(digits, radix);
-			return Number.isFinite(codepoint) ? String.fromCodePoint(codepoint) : _match;
-		}
-		return named[entity.toLowerCase()] ?? _match;
-	});
-}
 
 function stripTags(input: string): string {
 	return decodeEntities(input.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim());
@@ -83,39 +36,6 @@ function unwrapDuckDuckGoUrl(raw: string): string {
 function truncateText(text: string, maxChars: number): string {
 	if (text.length <= maxChars) return text;
 	return `${text.slice(0, maxChars)}\n\n[websearch truncated ${text.length - maxChars} characters]`;
-}
-
-function parseJsonOrSse(raw: string): unknown {
-	const trimmed = raw.trim();
-	if (trimmed.startsWith("{")) return JSON.parse(trimmed);
-
-	for (const line of trimmed.split(/\r?\n/)) {
-		if (!line.startsWith("data:")) continue;
-		const payload = line.slice("data:".length).trim();
-		if (!payload || payload === "[DONE]") continue;
-		return JSON.parse(payload);
-	}
-
-	throw new Error("MCP server returned neither JSON nor SSE data");
-}
-
-function extractMcpText(result: any): string {
-	const content = result?.content ?? result?.result?.content;
-	if (Array.isArray(content)) {
-		const text = content
-			.map((item) => {
-				if (typeof item?.text === "string") return item.text;
-				if (typeof item === "string") return item;
-				return "";
-			})
-			.filter(Boolean)
-			.join("\n\n");
-		if (text.trim()) return text.trim();
-	}
-
-	if (typeof result?.text === "string") return result.text;
-	if (typeof result?.result === "string") return result.result;
-	return JSON.stringify(result?.result ?? result, null, 2);
 }
 
 async function callExa(query: string, numResults: number, type: string, livecrawl: string, contextMaxCharacters: number, signal: AbortSignal | undefined): Promise<string> {
@@ -155,7 +75,7 @@ async function callExa(query: string, numResults: number, type: string, livecraw
 			throw new Error(`Exa MCP HTTP ${response.status}: ${raw.slice(0, 500)}`);
 		}
 
-		const payload: any = parseJsonOrSse(raw);
+		const payload: any = parseJsonOrSse(raw, "MCP server returned neither JSON nor SSE data");
 		if (payload.error) throw new Error(payload.error.message ?? JSON.stringify(payload.error));
 		return extractMcpText(payload.result ?? payload);
 	} finally {
@@ -174,7 +94,7 @@ async function searchDuckDuckGo(query: string, numResults: number, signal: Abort
 				accept: "text/html,application/xhtml+xml",
 				"content-type": "application/x-www-form-urlencoded",
 				"user-agent":
-					"Mozilla/5.0 (compatible; pi-websearch/1.0; +https://github.com/mariozechner/pi)",
+					"Mozilla/5.0 (compatible; pi-websearch/1.0; +https://github.com/earendil-works/pi/tree/main)",
 			},
 			body,
 		});
