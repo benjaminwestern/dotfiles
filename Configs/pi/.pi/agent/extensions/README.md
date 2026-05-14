@@ -1,6 +1,6 @@
 # Pi Agent Extensions
 
-This directory contains the local Pi extensions used to add web search, web fetch, MCP routing, client-credentials OAuth for provider gateways, inline bash expansion (`!{...}`), fish-backed user shell commands, `/side`, and small command utilities without forking Pi itself.
+This directory contains the local Pi extensions used to add web search, web fetch, MCP routing, client-credentials OAuth for provider gateways, model-scoped system prompts, inline bash expansion (`!{...}`), fish-backed user shell commands, `/side`, and small command utilities without forking Pi itself.
 
 The design goal is to stay close to Pi's native extension model. Extensions register Pi tools, slash commands, or lifecycle hooks, while the Pi runtime still owns sessions, model calls, rendering, and tool execution.
 
@@ -63,6 +63,7 @@ Use `settings.json` only for Pi-native settings such as model defaults, transpor
 | `ui-core/` | Shared TUI primitives | Provides the shared HUD overlay flow, close/markdown key handling, panel/table helpers, and default overlay placement used by `/status` and `/usage`. |
 | `workflow.ts` + `workflow-core/` | `/goal`, `/review`, `/autoresearch`, `/workflow`, workflow tools | Provides a shared durable workflow core with goal, review, and autoresearch controller layers. |
 | `git-status-widget.ts` | Below-editor widget | Shows live git branch, ahead/behind, staged, unstaged, and untracked counts without replacing the custom footer. |
+| `zz-model-system.ts` | `before_agent_start` hook | Appends Markdown from `~/.pi/agent/model-system/` and project `.pi/model-system/` only when the current model matches the file convention. |
 | `tps-tracker.ts` | Footer status item | Shows live and final assistant output speed as tokens/second through the existing footer status aggregation. |
 | `yeet.ts` | `/yeet` command | Adds all changes, commits them with a generated clear message, and pushes the current branch/upstream. |
 | `utils.ts` | Commands and hooks | Adds `/clear`, `/steer`, `/queue`, mise-aware bash hot reload, and documents Pi context-control hooks. |
@@ -878,6 +879,39 @@ Reviewing `huggingface/ml-intern` surfaced patterns worth keeping in Pi's autore
 - Loops need anti-thrash pressure. ML Intern has doom-loop and unfinished-plan guards; autoresearch now has a code-level anti-thrash guard plus prompt guidance to break repeated command/tool/idea patterns instead of retrying the same failure.
 - Expensive fan-out should be smoke-tested first. ML Intern submits one job before a batch; autoresearch now has `run_preflight` and optional `autoresearch.preflight.sh`, with `requirePreflight` available in config.
 - Each run should leave machine-readable learning behind. `log_experiment` now accepts optional `asi` fields such as `hypothesis`, `evidence`, `changed`, `learned`, `next_focus`, and `risk`, which are persisted to `autoresearch.jsonl` and included in finalization notes.
+
+## Model-scoped System Prompts
+
+`zz-model-system.ts` appends model-specific Markdown to the system prompt during `before_agent_start`. It is intentionally named with a `zz-` prefix so it normally runs after other local prompt customisers.
+
+Prompt files live in:
+
+```text
+~/.pi/agent/model-system/
+<ancestor>/.pi/model-system/
+```
+
+Project files are layered from outermost ancestor to nearest project, after global files. For each directory, matching files are appended in this order:
+
+1. `all.md` — every model
+2. `<provider>.md` — every model from that provider
+3. `<provider>/all.md` — every model from that provider, directory style
+4. `<provider>/index.md` — every model from that provider, directory style
+5. `<provider>/<model-id>.md` — exact model ID; model ID slashes may be real subdirectories
+6. `<provider>/<model-id-with-slashes-as-__>.md` — exact model ID with `/` replaced by `__`
+7. `<provider>__<model-id-with-slashes-as-__>.md` — flat exact-model file
+
+Examples:
+
+```text
+~/.pi/agent/model-system/openai-codex.md
+~/.pi/agent/model-system/openai-codex/all.md
+~/.pi/agent/model-system/openai-codex/gpt-5.5.md
+~/.pi/agent/model-system/google/gemini-3-pro-preview.md
+~/.pi/agent/model-system/fireworks/accounts/fireworks/routers/kimi-k2p6-turbo.md
+```
+
+The extension registers no commands. It hot-loads matching files on every user turn, immediately before the provider request is built.
 
 ## Utilities
 
