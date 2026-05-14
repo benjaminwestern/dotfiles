@@ -6,6 +6,7 @@ import { Type } from "typebox";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import {
 	activeWorkflow,
+	appendWorkflowEvent,
 	changeWorkflowStatus,
 	clearWorkflow,
 	currentWorkflowForStatusLine,
@@ -68,6 +69,7 @@ const DEFAULT_WORKFLOW_CONFIG: WorkflowConfig = {
 };
 
 const autoRuntimes = new Map<string, AutoRuntime>();
+const compactionWorkflowSnapshots = new Map<string, WorkflowRecord[]>();
 const lastExperimentBySession = new Map<string, { command: string; durationSeconds: number; exitCode: number | null; passed: boolean; output: string; parsedMetrics: Record<string, number> | null; checksPass: boolean | null; checksOutput: string; checksDuration: number }>();
 let dashboardServer: Server | null = null;
 let dashboardUrl: string | null = null;
@@ -264,6 +266,74 @@ function pauseOtherActiveWorkflows(pi: ExtensionAPI, ctx: ExtensionContext, cont
 	for (const workflow of workflows(ctx).filter((item) => isLive(item) && item.controller !== controller)) {
 		changeWorkflowStatus(pi, workflow, "paused", reason);
 	}
+}
+
+function workflowSnapshotKey(ctx: ExtensionContext | ExtensionCommandContext): string {
+	return ctx.sessionManager.getSessionId();
+}
+
+function cloneWorkflowRecord(workflow: WorkflowRecord): WorkflowRecord {
+	return {
+		...workflow,
+		data: { ...workflow.data },
+		events: [...workflow.events],
+	};
+}
+
+function captureWorkflowSnapshot(ctx: ExtensionContext | ExtensionCommandContext) {
+	const live = workflows(ctx).filter(isLive).map(cloneWorkflowRecord);
+	const key = workflowSnapshotKey(ctx);
+	if (live.length === 0) compactionWorkflowSnapshots.delete(key);
+	else compactionWorkflowSnapshots.set(key, live);
+}
+
+function workflowNeedsRefresh(current: WorkflowRecord, snapshot: WorkflowRecord): boolean {
+	return current.updatedAt < snapshot.updatedAt ||
+		current.controller !== snapshot.controller ||
+		current.title !== snapshot.title ||
+		current.objective !== snapshot.objective ||
+		current.status !== snapshot.status ||
+		current.lastNote !== snapshot.lastNote ||
+		current.nextAction !== snapshot.nextAction ||
+		JSON.stringify(current.data) !== JSON.stringify(snapshot.data);
+}
+
+function restoreWorkflowSnapshot(pi: ExtensionAPI, ctx: ExtensionContext | ExtensionCommandContext): WorkflowRecord[] {
+	const key = workflowSnapshotKey(ctx);
+	const snapshots = compactionWorkflowSnapshots.get(key) ?? [];
+	compactionWorkflowSnapshots.delete(key);
+	if (snapshots.length === 0) return [];
+
+	const currentById = new Map(workflows(ctx).map((workflow) => [workflow.id, workflow]));
+	const restored: WorkflowRecord[] = [];
+	for (const snapshot of snapshots) {
+		const current = currentById.get(snapshot.id);
+		if (!current) {
+			appendWorkflowEvent(pi, "workflow_started", snapshot.id, snapshot.controller, {
+				title: snapshot.title,
+				objective: snapshot.objective,
+				status: snapshot.status,
+				note: snapshot.lastNote,
+				nextAction: snapshot.nextAction,
+				data: snapshot.data,
+			});
+			restored.push(snapshot);
+			continue;
+		}
+
+		if (workflowNeedsRefresh(current, snapshot)) {
+			appendWorkflowEvent(pi, "workflow_updated", snapshot.id, snapshot.controller, {
+				title: snapshot.title,
+				objective: snapshot.objective,
+				status: snapshot.status,
+				note: snapshot.lastNote,
+				nextAction: snapshot.nextAction,
+				data: snapshot.data,
+			});
+			restored.push(snapshot);
+		}
+	}
+	return restored;
 }
 
 async function execText(pi: ExtensionAPI, cwd: string, command: string, timeout = 10_000): Promise<string | undefined> {
@@ -1641,6 +1711,7 @@ export default function workflowExtension(pi: ExtensionAPI) {
 	});
 
 	pi.on("session_shutdown", async (_event, ctx) => {
+		compactionWorkflowSnapshots.delete(workflowSnapshotKey(ctx));
 		if (ctx.hasUI) {
 			ctx.ui.setWidget("autoresearch", undefined);
 			ctx.ui.setStatus(WORKFLOW_STATUS_KEY, undefined);
@@ -1651,6 +1722,7 @@ export default function workflowExtension(pi: ExtensionAPI) {
 	});
 
 	pi.on("session_before_compact", async (event, ctx) => {
+		captureWorkflowSnapshot(ctx);
 		if (!activeWorkflow(ctx, "autoresearch") && autoresearchSummary(ctx.cwd).runs.length === 0) return undefined;
 		return {
 			compaction: {
@@ -1662,8 +1734,11 @@ export default function workflowExtension(pi: ExtensionAPI) {
 	});
 
 	pi.on("session_compact", async (_event, ctx) => {
+		restoreWorkflowSnapshot(pi, ctx);
 		bumpWorkflowStatusLine(ctx);
 		renderAutoresearchWidget(ctx);
+		const goal = activeWorkflow(ctx, "goal");
+		if (goal?.status === "active") sendWorkflowPrompt(pi, goalController, goal, "continue");
 		const workflow = activeWorkflow(ctx, "autoresearch");
 		if (workflow?.status === "active") pi.sendUserMessage("Continue autoresearch after compaction. Use persisted autoresearch state and run the next experiment now.", { deliverAs: "followUp" });
 	});

@@ -3,8 +3,17 @@
   "defaultProvider": "openai-codex",
   "defaultModel": "gpt-5.5",
   "defaultThinkingLevel": "high",
-  "transport": "sse",
-  "npmCommand": ["mise", "exec", "node@latest", "--", "npm"],
+  "compaction": {
+    "reserveTokens": 31250,
+    "keepRecentTokens": 25000
+  },
+  "npmCommand": [
+    "mise",
+    "exec",
+    "node@latest",
+    "--",
+    "npm"
+  ],
   "enabledModels": [
     "google/gemini-3-flash-preview",
     "opencode-go/deepseek-v4-flash",

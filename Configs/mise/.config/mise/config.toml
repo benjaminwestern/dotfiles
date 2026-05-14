@@ -41,9 +41,10 @@ bun = "latest"
 "npm:@playwright/cli" = "latest"
 "npm:@googleworkspace/cli" = "latest"
 "npm:markit-ai" = "latest"
-"npm:@mariozechner/pi-coding-agent" = "latest"
+"npm:@earendil-works/pi-coding-agent" = "latest"
 "npm:mcporter" = "latest"
 "npm:@kitlangton/ghui" = "latest"
+"npm:hunkdiff" = "latest"
 
 python = "latest"
 uv = "latest"
@@ -129,6 +130,14 @@ git push
 #   brew services start ollama
 #   brew services stop ollama
 #   brew services restart ollama
+#
+# Note on Embedding Models:
+# The current recommended local RAG standard is `nomic-embed-text`.
+# It provides 768 dimensions, an 8192 context window, and uses the Apache 2.0 license.
+# To switch from the default `embeddinggemma:300m`, set:
+#   OLLAMA_EMBED_MODEL="nomic-embed-text"
+# in your ~/.config/mise/.env file.
+#
 # Mise tasks below only manage model workflows against that server.
 [tasks.pull-hf]
 description = "Import a HuggingFace GGUF model into Ollama for use with Pi"
@@ -143,30 +152,30 @@ run = "$HOME/.config/mise/scripts/pull-hf.sh {{arg(name='hf_repo')}} {{arg(name=
 description = "Pull configured models; assumes the Homebrew-managed Ollama daemon is running"
 run = """
 ollama pull "${OLLAMA_GEMMA4_MODEL:-gemma4:e2b-it-q4_K_M}"
-ollama pull "${OLLAMA_EMBED_MODEL:-embeddinggemma:300m}"
+ollama pull "${OLLAMA_EMBED_MODEL:-nomic-embed-text}"
 """
 
 [tasks.ollama-warm-local-models]
 description = "Load configured models; assumes the Homebrew-managed Ollama daemon is running"
 run = """
 ollama run "${OLLAMA_GEMMA4_MODEL:-gemma4:e2b-it-q4_K_M}" "Reply with OK." --keepalive "${OLLAMA_KEEP_ALIVE:-24h}"
-ollama run "${OLLAMA_EMBED_MODEL:-embeddinggemma:300m}" "warmup" --keepalive "${OLLAMA_KEEP_ALIVE:-24h}" >/dev/null
+ollama run "${OLLAMA_EMBED_MODEL:-nomic-embed-text}" "warmup" --keepalive "${OLLAMA_KEEP_ALIVE:-24h}" >/dev/null
 """
 
 [tasks.ollama-unload-local-models]
 description = "Unload the configured local Ollama models"
 run = """
 ollama stop "${OLLAMA_GEMMA4_MODEL:-gemma4:e2b-it-q4_K_M}" || true
-ollama stop "${OLLAMA_EMBED_MODEL:-embeddinggemma:300m}" || true
+ollama stop "${OLLAMA_EMBED_MODEL:-nomic-embed-text}" || true
 """
 
 [tasks.ollama-up]
 description = "Pull, warm, and show model status; daemon lifecycle stays with Homebrew"
 run = """
 ollama pull "${OLLAMA_GEMMA4_MODEL:-gemma4:e2b-it-q4_K_M}"
-ollama pull "${OLLAMA_EMBED_MODEL:-embeddinggemma:300m}"
+ollama pull "${OLLAMA_EMBED_MODEL:-nomic-embed-text}"
 ollama run "${OLLAMA_GEMMA4_MODEL:-gemma4:e2b-it-q4_K_M}" "Reply with OK." --keepalive "${OLLAMA_KEEP_ALIVE:-24h}"
-ollama run "${OLLAMA_EMBED_MODEL:-embeddinggemma:300m}" "warmup" --keepalive "${OLLAMA_KEEP_ALIVE:-24h}" >/dev/null
+ollama run "${OLLAMA_EMBED_MODEL:-nomic-embed-text}" "warmup" --keepalive "${OLLAMA_KEEP_ALIVE:-24h}" >/dev/null
 echo ""
 echo "Installed models:"
 ollama list
@@ -179,7 +188,7 @@ ollama ps
 description = "Show configured, installed, and loaded Ollama models"
 run = """
 echo "Chat model:      ${OLLAMA_GEMMA4_MODEL:-gemma4:e2b-it-q4_K_M}"
-echo "Embedding model: ${OLLAMA_EMBED_MODEL:-embeddinggemma:300m}"
+echo "Embedding model: ${OLLAMA_EMBED_MODEL:-nomic-embed-text}"
 echo "Ollama host:     ${OLLAMA_HOST:-127.0.0.1:11434}"
 echo "Daemon owner:    Homebrew (brew services start/stop/restart ollama)"
 echo ""
