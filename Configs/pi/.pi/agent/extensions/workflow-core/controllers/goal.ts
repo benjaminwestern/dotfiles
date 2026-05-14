@@ -1,4 +1,14 @@
-import type { WorkflowController, WorkflowRecord } from "../core.js";
+import {
+	formatWorkflowDuration,
+	workflowActiveElapsedMs,
+	workflowDisplayTurns,
+	workflowStartedAt,
+	workflowTriggers,
+	workflowUpdatedAt,
+	workflowWallClockMs,
+	type WorkflowController,
+	type WorkflowRecord,
+} from "../core.js";
 
 function workflowHeader(workflow: WorkflowRecord): string {
 	return `<workflow>
@@ -15,7 +25,9 @@ function budgetBlock(workflow: WorkflowRecord): string {
 	const lines = ["Budget:"];
 	if (tokenBudget !== undefined) lines.push(`- Token budget: ${tokenBudget}`);
 	if (autoTurns !== undefined) lines.push(`- Auto turns used: ${autoTurns}`);
-	if (tokenBudget === undefined && autoTurns === undefined) lines.push("- No explicit token budget is recorded for this workflow.");
+	lines.push(`- Wall clock: ${formatWorkflowDuration(workflowWallClockMs(workflow))}`);
+	lines.push(`- Active runtime: ${formatWorkflowDuration(workflowActiveElapsedMs(workflow))}`);
+	if (tokenBudget === undefined && autoTurns === undefined) lines.push("- No explicit token/turn budget is recorded for this workflow.");
 	return lines.join("\n");
 }
 
@@ -99,8 +111,12 @@ First audit the current state against the objective. Then continue from the most
 			"",
 			`- Status: ${workflow.status}`,
 			`- Objective: ${workflow.objective}`,
-			`- Started: ${workflow.createdAt}`,
-			`- Updated: ${workflow.updatedAt}`,
+			`- Started: ${workflowStartedAt(workflow)}`,
+			`- Updated: ${workflowUpdatedAt(workflow)}`,
+			`- Wall clock: ${formatWorkflowDuration(workflowWallClockMs(workflow))}`,
+			`- Active runtime: ${formatWorkflowDuration(workflowActiveElapsedMs(workflow))}`,
+			`- Chat turns: ${workflowDisplayTurns(workflow)}`,
+			`- Triggers: ${workflowTriggers(workflow)}`,
 			`- Events: ${workflow.events.length}`,
 		];
 		if (workflow.lastNote) lines.push(`- Last note: ${workflow.lastNote}`);

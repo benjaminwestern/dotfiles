@@ -787,11 +787,20 @@ Commands:
 /workflow clear [controller]
 ```
 
+The workflow slash commands provide first-argument tab completion for their verbs. For example, `/goal <Tab>` lists `status`, `continue`, `pause`, `resume`, `edit`, `complete`, and `clear`; `/goal r<Tab>` narrows to `resume`. Completion is intentionally limited to the first argument so free-form goal objectives remain easy to type.
+
 Config lives in `~/.pi/agent/workflow.json`, with project overrides at `.pi/workflow.json`:
 
 ```jsonc
 {
-  "maxAutoTurns": 20
+  "maxAutoTurns": 20,
+  "settledMs": 800,
+  "autoResumeOnSessionStart": false,
+  "autoContinue": {
+    "goal": true,
+    "review": false,
+    "autoresearch": true
+  }
 }
 ```
 
@@ -824,7 +833,7 @@ finalize_autoresearch
 
 The workflow core persists append-only events in the active session branch as custom entries, so state survives reloads and respects session branching. The `create_*`, `update_*`, `stop_*`, and `clear_*` tools let the agent start, revise, pause/complete/fail/budget-limit, and clear workflows itself from natural language requests. `stop_*` defaults to pausing so state is preserved; `clear_*` is for explicit removal.
 
-When a workflow exists, the footer shows a small status-line badge with white text on a 20%-blend coloured background: gold for `goal`, burgundy/purple for `review`, and aqua for `autoresearch`. The badge stays visible for the latest non-cleared workflow between updates, including paused/complete/failed states, and clears only when the workflow is explicitly cleared or no workflow exists. It is refreshed from workflow-core state on session/tree/turn changes and after workflow slash commands.
+When a workflow exists, the footer shows a small status-line badge with white text on a 20%-blend coloured background: gold for `goal`, burgundy/purple for `review`, and aqua for `autoresearch`. The badge includes the workflow label/status, hot-updated wall-clock age, chat-turn count, and trigger count, stays visible for the latest non-cleared workflow between updates, including paused/complete/failed states, and clears only when the workflow is explicitly cleared or no workflow exists. The chat-turn count increments at workflow agent-turn start, is persisted in workflow data, and freezes from persisted state when the workflow is complete/failed/cleared. The trigger count increments whenever the workflow prompt is started, continued, resumed, refreshed after compaction/session restore, or auto-continued; auto-continue budget turns remain tracked separately and are shown as the trigger budget for auto-looping controllers. The badge is refreshed from workflow-core state on session/tree/turn changes, after workflow slash commands, and roughly once per second while the visible workflow can still age; complete/failed/cleared workflows freeze wall-clock at their terminal update and stop the ticker. Workflow status views show wall-clock age, active runtime, chat turns, and triggers; active runtime counts time spent in `active` status and excludes paused/waiting/settled states. Compaction snapshots preserve timing baselines so elapsed time continues across compacted session branches.
 
 Prompt sources:
 
@@ -832,7 +841,7 @@ Prompt sources:
 - `review` follows Codex `/review` rubric: actionable bugs only, changed-line discipline, P0-P3 priorities, exact file/line locations, overall correctness, and no fixes unless requested.
 - `autoresearch` follows `pi-autoresearch`'s skill and extension doctrine: write/resume from `autoresearch.md`, use `research_probe` for throwaway evidence gathering, use `run_preflight` for smoke tests, run `autoresearch.sh`, emit `METRIC name=value`, use `init_experiment`/`run_experiment`/`log_experiment`, keep winners, revert losers, maintain ideas/checks files, and loop until interrupted.
 
-The `goal` controller keeps a durable objective visible in the main workflow and auto-continues while active until the model marks it complete, it is paused/cleared, or `PI_WORKFLOW_MAX_AUTO_TURNS` is reached. Before compaction, live workflow records are snapshotted in memory; after compaction, missing or stale workflow events are re-appended so active goal/review/autoresearch state survives when older custom session entries fall out of the kept branch. This does not override Pi's normal compaction flow except for the existing autoresearch-specific summary hook. The `review` controller reviews current changes, base-branch diffs, commits, or custom instructions in the main session. The `autoresearch` controller runs measured experiment loops with `init_experiment`, `run_experiment`, and `log_experiment`; kept runs are committed when possible and failed/discarded runs are reverted while preserving autoresearch files.
+The workflow runtime is shared by `goal`, `review`, and `autoresearch`: starts/resumes wake the right controller prompt, activate its tools, refresh runtime UI, and route post-compaction continuation through one path. `goal` and `autoresearch` auto-continue by default while active until the model marks them complete, they are paused/cleared, or `maxAutoTurns`/`PI_WORKFLOW_MAX_AUTO_TURNS` is reached. `review` is runtime-managed but intentionally does not auto-loop by default; it runs once and waits for the user or `/review continue`. Before compaction, live workflow records are snapshotted in memory; after compaction, missing or stale workflow events are re-appended so active goal/review/autoresearch state survives when older custom session entries fall out of the kept branch. This does not override Pi's normal compaction flow except for the existing autoresearch-specific summary hook. The `autoresearch` controller runs measured experiment loops with `init_experiment`, `run_experiment`, and `log_experiment`; kept runs are committed when possible and failed/discarded runs are reverted while preserving autoresearch files.
 
 Autoresearch workflow extras now include:
 

@@ -1,4 +1,14 @@
-import type { WorkflowController, WorkflowRecord } from "../core.js";
+import {
+	formatWorkflowDuration,
+	workflowActiveElapsedMs,
+	workflowDisplayTurns,
+	workflowStartedAt,
+	workflowTriggers,
+	workflowUpdatedAt,
+	workflowWallClockMs,
+	type WorkflowController,
+	type WorkflowRecord,
+} from "../core.js";
 
 const BENCHMARK_GUARDRAIL = "Be careful not to overfit to the benchmarks and do not cheat on the benchmarks.";
 
@@ -128,8 +138,12 @@ Use persisted autoresearch state as source of truth: autoresearch.md, autoresear
 			`- Status: ${workflow.status}`,
 			`- Objective: ${workflow.objective}`,
 			`- State: ${stateLine(workflow)}`,
-			`- Started: ${workflow.createdAt}`,
-			`- Updated: ${workflow.updatedAt}`,
+			`- Started: ${workflowStartedAt(workflow)}`,
+			`- Updated: ${workflowUpdatedAt(workflow)}`,
+			`- Wall clock: ${formatWorkflowDuration(workflowWallClockMs(workflow))}`,
+			`- Active runtime: ${formatWorkflowDuration(workflowActiveElapsedMs(workflow))}`,
+			`- Chat turns: ${workflowDisplayTurns(workflow)}`,
+			`- Triggers: ${workflowTriggers(workflow)}`,
 			`- Events: ${workflow.events.length}`,
 		];
 		if (workflow.lastNote) lines.push(`- Last note: ${workflow.lastNote}`);

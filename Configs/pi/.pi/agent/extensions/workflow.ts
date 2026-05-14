@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { Type } from "typebox";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { AutocompleteItem } from "@earendil-works/pi-tui";
 import {
 	activeWorkflow,
 	appendWorkflowEvent,
@@ -12,12 +13,15 @@ import {
 	currentWorkflowForStatusLine,
 	isWorkflowStatus,
 	latestWorkflow,
+	formatWorkflowDuration,
 	renderWorkflowList,
 	renderWorkflowSummary,
 	sendWorkflowPrompt,
 	startWorkflow,
 	updateWorkflow,
 	workflowStatusLineSpec,
+	workflowTimingData,
+	workflowWallClockMs,
 	workflows,
 	type WorkflowController,
 	type WorkflowEvent,
@@ -45,8 +49,8 @@ const WORKFLOW_TOOL_NAMES = [
 	"workflow_update",
 ];
 const AUTORESEARCH_TOOL_NAMES = ["init_experiment", "research_probe", "run_preflight", "run_experiment", "log_experiment", "finalize_autoresearch"];
-const AUTO_CONTINUE_CONTROLLERS = new Set(["goal", "autoresearch"]);
-const AUTO_CONTINUE_SETTLED_MS = 800;
+const DEFAULT_AUTO_CONTINUE: Record<string, boolean> = { goal: true, review: false, autoresearch: true };
+const DEFAULT_AUTO_CONTINUE_SETTLED_MS = 800;
 const DEFAULT_MAX_AUTO_TURNS = 20;
 const WORKFLOW_CONFIG_FILE = "workflow.json";
 const EXPERIMENT_MAX_LINES = 20;
@@ -56,19 +60,28 @@ const HOOK_STDOUT_MAX_BYTES = 8 * 1024;
 
 type AutoRuntime = {
 	turns: number;
+	displayTurns: number;
+	triggers: number;
 	timer: ReturnType<typeof setTimeout> | null;
 	lastWorkflowId?: string;
 };
 
 type WorkflowConfig = Record<string, unknown> & {
 	maxAutoTurns?: number;
+	settledMs?: number;
+	autoResumeOnSessionStart?: boolean;
+	autoContinue?: Record<string, boolean>;
 };
 
 const DEFAULT_WORKFLOW_CONFIG: WorkflowConfig = {
 	maxAutoTurns: DEFAULT_MAX_AUTO_TURNS,
+	settledMs: DEFAULT_AUTO_CONTINUE_SETTLED_MS,
+	autoResumeOnSessionStart: false,
+	autoContinue: DEFAULT_AUTO_CONTINUE,
 };
 
 const autoRuntimes = new Map<string, AutoRuntime>();
+const statusLineTimers = new Map<string, ReturnType<typeof setInterval>>();
 const compactionWorkflowSnapshots = new Map<string, WorkflowRecord[]>();
 const lastExperimentBySession = new Map<string, { command: string; durationSeconds: number; exitCode: number | null; passed: boolean; output: string; parsedMetrics: Record<string, number> | null; checksPass: boolean | null; checksOutput: string; checksDuration: number }>();
 let dashboardServer: Server | null = null;
@@ -106,26 +119,88 @@ function workflowStatusLabel(workflow: WorkflowRecord): string {
 	return `${label} ${workflow.status}`;
 }
 
-function ansiWorkflowBadge(workflow: WorkflowRecord): string | undefined {
+function nonNegativeInteger(value: unknown): number | undefined {
+	const number = Number(value);
+	return Number.isFinite(number) && number >= 0 ? Math.trunc(number) : undefined;
+}
+
+function persistedWorkflowDisplayTurns(workflow: WorkflowRecord): number {
+	return nonNegativeInteger(workflow.data.displayTurns) ?? nonNegativeInteger(workflow.data.autoTurns) ?? 0;
+}
+
+function workflowDisplayTurns(ctx: ExtensionContext | ExtensionCommandContext, workflow: WorkflowRecord): number {
+	if (!isLive(workflow)) return persistedWorkflowDisplayTurns(workflow);
+	const runtime = autoRuntimes.get(ctx.sessionManager.getSessionId());
+	if (runtime?.lastWorkflowId === workflow.id) return runtime.displayTurns;
+	return persistedWorkflowDisplayTurns(workflow);
+}
+
+function persistedWorkflowTriggers(workflow: WorkflowRecord): number {
+	return nonNegativeInteger(workflow.data.triggers) ?? 0;
+}
+
+function workflowTriggers(ctx: ExtensionContext | ExtensionCommandContext, workflow: WorkflowRecord): number {
+	if (!isLive(workflow)) return persistedWorkflowTriggers(workflow);
+	const runtime = autoRuntimes.get(ctx.sessionManager.getSessionId());
+	if (runtime?.lastWorkflowId === workflow.id) return runtime.triggers;
+	return persistedWorkflowTriggers(workflow);
+}
+
+function workflowStatusMeta(ctx: ExtensionContext | ExtensionCommandContext, workflow: WorkflowRecord): string {
+	const wallClock = formatWorkflowDuration(workflowWallClockMs(workflow));
+	const turns = workflowDisplayTurns(ctx, workflow);
+	const triggers = workflowTriggers(ctx, workflow);
+	const maxTriggersLabel = workflowAutoContinueEnabled(ctx.cwd, workflow.controller) ? `/${maxAutoTurns(ctx.cwd)}` : "";
+	return `${wallClock} · ${turns} chats · ${triggers}${maxTriggersLabel} triggers`;
+}
+
+function ansiWorkflowBadge(ctx: ExtensionContext | ExtensionCommandContext, workflow: WorkflowRecord): string | undefined {
 	const spec = workflowStatusLineSpec(workflow);
 	if (!spec) return undefined;
 	const bg = blendHex(spec.color);
 	const bump = workflow.events.length % 2 === 0 ? spec.symbol : "●";
 	const label = workflowStatusLabel(workflow);
-	return `\x1b[38;2;255;255;255m\x1b[48;2;${bg.r};${bg.g};${bg.b}m ${bump} ${label} \x1b[39m\x1b[49m`;
+	const meta = workflowStatusMeta(ctx, workflow);
+	return `\x1b[38;2;255;255;255m\x1b[48;2;${bg.r};${bg.g};${bg.b}m ${bump} ${label} · ${meta} \x1b[39m\x1b[49m`;
+}
+
+function statusLineKey(ctx: ExtensionContext | ExtensionCommandContext): string {
+	return ctx.sessionManager.getSessionId();
+}
+
+function clearWorkflowStatusTicker(ctx: ExtensionContext | ExtensionCommandContext) {
+	const key = statusLineKey(ctx);
+	const timer = statusLineTimers.get(key);
+	if (timer) clearInterval(timer);
+	statusLineTimers.delete(key);
+}
+
+function ensureWorkflowStatusTicker(ctx: ExtensionContext | ExtensionCommandContext) {
+	if (!ctx.hasUI) return;
+	const key = statusLineKey(ctx);
+	if (statusLineTimers.has(key)) return;
+	const timer = setInterval(() => bumpWorkflowStatusLine(ctx), 1000);
+	timer.unref?.();
+	statusLineTimers.set(key, timer);
+}
+
+function workflowWallClockIsLive(workflow: WorkflowRecord): boolean {
+	return workflow.status !== "complete" && workflow.status !== "failed" && workflow.status !== "cleared";
 }
 
 function bumpWorkflowStatusLine(ctx: ExtensionContext | ExtensionCommandContext) {
 	if (!ctx.hasUI) return;
 	const workflow = currentWorkflowForStatusLine(ctx);
-	ctx.ui.setStatus(WORKFLOW_STATUS_KEY, workflow ? ansiWorkflowBadge(workflow) : undefined);
+	ctx.ui.setStatus(WORKFLOW_STATUS_KEY, workflow ? ansiWorkflowBadge(ctx, workflow) : undefined);
+	if (workflow && workflowWallClockIsLive(workflow)) ensureWorkflowStatusTicker(ctx);
+	else clearWorkflowStatusTicker(ctx);
 }
 
 function runtimeFor(ctx: ExtensionContext): AutoRuntime {
 	const key = ctx.sessionManager.getSessionId();
 	let runtime = autoRuntimes.get(key);
 	if (!runtime) {
-		runtime = { turns: 0, timer: null };
+		runtime = { turns: 0, displayTurns: 0, triggers: 0, timer: null };
 		autoRuntimes.set(key, runtime);
 	}
 	return runtime;
@@ -143,6 +218,38 @@ function workflowConfig(cwd: string): WorkflowConfig {
 function maxAutoTurns(cwd: string): number {
 	const envOverride = positiveNumber(process.env.PI_WORKFLOW_MAX_AUTO_TURNS);
 	return envOverride ?? positiveNumber(workflowConfig(cwd).maxAutoTurns) ?? DEFAULT_MAX_AUTO_TURNS;
+}
+
+function autoContinueSettledMs(cwd: string): number {
+	return positiveNumber(workflowConfig(cwd).settledMs) ?? DEFAULT_AUTO_CONTINUE_SETTLED_MS;
+}
+
+function autoResumeOnSessionStart(cwd: string): boolean {
+	return workflowConfig(cwd).autoResumeOnSessionStart === true;
+}
+
+function workflowAutoContinueEnabled(cwd: string, controller: string): boolean {
+	const value = workflowConfig(cwd).autoContinue?.[controller];
+	if (typeof value === "boolean") return value;
+	return DEFAULT_AUTO_CONTINUE[controller] ?? false;
+}
+
+function clearWorkflowRuntime(ctx: ExtensionContext | ExtensionCommandContext) {
+	const runtime = autoRuntimes.get(ctx.sessionManager.getSessionId());
+	if (runtime?.timer) clearTimeout(runtime.timer);
+	autoRuntimes.delete(ctx.sessionManager.getSessionId());
+}
+
+function resetWorkflowRuntime(ctx: ExtensionContext | ExtensionCommandContext, workflow: WorkflowRecord) {
+	const runtime = runtimeFor(ctx);
+	if (runtime.timer) {
+		clearTimeout(runtime.timer);
+		runtime.timer = null;
+	}
+	runtime.lastWorkflowId = workflow.id;
+	runtime.turns = 0;
+	runtime.displayTurns = persistedWorkflowDisplayTurns(workflow);
+	runtime.triggers = persistedWorkflowTriggers(workflow);
 }
 
 function ensureToolsActive(pi: ExtensionAPI, names: string[]) {
@@ -262,6 +369,37 @@ function isLive(workflow: WorkflowRecord): boolean {
 	return !["complete", "failed", "cleared"].includes(workflow.status);
 }
 
+function shouldCountWorkflowTurn(workflow: WorkflowRecord): boolean {
+	return isLive(workflow) && workflow.status !== "paused";
+}
+
+function seedWorkflowRuntime(ctx: ExtensionContext, workflow: WorkflowRecord): AutoRuntime {
+	const runtime = runtimeFor(ctx);
+	if (runtime.lastWorkflowId !== workflow.id) {
+		runtime.lastWorkflowId = workflow.id;
+		runtime.turns = nonNegativeInteger(workflow.data.autoTurns) ?? 0;
+		runtime.displayTurns = persistedWorkflowDisplayTurns(workflow);
+		runtime.triggers = persistedWorkflowTriggers(workflow);
+	}
+	return runtime;
+}
+
+function noteWorkflowAgentTurn(pi: ExtensionAPI, ctx: ExtensionContext) {
+	const workflow = currentWorkflowForStatusLine(ctx);
+	if (!workflow || !shouldCountWorkflowTurn(workflow)) return;
+	const runtime = seedWorkflowRuntime(ctx, workflow);
+	runtime.displayTurns += 1;
+	updateWorkflow(pi, workflow, { data: { displayTurns: runtime.displayTurns } });
+}
+
+function noteWorkflowTrigger(pi: ExtensionAPI, ctx: ExtensionContext, workflow: WorkflowRecord): WorkflowRecord {
+	if (!isLive(workflow)) return workflow;
+	const runtime = seedWorkflowRuntime(ctx, workflow);
+	runtime.triggers += 1;
+	updateWorkflow(pi, workflow, { data: { triggers: runtime.triggers } });
+	return { ...workflow, data: { ...workflow.data, triggers: runtime.triggers } };
+}
+
 function pauseOtherActiveWorkflows(pi: ExtensionAPI, ctx: ExtensionContext, controller: string, reason: string) {
 	for (const workflow of workflows(ctx).filter((item) => isLive(item) && item.controller !== controller)) {
 		changeWorkflowStatus(pi, workflow, "paused", reason);
@@ -308,16 +446,19 @@ function restoreWorkflowSnapshot(pi: ExtensionAPI, ctx: ExtensionContext | Exten
 	const restored: WorkflowRecord[] = [];
 	for (const snapshot of snapshots) {
 		const current = currentById.get(snapshot.id);
+		const snapshotData = { ...snapshot.data, workflowTiming: workflowTimingData(snapshot) };
 		if (!current) {
 			appendWorkflowEvent(pi, "workflow_started", snapshot.id, snapshot.controller, {
 				title: snapshot.title,
 				objective: snapshot.objective,
 				status: snapshot.status,
+				createdAt: snapshot.createdAt,
+				updatedAt: snapshot.updatedAt,
 				note: snapshot.lastNote,
 				nextAction: snapshot.nextAction,
-				data: snapshot.data,
+				data: snapshotData,
 			});
-			restored.push(snapshot);
+			restored.push({ ...snapshot, data: snapshotData });
 			continue;
 		}
 
@@ -328,9 +469,9 @@ function restoreWorkflowSnapshot(pi: ExtensionAPI, ctx: ExtensionContext | Exten
 				status: snapshot.status,
 				note: snapshot.lastNote,
 				nextAction: snapshot.nextAction,
-				data: snapshot.data,
+				data: snapshotData,
 			});
-			restored.push(snapshot);
+			restored.push({ ...snapshot, data: snapshotData });
 		}
 	}
 	return restored;
@@ -763,12 +904,13 @@ function registerWorkflowTools(pi: ExtensionAPI) {
 				data: params.initial_note ? { initialNote: params.initial_note.trim() } : {},
 			});
 			const workflow = eventToWorkflow(event);
-			runtimeFor(ctx).turns = 0;
-			ensureWorkflowToolsActive(pi);
-			const prompt = goalController.renderStartPrompt(workflow);
+			resetWorkflowRuntime(ctx, workflow);
+			const triggeredWorkflow = noteWorkflowTrigger(pi, ctx, workflow);
+			ensureWorkflowRuntimeTools(pi, triggeredWorkflow);
+			const prompt = goalController.renderStartPrompt(triggeredWorkflow);
 			return {
 				content: [{ type: "text", text: `Goal workflow created: ${workflow.id}\n\nFollow this workflow prompt now:\n\n${prompt}` }],
-				details: { workflow, prompt },
+				details: { workflow: triggeredWorkflow, prompt },
 			};
 		},
 	});
@@ -818,11 +960,13 @@ function registerWorkflowTools(pi: ExtensionAPI) {
 			if (existing) changeWorkflowStatus(pi, existing, "paused", `Paused because a new review was created: ${title}`);
 			const event = startWorkflow(pi, { controller: "review", title, objective, status: "active", data });
 			const workflow = eventToWorkflow(event);
-			ensureWorkflowToolsActive(pi);
-			const prompt = reviewController.renderStartPrompt(workflow);
+			resetWorkflowRuntime(ctx, workflow);
+			const triggeredWorkflow = noteWorkflowTrigger(pi, ctx, workflow);
+			ensureWorkflowRuntimeTools(pi, triggeredWorkflow);
+			const prompt = reviewController.renderStartPrompt(triggeredWorkflow);
 			return {
 				content: [{ type: "text", text: `Review workflow created: ${workflow.id}\n\nFollow this workflow prompt now:\n\n${prompt}` }],
-				details: { workflow, prompt },
+				details: { workflow: triggeredWorkflow, prompt },
 			};
 		},
 	});
@@ -856,13 +1000,14 @@ function registerWorkflowTools(pi: ExtensionAPI) {
 			if (params.benchmark_hint?.trim()) data.benchmarkHint = params.benchmark_hint.trim();
 			const event = startWorkflow(pi, { controller: "autoresearch", title: oneLine(objective), objective, status: "active", data });
 			const workflow = eventToWorkflow(event);
-			runtimeFor(ctx).turns = 0;
-			ensureAutoresearchToolsActive(pi);
-			renderAutoresearchWidget(ctx);
-			const prompt = autoresearchController.renderStartPrompt(workflow);
+			resetWorkflowRuntime(ctx, workflow);
+			const triggeredWorkflow = noteWorkflowTrigger(pi, ctx, workflow);
+			ensureWorkflowRuntimeTools(pi, triggeredWorkflow);
+			renderWorkflowRuntime(ctx, triggeredWorkflow);
+			const prompt = autoresearchController.renderStartPrompt(triggeredWorkflow);
 			return {
 				content: [{ type: "text", text: `Autoresearch workflow created: ${workflow.id}\n\nFollow this workflow prompt now:\n\n${prompt}` }],
-				details: { workflow, prompt },
+				details: { workflow: triggeredWorkflow, prompt },
 			};
 		},
 	});
@@ -1475,17 +1620,15 @@ async function startGoal(pi: ExtensionAPI, ctx: ExtensionCommandContext, objecti
 	if (existing) changeWorkflowStatus(pi, existing, "paused", `Paused because a new goal was started: ${objective}`);
 	const event = startWorkflow(pi, { controller: "goal", title: oneLine(objective), objective, status: "active" });
 	const workflow = eventToWorkflow(event);
-	runtimeFor(ctx).turns = 0;
-	ensureWorkflowToolsActive(pi);
+	resetWorkflowRuntime(ctx, workflow);
 	if (ctx.hasUI) ctx.ui.notify(`Goal started: ${oneLine(objective)}`, "info");
-	sendWorkflowPrompt(pi, goalController, workflow, "start");
+	wakeWorkflowRuntime(pi, ctx, goalController, workflow, "start");
 }
 
 async function continueWorkflow(pi: ExtensionAPI, ctx: ExtensionCommandContext, controller: WorkflowController, workflow: WorkflowRecord) {
 	if (workflow.status === "paused") return ctx.ui.notify(`${controller.label} is paused.`, "warning");
 	if (["complete", "failed", "cleared"].includes(workflow.status)) return ctx.ui.notify(`${controller.label} is ${workflow.status}.`, "warning");
-	controller.name === "autoresearch" ? ensureAutoresearchToolsActive(pi) : ensureWorkflowToolsActive(pi);
-	sendWorkflowPrompt(pi, controller, workflow, "continue");
+	wakeWorkflowRuntime(pi, ctx, controller, workflow, "continue");
 }
 
 async function handleGoalCommand(pi: ExtensionAPI, args: string, ctx: ExtensionCommandContext) {
@@ -1502,7 +1645,7 @@ async function handleGoalCommand(pi: ExtensionAPI, args: string, ctx: ExtensionC
 	if (verb === "resume") {
 		if (!current || current.status === "complete" || current.status === "cleared") return ctx.ui.notify("No paused goal to resume.", "warning");
 		changeWorkflowStatus(pi, current, "active", rest || "Resumed by user.");
-		runtimeFor(ctx).turns = 0;
+		resetWorkflowRuntime(ctx, current);
 		return continueWorkflow(pi, ctx, goalController, { ...current, status: "active", lastNote: rest || "Resumed by user." });
 	}
 	if (verb === "continue" || verb === "next") {
@@ -1524,7 +1667,7 @@ async function handleGoalCommand(pi: ExtensionAPI, args: string, ctx: ExtensionC
 		if (!rest) return ctx.ui.notify("Usage: /goal edit <new objective>", "warning");
 		if (!current || current.status === "complete" || current.status === "cleared") return startGoal(pi, ctx, rest);
 		updateWorkflow(pi, current, { objective: rest, title: oneLine(rest), status: "active", note: "Objective updated by user." });
-		runtimeFor(ctx).turns = 0;
+		resetWorkflowRuntime(ctx, current);
 		return continueWorkflow(pi, ctx, goalController, { ...current, objective: rest, title: oneLine(rest), status: "active", lastNote: "Objective updated by user." });
 	}
 	return startGoal(pi, ctx, raw);
@@ -1536,9 +1679,9 @@ async function startReview(pi: ExtensionAPI, ctx: ExtensionCommandContext, data:
 	if (existing) changeWorkflowStatus(pi, existing, "paused", `Paused because a new review was started: ${title}`);
 	const event = startWorkflow(pi, { controller: "review", title, objective, status: "active", data });
 	const workflow = eventToWorkflow(event);
-	ensureWorkflowToolsActive(pi);
+	resetWorkflowRuntime(ctx, workflow);
 	if (ctx.hasUI) ctx.ui.notify(`Review started: ${title}`, "info");
-	sendWorkflowPrompt(pi, reviewController, workflow, "start");
+	wakeWorkflowRuntime(pi, ctx, reviewController, workflow, "start");
 }
 
 async function handleReviewCommand(pi: ExtensionAPI, args: string, ctx: ExtensionCommandContext) {
@@ -1576,11 +1719,9 @@ async function startAutoresearch(pi: ExtensionAPI, ctx: ExtensionCommandContext,
 	if (existing) changeWorkflowStatus(pi, existing, "paused", `Paused because a new autoresearch workflow was started: ${objective}`);
 	const event = startWorkflow(pi, { controller: "autoresearch", title: oneLine(objective), objective, status: "active", data: { runCount: 0 } });
 	const workflow = eventToWorkflow(event);
-	runtimeFor(ctx).turns = 0;
-	ensureAutoresearchToolsActive(pi);
-	renderAutoresearchWidget(ctx);
+	resetWorkflowRuntime(ctx, workflow);
 	if (ctx.hasUI) ctx.ui.notify(`Autoresearch started: ${oneLine(objective)}`, "info");
-	sendWorkflowPrompt(pi, autoresearchController, workflow, "start");
+	wakeWorkflowRuntime(pi, ctx, autoresearchController, workflow, "start");
 }
 
 async function handleAutoresearchCommand(pi: ExtensionAPI, args: string, ctx: ExtensionCommandContext) {
@@ -1614,7 +1755,7 @@ async function handleAutoresearchCommand(pi: ExtensionAPI, args: string, ctx: Ex
 	if (verb === "resume" || verb === "continue" || verb === "next") {
 		if (!current || current.status === "complete" || current.status === "cleared") return ctx.ui.notify("No autoresearch workflow to resume.", "warning");
 		changeWorkflowStatus(pi, current, "active", rest || "Resumed by user.");
-		runtimeFor(ctx).turns = 0;
+		resetWorkflowRuntime(ctx, current);
 		return continueWorkflow(pi, ctx, autoresearchController, { ...current, status: "active", lastNote: rest || "Resumed by user." });
 	}
 	if (verb === "clear") {
@@ -1641,6 +1782,48 @@ async function handleWorkflowCommand(pi: ExtensionAPI, args: string, ctx: Extens
 	ctx.ui.notify("Usage: /workflow [status|list|clear [controller]]", "warning");
 }
 
+const GOAL_ARGUMENT_COMPLETIONS: AutocompleteItem[] = [
+	{ value: "status", label: "status", description: "Show goal status" },
+	{ value: "continue", label: "continue", description: "Wake the active goal" },
+	{ value: "pause", label: "pause", description: "Pause the active goal" },
+	{ value: "resume", label: "resume", description: "Resume and wake the goal" },
+	{ value: "edit", label: "edit", description: "Replace the goal objective" },
+	{ value: "complete", label: "complete", description: "Mark the goal complete" },
+	{ value: "clear", label: "clear", description: "Clear goal state" },
+];
+
+const REVIEW_ARGUMENT_COMPLETIONS: AutocompleteItem[] = [
+	{ value: "status", label: "status", description: "Show review status" },
+	{ value: "continue", label: "continue", description: "Wake the active review" },
+	{ value: "--base", label: "--base", description: "Review against a base branch" },
+	{ value: "--commit", label: "--commit", description: "Review a commit" },
+	{ value: "clear", label: "clear", description: "Clear review state" },
+];
+
+const AUTORESEARCH_ARGUMENT_COMPLETIONS: AutocompleteItem[] = [
+	{ value: "status", label: "status", description: "Show autoresearch status" },
+	{ value: "pause", label: "pause", description: "Pause autoresearch" },
+	{ value: "resume", label: "resume", description: "Resume autoresearch" },
+	{ value: "export", label: "export", description: "Open browser dashboard" },
+	{ value: "expand", label: "expand", description: "Expand TUI dashboard" },
+	{ value: "collapse", label: "collapse", description: "Collapse TUI dashboard" },
+	{ value: "fullscreen", label: "fullscreen", description: "Open fullscreen dashboard" },
+	{ value: "finalize", label: "finalize", description: "Write finalization report" },
+	{ value: "clear", label: "clear", description: "Clear autoresearch state" },
+];
+
+const WORKFLOW_ARGUMENT_COMPLETIONS: AutocompleteItem[] = [
+	{ value: "status", label: "status", description: "Show all workflow state" },
+	{ value: "clear", label: "clear", description: "Clear the active workflow" },
+];
+
+function workflowArgumentCompletions(items: AutocompleteItem[], argumentPrefix: string): AutocompleteItem[] | null {
+	const query = argumentPrefix.trimStart();
+	if (/\s/.test(query)) return null;
+	const filtered = query ? items.filter((item) => item.value.startsWith(query) || item.label?.startsWith(query)) : items;
+	return filtered.length > 0 ? filtered : null;
+}
+
 function controllerFor(workflow: WorkflowRecord): WorkflowController | undefined {
 	if (workflow.controller === "goal") return goalController;
 	if (workflow.controller === "autoresearch") return autoresearchController;
@@ -1648,19 +1831,46 @@ function controllerFor(workflow: WorkflowRecord): WorkflowController | undefined
 	return undefined;
 }
 
+function latestActiveRuntimeWorkflow(ctx: ExtensionContext | ExtensionCommandContext): WorkflowRecord | undefined {
+	return workflows(ctx).findLast((workflow) => workflow.status === "active" && controllerFor(workflow) !== undefined);
+}
+
+function ensureWorkflowRuntimeTools(pi: ExtensionAPI, workflow: WorkflowRecord) {
+	workflow.controller === "autoresearch" ? ensureAutoresearchToolsActive(pi) : ensureWorkflowToolsActive(pi);
+}
+
+function renderWorkflowRuntime(ctx: ExtensionContext | ExtensionCommandContext, workflow: WorkflowRecord) {
+	if (workflow.controller === "autoresearch") renderAutoresearchWidget(ctx);
+}
+
+function wakeWorkflowRuntime(
+	pi: ExtensionAPI,
+	ctx: ExtensionContext | ExtensionCommandContext,
+	controller: WorkflowController,
+	workflow: WorkflowRecord,
+	mode: "start" | "continue",
+) {
+	const triggeredWorkflow = noteWorkflowTrigger(pi, ctx, workflow);
+	ensureWorkflowRuntimeTools(pi, triggeredWorkflow);
+	renderWorkflowRuntime(ctx, triggeredWorkflow);
+	sendWorkflowPrompt(pi, controller, triggeredWorkflow, mode);
+}
+
 function scheduleAutoContinue(pi: ExtensionAPI, ctx: ExtensionContext) {
-	const workflow = workflows(ctx).findLast((item) => AUTO_CONTINUE_CONTROLLERS.has(item.controller) && item.status === "active");
+	const workflow = workflows(ctx).findLast((item) => item.status === "active" && workflowAutoContinueEnabled(ctx.cwd, item.controller));
 	if (!workflow) return;
 	const controller = controllerFor(workflow);
 	if (!controller) return;
 	const runtime = runtimeFor(ctx);
 	if (runtime.lastWorkflowId !== workflow.id) {
 		runtime.lastWorkflowId = workflow.id;
-		runtime.turns = 0;
+		runtime.turns = nonNegativeInteger(workflow.data.autoTurns) ?? 0;
+		runtime.displayTurns = persistedWorkflowDisplayTurns(workflow);
+		runtime.triggers = persistedWorkflowTriggers(workflow);
 	}
 	const maxTurns = maxAutoTurns(ctx.cwd);
 	if (runtime.turns >= maxTurns) {
-		changeWorkflowStatus(pi, workflow, "budget_limited", `Auto-continue limit reached (${maxTurns} turns).`, "Use /goal resume or /autoresearch resume to continue.");
+		changeWorkflowStatus(pi, workflow, "budget_limited", `Auto-continue limit reached (${maxTurns} turns).`, `Use /${workflow.controller} resume to continue.`);
 		ctx.ui.notify(`Workflow auto-continue limit reached (${maxTurns} turns).`, "info");
 		return;
 	}
@@ -1668,12 +1878,14 @@ function scheduleAutoContinue(pi: ExtensionAPI, ctx: ExtensionContext) {
 	runtime.timer = setTimeout(() => {
 		runtime.timer = null;
 		if (!ctx.isIdle() || ctx.hasPendingMessages()) return;
+		if (!workflowAutoContinueEnabled(ctx.cwd, workflow.controller)) return;
 		const fresh = activeWorkflow(ctx, workflow.controller);
 		if (!fresh || fresh.id !== workflow.id || fresh.status !== "active") return;
 		runtime.turns += 1;
-		workflow.controller === "autoresearch" ? ensureAutoresearchToolsActive(pi) : ensureWorkflowToolsActive(pi);
-		sendWorkflowPrompt(pi, controller, fresh, "continue");
-	}, AUTO_CONTINUE_SETTLED_MS);
+		const promptWorkflow = { ...fresh, data: { ...fresh.data, autoTurns: runtime.turns } };
+		updateWorkflow(pi, fresh, { data: { autoTurns: runtime.turns } });
+		wakeWorkflowRuntime(pi, ctx, controller, promptWorkflow, "continue");
+	}, autoContinueSettledMs(ctx.cwd));
 }
 
 export default function workflowExtension(pi: ExtensionAPI) {
@@ -1703,6 +1915,9 @@ export default function workflowExtension(pi: ExtensionAPI) {
 		if (activeWorkflow(ctx, "autoresearch")) ensureAutoresearchToolsActive(pi);
 		bumpWorkflowStatusLine(ctx);
 		renderAutoresearchWidget(ctx);
+		const workflow = latestActiveRuntimeWorkflow(ctx);
+		const controller = workflow ? controllerFor(workflow) : undefined;
+		if (workflow && controller && autoResumeOnSessionStart(ctx.cwd)) wakeWorkflowRuntime(pi, ctx, controller, workflow, "continue");
 	});
 
 	pi.on("session_tree", async (_event, ctx) => {
@@ -1712,6 +1927,8 @@ export default function workflowExtension(pi: ExtensionAPI) {
 
 	pi.on("session_shutdown", async (_event, ctx) => {
 		compactionWorkflowSnapshots.delete(workflowSnapshotKey(ctx));
+		clearWorkflowRuntime(ctx);
+		clearWorkflowStatusTicker(ctx);
 		if (ctx.hasUI) {
 			ctx.ui.setWidget("autoresearch", undefined);
 			ctx.ui.setStatus(WORKFLOW_STATUS_KEY, undefined);
@@ -1737,13 +1954,13 @@ export default function workflowExtension(pi: ExtensionAPI) {
 		restoreWorkflowSnapshot(pi, ctx);
 		bumpWorkflowStatusLine(ctx);
 		renderAutoresearchWidget(ctx);
-		const goal = activeWorkflow(ctx, "goal");
-		if (goal?.status === "active") sendWorkflowPrompt(pi, goalController, goal, "continue");
-		const workflow = activeWorkflow(ctx, "autoresearch");
-		if (workflow?.status === "active") pi.sendUserMessage("Continue autoresearch after compaction. Use persisted autoresearch state and run the next experiment now.", { deliverAs: "followUp" });
+		const workflow = latestActiveRuntimeWorkflow(ctx);
+		const controller = workflow ? controllerFor(workflow) : undefined;
+		if (workflow && controller) wakeWorkflowRuntime(pi, ctx, controller, workflow, "continue");
 	});
 
 	pi.on("agent_start", async (_event, ctx) => {
+		noteWorkflowAgentTurn(pi, ctx);
 		bumpWorkflowStatusLine(ctx);
 	});
 
@@ -1763,6 +1980,7 @@ export default function workflowExtension(pi: ExtensionAPI) {
 
 	pi.registerCommand("goal", {
 		description: "Start, continue, pause, resume, or inspect a durable goal workflow",
+		getArgumentCompletions: (prefix) => workflowArgumentCompletions(GOAL_ARGUMENT_COMPLETIONS, prefix),
 		handler: async (args, ctx) => {
 			try { return await handleGoalCommand(pi, args, ctx); }
 			finally { bumpWorkflowStatusLine(ctx); }
@@ -1771,6 +1989,7 @@ export default function workflowExtension(pi: ExtensionAPI) {
 
 	pi.registerCommand("review", {
 		description: "Review current changes, a base-branch diff, or a commit using workflow core",
+		getArgumentCompletions: (prefix) => workflowArgumentCompletions(REVIEW_ARGUMENT_COMPLETIONS, prefix),
 		handler: async (args, ctx) => {
 			try { return await handleReviewCommand(pi, args, ctx); }
 			finally { bumpWorkflowStatusLine(ctx); }
@@ -1779,6 +1998,7 @@ export default function workflowExtension(pi: ExtensionAPI) {
 
 	pi.registerCommand("autoresearch", {
 		description: "Start, pause, resume, or inspect an autoresearch workflow",
+		getArgumentCompletions: (prefix) => workflowArgumentCompletions(AUTORESEARCH_ARGUMENT_COMPLETIONS, prefix),
 		handler: async (args, ctx) => {
 			try { return await handleAutoresearchCommand(pi, args, ctx); }
 			finally { bumpWorkflowStatusLine(ctx); }
@@ -1787,6 +2007,7 @@ export default function workflowExtension(pi: ExtensionAPI) {
 
 	pi.registerCommand("workflow", {
 		description: "Inspect or clear Pi workflow-core state",
+		getArgumentCompletions: (prefix) => workflowArgumentCompletions(WORKFLOW_ARGUMENT_COMPLETIONS, prefix),
 		handler: async (args, ctx) => {
 			try { return await handleWorkflowCommand(pi, args, ctx); }
 			finally { bumpWorkflowStatusLine(ctx); }

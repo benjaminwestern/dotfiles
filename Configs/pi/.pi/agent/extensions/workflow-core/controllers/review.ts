@@ -1,4 +1,14 @@
-import type { WorkflowController, WorkflowRecord } from "../core.js";
+import {
+	formatWorkflowDuration,
+	workflowActiveElapsedMs,
+	workflowDisplayTurns,
+	workflowStartedAt,
+	workflowTriggers,
+	workflowUpdatedAt,
+	workflowWallClockMs,
+	type WorkflowController,
+	type WorkflowRecord,
+} from "../core.js";
 
 const REVIEW_RUBRIC = `You are acting as a reviewer for a proposed code change made by another engineer.
 
@@ -121,8 +131,12 @@ If findings are already present and the user has not asked for a fix, help them 
 			"",
 			`- Status: ${workflow.status}`,
 			`- Target: ${reviewTarget(workflow)}`,
-			`- Started: ${workflow.createdAt}`,
-			`- Updated: ${workflow.updatedAt}`,
+			`- Started: ${workflowStartedAt(workflow)}`,
+			`- Updated: ${workflowUpdatedAt(workflow)}`,
+			`- Wall clock: ${formatWorkflowDuration(workflowWallClockMs(workflow))}`,
+			`- Active runtime: ${formatWorkflowDuration(workflowActiveElapsedMs(workflow))}`,
+			`- Chat turns: ${workflowDisplayTurns(workflow)}`,
+			`- Triggers: ${workflowTriggers(workflow)}`,
 			`- Events: ${workflow.events.length}`,
 		];
 		if (workflow.lastNote) lines.push(`- Last note: ${workflow.lastNote}`);

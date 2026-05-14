@@ -36,6 +36,14 @@ export type WorkflowRecord = {
 	events: WorkflowEvent[];
 };
 
+export type WorkflowTimingData = {
+	originalCreatedAt: string;
+	originalUpdatedAt: string;
+	capturedAt: string;
+	activeElapsedMs: number;
+	status: WorkflowStatus;
+};
+
 export type StartWorkflowInput = {
 	controller: string;
 	title: string;
@@ -85,6 +93,37 @@ function asObject(value: unknown): Record<string, unknown> | undefined {
 	return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
+function parseMs(value: string | undefined): number | undefined {
+	if (!value) return undefined;
+	const ms = Date.parse(value);
+	return Number.isFinite(ms) ? ms : undefined;
+}
+
+function asWorkflowTimingData(value: unknown): WorkflowTimingData | undefined {
+	const object = asObject(value);
+	if (!object) return undefined;
+	return typeof object.originalCreatedAt === "string" &&
+		typeof object.originalUpdatedAt === "string" &&
+		typeof object.capturedAt === "string" &&
+		typeof object.activeElapsedMs === "number" &&
+		isWorkflowStatus(object.status)
+		? object as WorkflowTimingData
+		: undefined;
+}
+
+function nonNegativeInteger(value: unknown): number | undefined {
+	const number = Number(value);
+	return Number.isFinite(number) && number >= 0 ? Math.trunc(number) : undefined;
+}
+
+export function workflowDisplayTurns(workflow: WorkflowRecord): number {
+	return nonNegativeInteger(workflow.data.displayTurns) ?? nonNegativeInteger(workflow.data.autoTurns) ?? 0;
+}
+
+export function workflowTriggers(workflow: WorkflowRecord): number {
+	return nonNegativeInteger(workflow.data.triggers) ?? 0;
+}
+
 function isWorkflowEvent(value: unknown): value is WorkflowEvent {
 	const object = asObject(value);
 	return (
@@ -119,8 +158,8 @@ function applyEvent(record: WorkflowRecord | undefined, event: WorkflowEvent): W
 			title,
 			objective,
 			status,
-			createdAt: event.timestamp,
-			updatedAt: event.timestamp,
+			createdAt: typeof payload.createdAt === "string" ? payload.createdAt : event.timestamp,
+			updatedAt: typeof payload.updatedAt === "string" ? payload.updatedAt : event.timestamp,
 			lastNote: typeof payload.note === "string" ? payload.note : undefined,
 			nextAction: typeof payload.nextAction === "string" ? payload.nextAction : undefined,
 			data: asObject(payload.data) ?? {},
@@ -252,13 +291,110 @@ export function isWorkflowStatus(value: unknown): value is WorkflowStatus {
 	);
 }
 
+function statusAfterEvent(current: WorkflowStatus | undefined, event: WorkflowEvent): WorkflowStatus | undefined {
+	if (event.kind === "workflow_started") return isWorkflowStatus(event.payload.status) ? event.payload.status : "active";
+	if (event.kind === "workflow_cleared") return "cleared";
+	if ((event.kind === "workflow_updated" || event.kind === "workflow_status_changed") && isWorkflowStatus(event.payload.status)) return event.payload.status;
+	return current;
+}
+
+function activeElapsedFromEvents(events: WorkflowEvent[], nowMs: number, startStatus?: WorkflowStatus, startAtMs?: number): number {
+	let status = startStatus;
+	let activeSince = status === "active" ? startAtMs : undefined;
+	let elapsed = 0;
+	for (const event of [...events].sort((a, b) => a.timestamp.localeCompare(b.timestamp))) {
+		const at = parseMs(event.timestamp);
+		if (at === undefined) continue;
+		if (startAtMs !== undefined && at < startAtMs) continue;
+		const nextStatus = statusAfterEvent(status, event);
+		if (nextStatus === status) continue;
+		if (status === "active" && activeSince !== undefined) elapsed += Math.max(0, at - activeSince);
+		if (nextStatus === "active") activeSince = at;
+		else activeSince = undefined;
+		status = nextStatus;
+	}
+	if (status === "active" && activeSince !== undefined) elapsed += Math.max(0, nowMs - activeSince);
+	return elapsed;
+}
+
+function isWorkflowTimingRestoreEvent(event: WorkflowEvent, timing: WorkflowTimingData): boolean {
+	const data = asObject(event.payload.data);
+	const eventTiming = asWorkflowTimingData(data?.workflowTiming);
+	return eventTiming?.capturedAt === timing.capturedAt;
+}
+
+export function workflowStartedAt(workflow: WorkflowRecord): string {
+	return asWorkflowTimingData(workflow.data.workflowTiming)?.originalCreatedAt ?? workflow.createdAt;
+}
+
+export function workflowUpdatedAt(workflow: WorkflowRecord): string {
+	const timing = asWorkflowTimingData(workflow.data.workflowTiming);
+	if (!timing) return workflow.updatedAt;
+	const hasPostSnapshotUpdate = workflow.events.some((event) => event.timestamp >= timing.capturedAt && !isWorkflowTimingRestoreEvent(event, timing));
+	return hasPostSnapshotUpdate ? workflow.updatedAt : timing.originalUpdatedAt;
+}
+
+function workflowWallClockEndMs(workflow: WorkflowRecord, nowMs: number): number {
+	if (workflow.status === "complete" || workflow.status === "failed" || workflow.status === "cleared") {
+		return parseMs(workflowUpdatedAt(workflow)) ?? parseMs(workflow.updatedAt) ?? nowMs;
+	}
+	return nowMs;
+}
+
+export function workflowWallClockMs(workflow: WorkflowRecord, now = new Date()): number {
+	const nowMs = now.getTime();
+	const startedAt = parseMs(workflowStartedAt(workflow)) ?? parseMs(workflow.createdAt) ?? nowMs;
+	return Math.max(0, workflowWallClockEndMs(workflow, nowMs) - startedAt);
+}
+
+export function workflowActiveElapsedMs(workflow: WorkflowRecord, now = new Date()): number {
+	const nowMs = now.getTime();
+	const timing = asWorkflowTimingData(workflow.data.workflowTiming);
+	if (timing) {
+		const capturedAt = parseMs(timing.capturedAt) ?? nowMs;
+		return Math.max(0, timing.activeElapsedMs) + activeElapsedFromEvents(workflow.events, nowMs, timing.status, capturedAt);
+	}
+	return activeElapsedFromEvents(workflow.events, nowMs);
+}
+
+export function workflowTimingData(workflow: WorkflowRecord, capturedAt = nowIso()): WorkflowTimingData {
+	const captured = new Date(capturedAt);
+	return {
+		originalCreatedAt: workflowStartedAt(workflow),
+		originalUpdatedAt: workflowUpdatedAt(workflow),
+		capturedAt,
+		activeElapsedMs: workflowActiveElapsedMs(workflow, captured),
+		status: workflow.status,
+	};
+}
+
+export function formatWorkflowDuration(ms: number): string {
+	const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+	const seconds = totalSeconds % 60;
+	const totalMinutes = Math.floor(totalSeconds / 60);
+	const minutes = totalMinutes % 60;
+	const totalHours = Math.floor(totalMinutes / 60);
+	const hours = totalHours % 24;
+	const days = Math.floor(totalHours / 24);
+	const parts: string[] = [];
+	if (days) parts.push(`${days}d`);
+	if (hours || parts.length) parts.push(`${hours}h`);
+	if (minutes || parts.length) parts.push(`${minutes}m`);
+	parts.push(`${seconds}s`);
+	return parts.join(" ");
+}
+
 export function renderWorkflowSummary(workflow: WorkflowRecord): string {
 	const lines = [
 		`- Controller: ${workflow.controller}`,
 		`- Status: ${workflow.status}`,
 		`- Objective: ${workflow.objective}`,
-		`- Started: ${workflow.createdAt}`,
-		`- Updated: ${workflow.updatedAt}`,
+		`- Started: ${workflowStartedAt(workflow)}`,
+		`- Updated: ${workflowUpdatedAt(workflow)}`,
+		`- Wall clock: ${formatWorkflowDuration(workflowWallClockMs(workflow))}`,
+		`- Active runtime: ${formatWorkflowDuration(workflowActiveElapsedMs(workflow))}`,
+		`- Chat turns: ${workflowDisplayTurns(workflow)}`,
+		`- Triggers: ${workflowTriggers(workflow)}`,
 		`- Events: ${workflow.events.length}`,
 	];
 	if (workflow.lastNote) lines.push(`- Last note: ${workflow.lastNote}`);

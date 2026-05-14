@@ -1,3 +1,10 @@
 {
-  "maxAutoTurns": 20
+  "maxAutoTurns": 20,
+  "settledMs": 800,
+  "autoResumeOnSessionStart": false,
+  "autoContinue": {
+    "goal": true,
+    "review": false,
+    "autoresearch": true
+  }
 }
