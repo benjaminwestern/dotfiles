@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { loadExtensionConfig } from "./extension-config.js";
+import { loadExtensionConfig } from "./common-core/config.js";
 
 const execFileAsync = promisify(execFile);
 const WIDGET_ID = "git-status";

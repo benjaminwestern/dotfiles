@@ -25,7 +25,7 @@ import {
 import { goalController } from "./workflow-core/controllers/goal.js";
 import { reviewController } from "./workflow-core/controllers/review.js";
 import { autoresearchController } from "./workflow-core/controllers/autoresearch.js";
-import { loadExtensionConfig } from "./extension-config.js";
+import { loadExtensionConfig } from "./common-core/config.js";
 
 const WORKFLOW_TOOL_NAMES = [
 	"create_goal",

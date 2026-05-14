@@ -13,7 +13,7 @@ import {
 	type FileEntry,
 	type SessionHeader,
 } from "@earendil-works/pi-coding-agent";
-import { loadExtensionConfig } from "./extension-config.js";
+import { loadExtensionConfig } from "./common-core/config.js";
 
 const SIDE_CONFIG_FILE = "side.json";
 const DEFAULT_SIDE_CAR_TOOLS = ["read", "grep", "find", "ls", "websearch", "webfetch", "mcp_search", "mcp_inspect"];

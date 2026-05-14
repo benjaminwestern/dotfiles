@@ -53,7 +53,7 @@ Use `settings.json` only for Pi-native settings such as model defaults, transpor
 | `mcp.ts` | Tools and `/mcp` command | Routes enabled MCP servers through search, inspect, and call tools. Can expose selected MCP tools directly to the model. |
 | `websearch.ts` | `websearch` tool | Searches current web content through Exa when available, with DuckDuckGo HTML search as a no-key fallback. |
 | `webfetch.ts` | `webfetch` tool | Fetches an HTTP(S) URL and returns markdown, text, or raw HTML with bounded output. |
-| `common-core/` | Shared helpers | Provides small shared tool-result, timeout, number clamp, entity decoding, and MCP JSON/SSE/text helpers used by web and MCP extensions. |
+| `common-core/` | Shared helpers | Provides shared tool-result, timeout, number clamp, entity decoding, config loading, and MCP JSON/SSE/text helpers used by extensions. |
 | `bang.ts` | Inline expansion | Expands `!{command}` patterns inside user prompts before they reach the LLM (e.g. `What's in !{pwd}?`). |
 | `inline-dollar.ts` | Inline command expansion | Adds `$:` autocomplete inside long prompts and expands `$:skill`, `$:prompt`, and `$:tool:<name>` markers before the prompt reaches the LLM. |
 | `fish-user-bash.ts` | `user_bash` hook | Runs user-triggered `!`/`!!` shell commands through fish and hot-reloads mise with `mise env -s fish`. |
