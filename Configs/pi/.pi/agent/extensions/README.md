@@ -54,6 +54,7 @@ Use `settings.json` only for Pi-native settings such as model defaults, transpor
 | `websearch.ts` | `websearch` tool | Searches current web content through Exa when available, with DuckDuckGo HTML search as a no-key fallback. |
 | `webfetch.ts` | `webfetch` tool | Fetches an HTTP(S) URL and returns markdown, text, or raw HTML with bounded output. |
 | `common-core/` | Shared helpers | Provides shared tool-result, timeout, number clamp, entity decoding, config loading, and MCP JSON/SSE/text helpers used by extensions. |
+| `modal-core/` | Shared TUI re-export | Re-exports `ui-core/core.js` for modal primitives consumed by `mcp.ts`. |
 | `bang.ts` | Inline expansion | Expands `!{command}` patterns inside user prompts before they reach the LLM (e.g. `What's in !{pwd}?`). |
 | `inline-dollar.ts` | Inline command expansion | Adds `$:` autocomplete inside long prompts and expands `$:skill`, `$:prompt`, and `$:tool:<name>` markers before the prompt reaches the LLM. |
 | `fish-user-bash.ts` | `user_bash` hook | Runs user-triggered `!`/`!!` shell commands through fish and hot-reloads mise with `mise env -s fish`. |
@@ -63,8 +64,10 @@ Use `settings.json` only for Pi-native settings such as model defaults, transpor
 | `ui-core/` | Shared TUI primitives | Provides the shared HUD overlay flow, close/markdown key handling, panel/table helpers, and default overlay placement used by `/status` and `/usage`. |
 | `workflow.ts` + `workflow-core/` | `/goal`, `/review`, `/autoresearch`, `/workflow`, workflow tools | Provides a shared durable workflow core with goal, review, and autoresearch controller layers. |
 | `git-status-widget.ts` | Below-editor widget | Shows live git branch, ahead/behind, staged, unstaged, and untracked counts without replacing the custom footer. |
+| `local-share.ts` | `/lshare`, `/lshare-list` commands | Exports the current session to `~/.pi/agent/exported-sessions/` as HTML and opens it in the default browser. |
 | `zz-model-system.ts` | `before_agent_start` hook | Appends Markdown from `~/.pi/agent/model-system/` and project `.pi/model-system/` only when the current model matches the file convention. |
 | `tps-tracker.ts` | Footer status item | Shows live and final assistant output speed as tokens/second through the existing footer status aggregation. |
+| `compact-footer.ts` | `session_start`, `message_update`, `message_end`, `turn_end`, `agent_end`, `model_select`, `thinking_level_select`, `input`, `tool_execution_end`, `session_shutdown` hooks | Replaces the default footer with a compact 2-row layout: row 1 shows cwd (left) and git + tps + tok (right); row 2 shows context usage (left) and model + thinking level (right). Reads `git-status` and `speed` extension statuses and triggers re-renders during streaming. |
 | `yeet.ts` | `/yeet` command | Adds all changes, commits them with a generated clear message, and pushes the current branch/upstream. |
 | `utils.ts` | Commands and hooks | Adds `/clear`, `/steer`, `/queue`, mise-aware bash hot reload, and documents Pi context-control hooks. |
 
@@ -155,17 +158,8 @@ skill instructions.`,
 
 To restore it:
 
-1. Add `skills-context.ts` to `~/.pi/agent/extensions` or this dotfiles
-   directory.
-2. Keep the hook after extensions that intentionally add system-prompt context,
-   because `event.systemPrompt` is chained across hooks.
-3. Run `PI_CODING_AGENT_DIR=~/.pi/agent pi --offline --list-models` to catch
-   extension load errors.
-4. Use `/reload` in an interactive Pi session.
-
-Use this only when the skill metadata block becomes materially noisy. Native Pi
-skills are still the default because they are simpler and progressive-disclosure
-friendly.
+This extension has been removed from the codebase. Native Pi skills remain the
+default because they are simpler and progressive-disclosure friendly.
 
 ## Client Credentials OAuth
 

@@ -114,7 +114,9 @@ ${inspectInstructions(workflow)}
 
 ${JSON_SCHEMA}
 
-Output for the user may be human-readable, but preserve the same fields and discipline as the schema: prioritized findings, exact absolute file paths, exact line ranges, overall correctness, explanation, and confidence. If no findings qualify, say that no actionable findings were found and mark the patch correct. When finished, call workflow_update with status "waiting_for_user", a concise summary note, and nextAction such as "fix P1", "explain finding 1", or "review again".`;
+Output for the user may be human-readable, but preserve the same fields and discipline as the schema: prioritized findings, exact absolute file paths, exact line ranges, overall correctness, explanation, and confidence. If no findings qualify, say that no actionable findings were found and mark the patch correct.
+
+This review workflow will be automatically marked as complete after your response. Do not call workflow_update or update_review. If follow-up review is needed, the user will create a new review workflow.`;
 	},
 	renderContinuePrompt(workflow) {
 		return `${header(workflow)}
@@ -123,7 +125,7 @@ Continue the Pi review workflow for ${reviewTarget(workflow)}.
 
 ${REVIEW_RUBRIC}
 
-If findings are already present and the user has not asked for a fix, help them choose the next action. If code changed after the previous review, inspect the new diff and review again. If all findings have been resolved and verified, call workflow_update with status "complete" and a concise verification note.`;
+Output any additional findings. This workflow will be automatically marked as complete after your response. Do not call workflow_update or update_review.`;
 	},
 	renderStatus(workflow) {
 		const lines = [
@@ -135,7 +137,7 @@ If findings are already present and the user has not asked for a fix, help them 
 			`- Updated: ${workflowUpdatedAt(workflow)}`,
 			`- Wall clock: ${formatWorkflowDuration(workflowWallClockMs(workflow))}`,
 			`- Active runtime: ${formatWorkflowDuration(workflowActiveElapsedMs(workflow))}`,
-			`- Chat turns: ${workflowDisplayTurns(workflow)}`,
+			`- Turns: ${workflowDisplayTurns(workflow)}`,
 			`- Triggers: ${workflowTriggers(workflow)}`,
 			`- Events: ${workflow.events.length}`,
 		];

@@ -140,9 +140,9 @@ async function update(ctx: ExtensionContext) {
 	try {
 		const cwd = currentCwd(ctx);
 		const snapshot = await readSnapshot(cwd, gitStatusConfig(cwd));
-		ctx.ui.setWidget(WIDGET_ID, snapshot ? [formatSnapshot(ctx, snapshot)] : undefined, { placement: "belowEditor" });
+		ctx.ui.setStatus(WIDGET_ID, snapshot ? formatSnapshot(ctx, snapshot) : undefined);
 	} catch {
-		ctx.ui.setWidget(WIDGET_ID, undefined);
+		ctx.ui.setStatus(WIDGET_ID, undefined);
 	}
 }
 
@@ -182,6 +182,6 @@ export default function gitStatusWidget(pi: ExtensionAPI) {
 	pi.on("session_shutdown", (_event, ctx) => {
 		if (timer) clearInterval(timer);
 		timer = undefined;
-		if (ctx.hasUI) ctx.ui.setWidget(WIDGET_ID, undefined);
+		if (ctx.hasUI) ctx.ui.setStatus(WIDGET_ID, undefined);
 	});
 }

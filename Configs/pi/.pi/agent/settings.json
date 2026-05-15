@@ -1,7 +1,7 @@
 {
   "lastChangelogVersion": "0.74.0",
-  "defaultProvider": "openai-codex",
-  "defaultModel": "gpt-5.5",
+  "defaultProvider": "fireworks",
+  "defaultModel": "accounts/fireworks/routers/kimi-k2p6-turbo",
   "defaultThinkingLevel": "high",
   "compaction": {
     "reserveTokens": 31250,

@@ -142,7 +142,7 @@ Use persisted autoresearch state as source of truth: autoresearch.md, autoresear
 			`- Updated: ${workflowUpdatedAt(workflow)}`,
 			`- Wall clock: ${formatWorkflowDuration(workflowWallClockMs(workflow))}`,
 			`- Active runtime: ${formatWorkflowDuration(workflowActiveElapsedMs(workflow))}`,
-			`- Chat turns: ${workflowDisplayTurns(workflow)}`,
+			`- Turns: ${workflowDisplayTurns(workflow)}`,
 			`- Triggers: ${workflowTriggers(workflow)}`,
 			`- Events: ${workflow.events.length}`,
 		];

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { Type } from "typebox";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
+import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import {
 	activeWorkflow,
 	appendWorkflowEvent,
@@ -151,17 +152,94 @@ function workflowStatusMeta(ctx: ExtensionContext | ExtensionCommandContext, wor
 	const turns = workflowDisplayTurns(ctx, workflow);
 	const triggers = workflowTriggers(ctx, workflow);
 	const maxTriggersLabel = workflowAutoContinueEnabled(ctx.cwd, workflow.controller) ? `/${maxAutoTurns(ctx.cwd)}` : "";
-	return `${wallClock} · ${turns} chats · ${triggers}${maxTriggersLabel} triggers`;
+	return `${wallClock} · ${turns} turns · ${triggers}${maxTriggersLabel} triggers`;
 }
 
-function ansiWorkflowBadge(ctx: ExtensionContext | ExtensionCommandContext, workflow: WorkflowRecord): string | undefined {
+function renderWorkflowBadgeLine(
+	ctx: ExtensionContext | ExtensionCommandContext,
+	workflow: WorkflowRecord,
+	width: number,
+	extraParts?: string[]
+): string {
 	const spec = workflowStatusLineSpec(workflow);
-	if (!spec) return undefined;
+	if (!spec) return " ".repeat(width);
 	const bg = blendHex(spec.color);
 	const bump = workflow.events.length % 2 === 0 ? spec.symbol : "●";
 	const label = workflowStatusLabel(workflow);
 	const meta = workflowStatusMeta(ctx, workflow);
-	return `\x1b[38;2;255;255;255m\x1b[48;2;${bg.r};${bg.g};${bg.b}m ${bump} ${label} · ${meta} \x1b[39m\x1b[49m`;
+	const parts = [` ${bump} ${label} · ${meta}`];
+	if (extraParts?.length) parts.push(...extraParts);
+	const content = parts.join(" · ");
+	const prefix = `\x1b[38;2;255;255;255m\x1b[48;2;${bg.r};${bg.g};${bg.b}m`;
+	const reset = `\x1b[39m\x1b[49m`;
+	const contentWidth = visibleWidth(content);
+	if (contentWidth >= width) {
+		return prefix + truncateToWidth(content, width) + reset;
+	}
+	const padding = " ".repeat(width - contentWidth);
+	return prefix + content + padding + reset;
+}
+
+function reviewTargetForWidget(workflow: WorkflowRecord): string {
+	const target = typeof workflow.data.target === "string" ? workflow.data.target : "current changes";
+	const base = typeof workflow.data.base === "string" ? workflow.data.base : undefined;
+	const commit = typeof workflow.data.commit === "string" ? workflow.data.commit : undefined;
+	const instructions = typeof workflow.data.instructions === "string" ? workflow.data.instructions : undefined;
+	if (target === "base" && base) return `changes against base branch ${base}`;
+	if (target === "commit" && commit) return `commit ${commit}`;
+	if (target === "custom" && instructions) return instructions;
+	return "current staged, unstaged, and untracked changes";
+}
+
+function renderGoalWidget(ctx: ExtensionContext) {
+	if (!ctx.hasUI) return;
+	const workflow = activeWorkflow(ctx, "goal");
+	if (!workflow || workflow.status !== "active") {
+		ctx.ui.setWidget("goal", undefined);
+		return;
+	}
+	ctx.ui.setWidget("goal", () => ({
+		render(width: number): string[] {
+			const extraParts: string[] = [];
+			if (workflow.objective) {
+				extraParts.push(truncateToWidth(workflow.objective, Math.max(20, width - 60)));
+			}
+			return [renderWorkflowBadgeLine(ctx, workflow, width, extraParts)];
+		},
+		invalidate() {},
+	}));
+}
+
+function renderReviewWidget(ctx: ExtensionContext) {
+	if (!ctx.hasUI) return;
+	const workflow = activeWorkflow(ctx, "review");
+	if (!workflow || workflow.status !== "active") {
+		ctx.ui.setWidget("review", undefined);
+		return;
+	}
+	ctx.ui.setWidget("review", () => ({
+		render(width: number): string[] {
+			const extraParts = [`target: ${truncateToWidth(reviewTargetForWidget(workflow), Math.max(20, width - 40))}`];
+			return [renderWorkflowBadgeLine(ctx, workflow, width, extraParts)];
+		},
+		invalidate() {},
+	}));
+}
+
+function renderAllWorkflowWidgets(ctx: ExtensionContext | ExtensionCommandContext) {
+	renderAutoresearchWidget(ctx);
+	renderGoalWidget(ctx);
+	renderReviewWidget(ctx);
+}
+
+function autoCompleteReviewIfDone(pi: ExtensionAPI, ctx: ExtensionContext) {
+	const workflow = activeWorkflow(ctx, "review");
+	if (!workflow || workflow.status !== "active") return;
+	const turns = workflowDisplayTurns(ctx, workflow);
+	if (turns >= 1) {
+		changeWorkflowStatus(pi, workflow, "complete", "Review completed after agent output.");
+		renderAllWorkflowWidgets(ctx);
+	}
 }
 
 function statusLineKey(ctx: ExtensionContext | ExtensionCommandContext): string {
@@ -175,25 +253,10 @@ function clearWorkflowStatusTicker(ctx: ExtensionContext | ExtensionCommandConte
 	statusLineTimers.delete(key);
 }
 
-function ensureWorkflowStatusTicker(ctx: ExtensionContext | ExtensionCommandContext) {
-	if (!ctx.hasUI) return;
-	const key = statusLineKey(ctx);
-	if (statusLineTimers.has(key)) return;
-	const timer = setInterval(() => bumpWorkflowStatusLine(ctx), 1000);
-	timer.unref?.();
-	statusLineTimers.set(key, timer);
-}
-
-function workflowWallClockIsLive(workflow: WorkflowRecord): boolean {
-	return workflow.status !== "complete" && workflow.status !== "failed" && workflow.status !== "cleared";
-}
-
 function bumpWorkflowStatusLine(ctx: ExtensionContext | ExtensionCommandContext) {
 	if (!ctx.hasUI) return;
-	const workflow = currentWorkflowForStatusLine(ctx);
-	ctx.ui.setStatus(WORKFLOW_STATUS_KEY, workflow ? ansiWorkflowBadge(ctx, workflow) : undefined);
-	if (workflow && workflowWallClockIsLive(workflow)) ensureWorkflowStatusTicker(ctx);
-	else clearWorkflowStatusTicker(ctx);
+	ctx.ui.setStatus(WORKFLOW_STATUS_KEY, undefined);
+	clearWorkflowStatusTicker(ctx);
 }
 
 function runtimeFor(ctx: ExtensionContext): AutoRuntime {
@@ -609,10 +672,11 @@ function autoresearchSummary(cwd: string) {
 	const name = typeof config.name === "string" ? config.name : undefined;
 	const baseline = typeof runs[0]?.metric === "number" ? (runs[0].metric as number) : undefined;
 	const kept = runs.filter((entry) => entry.status === "keep");
+	const discarded = runs.filter((entry) => entry.status === "discard").length;
 	const crashed = runs.filter((entry) => entry.status === "crash").length;
 	const checksFailed = runs.filter((entry) => entry.status === "checks_failed").length;
 	const best = bestMetricFromEntries(entries, direction);
-	return { entries, runs, direction, metricName, metricUnit, name, baseline, kept: kept.length, crashed, checksFailed, best };
+	return { entries, runs, direction, metricName, metricUnit, name, baseline, kept: kept.length, discarded, crashed, checksFailed, best };
 }
 
 function median(values: number[]): number | null {
@@ -622,6 +686,7 @@ function median(values: number[]): number | null {
 	return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
+/** Signal-to-noise ratio: |best − baseline| ÷ median absolute deviation of measurements. */
 function confidenceScore(values: number[], baseline: number | undefined, best: number | undefined): number | null {
 	if (baseline === undefined || best === undefined || values.length < 3) return null;
 	const med = median(values);
@@ -644,14 +709,15 @@ function autoresearchMarkdown(cwd: string): string {
 	const rows = summary.runs
 		.map((run, index) => `| ${index + 1} | ${String(run.status ?? "")} | ${formatMetric(typeof run.metric === "number" ? run.metric : undefined, summary.metricUnit)} | ${String(run.description ?? "").replace(/\|/g, "\\|")} | ${String(run.command ?? "").replace(/\|/g, "\\|")} |`)
 		.join("\n");
-	return [`# Autoresearch${summary.name ? `: ${summary.name}` : ""}`, "", `- Runs: ${summary.runs.length}`, `- Kept: ${summary.kept}`, `- Crashes: ${summary.crashed}`, `- Checks failed: ${summary.checksFailed}`, `- Primary metric: ${summary.metricName} (${summary.metricUnit || "unitless"}, ${summary.direction} is better)`, `- Baseline: ${formatMetric(summary.baseline, summary.metricUnit)}`, `- Best: ${formatMetric(summary.best, summary.metricUnit)}`, `- Confidence: ${conf === null ? "n/a" : `${conf.toFixed(1)}×`}`, "", "| # | Status | Metric | Description | Command |", "| --- | --- | ---: | --- | --- |", rows || "| - | - | - | No runs yet | - |"].join("\n");
+	return [`# Autoresearch${summary.name ? `: ${summary.name}` : ""}`, "", `- Runs: ${summary.runs.length}`, `- Kept: ${summary.kept}`, `- Discarded: ${summary.discarded}`, `- Crashes: ${summary.crashed}`, `- Checks failed: ${summary.checksFailed}`, `- Primary metric: ${summary.metricName} (${summary.metricUnit || "unitless"}, ${summary.direction} is better)`, `- Baseline: ${formatMetric(summary.baseline, summary.metricUnit)}`, `- Best: ${formatMetric(summary.best, summary.metricUnit)}`, `- Signal-to-noise: ${conf === null ? "n/a" : `${conf.toFixed(1)}×`}`, "", "| # | Status | Metric | Description | Command |", "| --- | --- | ---: | --- | --- |", rows || "| - | - | - | No runs yet | - |"].join("\n");
 }
 
 function renderAutoresearchWidget(ctx: ExtensionContext) {
 	if (!ctx.hasUI) return;
 	const workflow = activeWorkflow(ctx, "autoresearch");
 	const summary = autoresearchSummary(ctx.cwd);
-	if (!workflow && summary.runs.length === 0) {
+	const hasActiveWorkflow = workflow?.status === "active";
+	if (!hasActiveWorkflow && summary.runs.length === 0) {
 		ctx.ui.setWidget("autoresearch", undefined);
 		return;
 	}
@@ -662,16 +728,34 @@ function renderAutoresearchWidget(ctx: ExtensionContext) {
 			const conf = confidenceScore(values, summary.baseline, summary.best);
 			let delta = "";
 			if (summary.baseline !== undefined && summary.best !== undefined && summary.baseline !== 0 && summary.best !== summary.baseline) {
-				const pct = ((summary.best - summary.baseline) / summary.baseline) * 100;
-				const sign = pct > 0 ? "+" : "";
-				delta = ` (${sign}${pct.toFixed(1)}%)`;
+				const rawPct = ((summary.best - summary.baseline) / summary.baseline) * 100;
+				const improved = (summary.direction === "lower" && rawPct < 0) || (summary.direction === "higher" && rawPct > 0);
+				const absPct = Math.abs(rawPct);
+				delta = ` (${absPct.toFixed(1)}% ${improved ? "better" : "worse"})`;
 			}
-			const status = workflow ? ` │ ${workflow.status}` : "";
-			const failures = `${summary.crashed ? ` ${summary.crashed}💥` : ""}${summary.checksFailed ? ` ${summary.checksFailed}⚠` : ""}`;
-			const text = `🔬 autoresearch ${summary.runs.length} runs ${summary.kept} kept${failures} │ ★ ${summary.metricName}: ${formatMetric(best, summary.metricUnit)}${delta}${conf === null ? "" : ` │ conf: ${conf.toFixed(1)}×`}${status}${summary.name ? ` │ ${summary.name}` : ""}`;
-			if (!dashboardExpandedSessions.has(ctx.sessionManager.getSessionId())) return [text.length > width && width > 1 ? `${text.slice(0, width - 1)}…` : text];
-			const table = summary.runs.slice(-6).map((run, index) => `#${summary.runs.length - Math.min(summary.runs.length, 6) + index + 1} ${String(run.status ?? "").padEnd(13)} ${formatMetric(typeof run.metric === "number" ? run.metric : undefined, summary.metricUnit).padStart(10)}  ${String(run.description ?? "").slice(0, Math.max(10, width - 34))}`);
-			return [text.length > width && width > 1 ? `${text.slice(0, width - 1)}…` : text, ...table];
+			const failures = `${summary.discarded ? ` ${summary.discarded} discarded` : ""}${summary.crashed ? ` ${summary.crashed} crashed` : ""}${summary.checksFailed ? ` ${summary.checksFailed} checks-failed` : ""}`;
+			const extraParts: string[] = [];
+			if (summary.runs.length > 0) {
+				extraParts.push(`${summary.runs.length} runs ${summary.kept} kept${failures}`);
+				extraParts.push(`★ ${summary.metricName}: ${formatMetric(best, summary.metricUnit)}${delta}`);
+				if (conf !== null) extraParts.push(`SNR: ${conf.toFixed(1)}×`);
+			}
+			if (hasActiveWorkflow && summary.name) extraParts.push(summary.name);
+			const lines: string[] = [];
+			if (hasActiveWorkflow) {
+				lines.push(renderWorkflowBadgeLine(ctx, workflow!, width, extraParts));
+			} else if (extraParts.length > 0) {
+				const text = `🔬 autoresearch ${extraParts.join(" · ")}`;
+				lines.push(truncateToWidth(text, width));
+			}
+			if (dashboardExpandedSessions.has(ctx.sessionManager.getSessionId()) && summary.runs.length > 0) {
+				const table = summary.runs.slice(-6).map((run, index) => {
+					const line = `#${summary.runs.length - Math.min(summary.runs.length, 6) + index + 1} ${String(run.status ?? "").padEnd(13)} ${formatMetric(typeof run.metric === "number" ? run.metric : undefined, summary.metricUnit).padStart(10)}  ${String(run.description ?? "").slice(0, Math.max(10, width - 34))}`;
+					return truncateToWidth(line, width);
+				});
+				lines.push(...table);
+			}
+			return lines;
 		},
 		invalidate() {},
 	}));
@@ -836,7 +920,7 @@ function dashboardHtml(cwd: string): string {
 	const values = summary.runs.map((run) => (typeof run.metric === "number" ? run.metric : Number.NaN)).filter(Number.isFinite);
 	const conf = confidenceScore(values, summary.baseline, summary.best);
 	const rows = summary.runs.map((run, index) => `<tr class="${htmlEscape(run.status)}"><td>${index + 1}</td><td>${htmlEscape(run.status)}</td><td>${htmlEscape(formatMetric(typeof run.metric === "number" ? run.metric : undefined, summary.metricUnit))}</td><td>${htmlEscape(run.description)}</td><td><code>${htmlEscape(run.command)}</code></td></tr>`).join("\n");
-	return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="3"><title>Autoresearch</title><style>body{font-family:ui-sans-serif,system-ui;margin:24px;background:#111;color:#eee}table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #333;padding:6px;text-align:left;vertical-align:top}th{color:#aaa}.best,.keep{color:#7ee787}.discard{color:#d29922}.crash,.checks_failed{color:#ff7b72}code{color:#a5d6ff}</style></head><body><h1>🔬 Autoresearch${summary.name ? `: ${htmlEscape(summary.name)}` : ""}</h1><p>${summary.runs.length} runs, ${summary.kept} kept, ${summary.crashed} crashes, ${summary.checksFailed} checks failed<br>best <span class="best">${htmlEscape(summary.metricName)}: ${htmlEscape(formatMetric(summary.best ?? summary.baseline, summary.metricUnit))}</span>${conf === null ? "" : ` · confidence ${conf.toFixed(1)}×`}</p><table><thead><tr><th>#</th><th>Status</th><th>${htmlEscape(summary.metricName)}</th><th>Description</th><th>Command</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
+	return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="3"><title>Autoresearch</title><style>body{font-family:ui-sans-serif,system-ui;margin:24px;background:#111;color:#eee}table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #333;padding:6px;text-align:left;vertical-align:top}th{color:#aaa}.best,.keep{color:#7ee787}.discard{color:#d29922}.crash,.checks_failed{color:#ff7b72}code{color:#a5d6ff}</style></head><body><h1>🔬 Autoresearch${summary.name ? `: ${htmlEscape(summary.name)}` : ""}</h1><p>${summary.runs.length} runs, ${summary.kept} kept, ${summary.discarded} discarded, ${summary.crashed} crashes, ${summary.checksFailed} checks failed<br>best <span class="best">${htmlEscape(summary.metricName)}: ${htmlEscape(formatMetric(summary.best ?? summary.baseline, summary.metricUnit))}</span>${conf === null ? "" : ` · SNR ${conf.toFixed(1)}×`}</p><table><thead><tr><th>#</th><th>Status</th><th>${htmlEscape(summary.metricName)}</th><th>Description</th><th>Command</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
 }
 
 async function exportAutoresearchDashboard(pi: ExtensionAPI, ctx: ExtensionCommandContext) {
@@ -1839,8 +1923,8 @@ function ensureWorkflowRuntimeTools(pi: ExtensionAPI, workflow: WorkflowRecord) 
 	workflow.controller === "autoresearch" ? ensureAutoresearchToolsActive(pi) : ensureWorkflowToolsActive(pi);
 }
 
-function renderWorkflowRuntime(ctx: ExtensionContext | ExtensionCommandContext, workflow: WorkflowRecord) {
-	if (workflow.controller === "autoresearch") renderAutoresearchWidget(ctx);
+function renderWorkflowRuntime(ctx: ExtensionContext | ExtensionCommandContext, _workflow: WorkflowRecord) {
+	renderAllWorkflowWidgets(ctx);
 }
 
 function wakeWorkflowRuntime(
@@ -1914,7 +1998,7 @@ export default function workflowExtension(pi: ExtensionAPI) {
 		ensureWorkflowToolsActive(pi);
 		if (activeWorkflow(ctx, "autoresearch")) ensureAutoresearchToolsActive(pi);
 		bumpWorkflowStatusLine(ctx);
-		renderAutoresearchWidget(ctx);
+		renderAllWorkflowWidgets(ctx);
 		const workflow = latestActiveRuntimeWorkflow(ctx);
 		const controller = workflow ? controllerFor(workflow) : undefined;
 		if (workflow && controller && autoResumeOnSessionStart(ctx.cwd)) wakeWorkflowRuntime(pi, ctx, controller, workflow, "continue");
@@ -1922,7 +2006,7 @@ export default function workflowExtension(pi: ExtensionAPI) {
 
 	pi.on("session_tree", async (_event, ctx) => {
 		bumpWorkflowStatusLine(ctx);
-		renderAutoresearchWidget(ctx);
+		renderAllWorkflowWidgets(ctx);
 	});
 
 	pi.on("session_shutdown", async (_event, ctx) => {
@@ -1931,6 +2015,8 @@ export default function workflowExtension(pi: ExtensionAPI) {
 		clearWorkflowStatusTicker(ctx);
 		if (ctx.hasUI) {
 			ctx.ui.setWidget("autoresearch", undefined);
+			ctx.ui.setWidget("goal", undefined);
+			ctx.ui.setWidget("review", undefined);
 			ctx.ui.setStatus(WORKFLOW_STATUS_KEY, undefined);
 		}
 		if (dashboardServer) dashboardServer.close();
@@ -1953,7 +2039,7 @@ export default function workflowExtension(pi: ExtensionAPI) {
 	pi.on("session_compact", async (_event, ctx) => {
 		restoreWorkflowSnapshot(pi, ctx);
 		bumpWorkflowStatusLine(ctx);
-		renderAutoresearchWidget(ctx);
+		renderAllWorkflowWidgets(ctx);
 		const workflow = latestActiveRuntimeWorkflow(ctx);
 		const controller = workflow ? controllerFor(workflow) : undefined;
 		if (workflow && controller) wakeWorkflowRuntime(pi, ctx, controller, workflow, "continue");
@@ -1972,10 +2058,23 @@ export default function workflowExtension(pi: ExtensionAPI) {
 		bumpWorkflowStatusLine(ctx);
 	});
 
-	pi.on("agent_end", async (_event, ctx) => {
+	pi.on("agent_end", async (event, ctx) => {
+		const wasUserCancelled = event.messages.some((m) => (m as any).cancelled === true || (m as any).stopReason === "aborted");
 		bumpWorkflowStatusLine(ctx);
-		renderAutoresearchWidget(ctx);
-		scheduleAutoContinue(pi, ctx);
+		renderAllWorkflowWidgets(ctx);
+		autoCompleteReviewIfDone(pi, ctx);
+		if (!wasUserCancelled) {
+			scheduleAutoContinue(pi, ctx);
+		} else {
+			const workflow = activeWorkflow(ctx);
+			if (workflow) {
+				updateWorkflow(pi, workflow, {
+					note: `Paused by user (Esc). ${workflow.note || ""}`,
+					nextAction: `Press Enter or use /${workflow.controller} resume to continue.`,
+				});
+				renderAllWorkflowWidgets(ctx);
+			}
+		}
 	});
 
 	pi.registerCommand("goal", {
@@ -1983,7 +2082,7 @@ export default function workflowExtension(pi: ExtensionAPI) {
 		getArgumentCompletions: (prefix) => workflowArgumentCompletions(GOAL_ARGUMENT_COMPLETIONS, prefix),
 		handler: async (args, ctx) => {
 			try { return await handleGoalCommand(pi, args, ctx); }
-			finally { bumpWorkflowStatusLine(ctx); }
+			finally { bumpWorkflowStatusLine(ctx); renderAllWorkflowWidgets(ctx); }
 		},
 	});
 
@@ -1992,7 +2091,7 @@ export default function workflowExtension(pi: ExtensionAPI) {
 		getArgumentCompletions: (prefix) => workflowArgumentCompletions(REVIEW_ARGUMENT_COMPLETIONS, prefix),
 		handler: async (args, ctx) => {
 			try { return await handleReviewCommand(pi, args, ctx); }
-			finally { bumpWorkflowStatusLine(ctx); }
+			finally { bumpWorkflowStatusLine(ctx); renderAllWorkflowWidgets(ctx); }
 		},
 	});
 
@@ -2001,7 +2100,7 @@ export default function workflowExtension(pi: ExtensionAPI) {
 		getArgumentCompletions: (prefix) => workflowArgumentCompletions(AUTORESEARCH_ARGUMENT_COMPLETIONS, prefix),
 		handler: async (args, ctx) => {
 			try { return await handleAutoresearchCommand(pi, args, ctx); }
-			finally { bumpWorkflowStatusLine(ctx); }
+			finally { bumpWorkflowStatusLine(ctx); renderAllWorkflowWidgets(ctx); }
 		},
 	});
 
@@ -2010,7 +2109,7 @@ export default function workflowExtension(pi: ExtensionAPI) {
 		getArgumentCompletions: (prefix) => workflowArgumentCompletions(WORKFLOW_ARGUMENT_COMPLETIONS, prefix),
 		handler: async (args, ctx) => {
 			try { return await handleWorkflowCommand(pi, args, ctx); }
-			finally { bumpWorkflowStatusLine(ctx); }
+			finally { bumpWorkflowStatusLine(ctx); renderAllWorkflowWidgets(ctx); }
 		},
 	});
 }
