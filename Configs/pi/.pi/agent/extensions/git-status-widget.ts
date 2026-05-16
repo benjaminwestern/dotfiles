@@ -141,8 +141,13 @@ async function update(ctx: ExtensionContext) {
 		const cwd = currentCwd(ctx);
 		const snapshot = await readSnapshot(cwd, gitStatusConfig(cwd));
 		ctx.ui.setStatus(WIDGET_ID, snapshot ? formatSnapshot(ctx, snapshot) : undefined);
-	} catch {
-		ctx.ui.setStatus(WIDGET_ID, undefined);
+	} catch (error: any) {
+		if (error?.message?.includes("stale")) throw error;
+		try {
+			ctx.ui.setStatus(WIDGET_ID, undefined);
+		} catch {
+			// Ignore double fault
+		}
 	}
 }
 
@@ -155,6 +160,11 @@ export default function gitStatusWidget(pi: ExtensionAPI) {
 		refreshing = true;
 		try {
 			await update(ctx);
+		} catch (error: any) {
+			if (error?.message?.includes("stale") && timer) {
+				clearInterval(timer);
+				timer = undefined;
+			}
 		} finally {
 			refreshing = false;
 		}

@@ -1724,6 +1724,7 @@ async function handleGoalCommand(pi: ExtensionAPI, args: string, ctx: ExtensionC
 	if (verb === "pause") {
 		if (!current || current.status === "complete" || current.status === "cleared") return ctx.ui.notify("No active goal to pause.", "warning");
 		changeWorkflowStatus(pi, current, "paused", rest || "Paused by user.");
+		clearWorkflowRuntime(ctx);
 		return ctx.ui.notify("Goal paused.", "info");
 	}
 	if (verb === "resume") {
@@ -1740,11 +1741,13 @@ async function handleGoalCommand(pi: ExtensionAPI, args: string, ctx: ExtensionC
 	if (verb === "clear") {
 		if (!current || current.status === "cleared") return ctx.ui.notify("No goal to clear.", "warning");
 		clearWorkflow(pi, current, rest || "Cleared by user.");
+		clearWorkflowRuntime(ctx);
 		return ctx.ui.notify("Goal cleared.", "info");
 	}
 	if (verb === "complete" || verb === "done") {
 		if (!current || current.status === "complete" || current.status === "cleared") return ctx.ui.notify("No active goal to complete.", "warning");
 		changeWorkflowStatus(pi, current, "complete", rest || "Marked complete by user.");
+		clearWorkflowRuntime(ctx);
 		return ctx.ui.notify("Goal marked complete.", "info");
 	}
 	if (verb === "edit" || verb === "set") {
@@ -1777,6 +1780,7 @@ async function handleReviewCommand(pi: ExtensionAPI, args: string, ctx: Extensio
 	if (verb === "clear") {
 		if (!current || current.status === "cleared") return ctx.ui.notify("No review to clear.", "warning");
 		clearWorkflow(pi, current, rest || "Cleared by user.");
+		clearWorkflowRuntime(ctx);
 		return ctx.ui.notify("Review cleared.", "info");
 	}
 	if (verb === "continue" || verb === "again") {
@@ -1833,6 +1837,7 @@ async function handleAutoresearchCommand(pi: ExtensionAPI, args: string, ctx: Ex
 	if (verb === "off" || verb === "pause") {
 		if (!current || current.status === "complete" || current.status === "cleared") return ctx.ui.notify("No active autoresearch workflow to pause.", "warning");
 		changeWorkflowStatus(pi, current, "paused", rest || "Paused by user.");
+		clearWorkflowRuntime(ctx);
 		renderAutoresearchWidget(ctx);
 		return ctx.ui.notify("Autoresearch paused.", "info");
 	}
@@ -1846,6 +1851,7 @@ async function handleAutoresearchCommand(pi: ExtensionAPI, args: string, ctx: Ex
 		if (current && current.status !== "cleared") clearWorkflow(pi, current, rest || "Cleared by user.");
 		const jsonl = autoresearchJsonlPath(ctx.cwd);
 		if (existsSync(jsonl)) unlinkSync(jsonl);
+		clearWorkflowRuntime(ctx);
 		renderAutoresearchWidget(ctx);
 		return ctx.ui.notify("Autoresearch cleared.", "info");
 	}
@@ -1961,14 +1967,19 @@ function scheduleAutoContinue(pi: ExtensionAPI, ctx: ExtensionContext) {
 	if (runtime.timer) clearTimeout(runtime.timer);
 	runtime.timer = setTimeout(() => {
 		runtime.timer = null;
-		if (!ctx.isIdle() || ctx.hasPendingMessages()) return;
-		if (!workflowAutoContinueEnabled(ctx.cwd, workflow.controller)) return;
-		const fresh = activeWorkflow(ctx, workflow.controller);
-		if (!fresh || fresh.id !== workflow.id || fresh.status !== "active") return;
-		runtime.turns += 1;
-		const promptWorkflow = { ...fresh, data: { ...fresh.data, autoTurns: runtime.turns } };
-		updateWorkflow(pi, fresh, { data: { autoTurns: runtime.turns } });
-		wakeWorkflowRuntime(pi, ctx, controller, promptWorkflow, "continue");
+		try {
+			if (!ctx.isIdle() || ctx.hasPendingMessages()) return;
+			if (!workflowAutoContinueEnabled(ctx.cwd, workflow.controller)) return;
+			const fresh = activeWorkflow(ctx, workflow.controller);
+			if (!fresh || fresh.id !== workflow.id || fresh.status !== "active") return;
+			runtime.turns += 1;
+			const promptWorkflow = { ...fresh, data: { ...fresh.data, autoTurns: runtime.turns } };
+			updateWorkflow(pi, fresh, { data: { autoTurns: runtime.turns } });
+			wakeWorkflowRuntime(pi, ctx, controller, promptWorkflow, "continue");
+		} catch (error: any) {
+			if (error?.message?.includes("stale")) return;
+			throw error;
+		}
 	}, autoContinueSettledMs(ctx.cwd));
 }
 
@@ -2054,6 +2065,13 @@ export default function workflowExtension(pi: ExtensionAPI) {
 		bumpWorkflowStatusLine(ctx);
 	});
 
+	pi.on("tool_execution_end", async (_event, ctx) => {
+		bumpWorkflowStatusLine(ctx);
+		renderAllWorkflowWidgets(ctx);
+		const workflow = latestActiveRuntimeWorkflow(ctx);
+		if (!workflow) clearWorkflowRuntime(ctx);
+	});
+
 	pi.on("turn_end", async (_event, ctx) => {
 		bumpWorkflowStatusLine(ctx);
 	});
@@ -2063,6 +2081,8 @@ export default function workflowExtension(pi: ExtensionAPI) {
 		bumpWorkflowStatusLine(ctx);
 		renderAllWorkflowWidgets(ctx);
 		autoCompleteReviewIfDone(pi, ctx);
+		const workflowActive = latestActiveRuntimeWorkflow(ctx);
+		if (!workflowActive) clearWorkflowRuntime(ctx);
 		if (!wasUserCancelled) {
 			scheduleAutoContinue(pi, ctx);
 		} else {
@@ -2082,7 +2102,12 @@ export default function workflowExtension(pi: ExtensionAPI) {
 		getArgumentCompletions: (prefix) => workflowArgumentCompletions(GOAL_ARGUMENT_COMPLETIONS, prefix),
 		handler: async (args, ctx) => {
 			try { return await handleGoalCommand(pi, args, ctx); }
-			finally { bumpWorkflowStatusLine(ctx); renderAllWorkflowWidgets(ctx); }
+			finally {
+				bumpWorkflowStatusLine(ctx);
+				renderAllWorkflowWidgets(ctx);
+				const active = latestActiveRuntimeWorkflow(ctx);
+				if (!active) clearWorkflowRuntime(ctx);
+			}
 		},
 	});
 
@@ -2091,7 +2116,12 @@ export default function workflowExtension(pi: ExtensionAPI) {
 		getArgumentCompletions: (prefix) => workflowArgumentCompletions(REVIEW_ARGUMENT_COMPLETIONS, prefix),
 		handler: async (args, ctx) => {
 			try { return await handleReviewCommand(pi, args, ctx); }
-			finally { bumpWorkflowStatusLine(ctx); renderAllWorkflowWidgets(ctx); }
+			finally {
+				bumpWorkflowStatusLine(ctx);
+				renderAllWorkflowWidgets(ctx);
+				const active = latestActiveRuntimeWorkflow(ctx);
+				if (!active) clearWorkflowRuntime(ctx);
+			}
 		},
 	});
 
@@ -2100,7 +2130,12 @@ export default function workflowExtension(pi: ExtensionAPI) {
 		getArgumentCompletions: (prefix) => workflowArgumentCompletions(AUTORESEARCH_ARGUMENT_COMPLETIONS, prefix),
 		handler: async (args, ctx) => {
 			try { return await handleAutoresearchCommand(pi, args, ctx); }
-			finally { bumpWorkflowStatusLine(ctx); renderAllWorkflowWidgets(ctx); }
+			finally {
+				bumpWorkflowStatusLine(ctx);
+				renderAllWorkflowWidgets(ctx);
+				const active = latestActiveRuntimeWorkflow(ctx);
+				if (!active) clearWorkflowRuntime(ctx);
+			}
 		},
 	});
 
@@ -2109,7 +2144,12 @@ export default function workflowExtension(pi: ExtensionAPI) {
 		getArgumentCompletions: (prefix) => workflowArgumentCompletions(WORKFLOW_ARGUMENT_COMPLETIONS, prefix),
 		handler: async (args, ctx) => {
 			try { return await handleWorkflowCommand(pi, args, ctx); }
-			finally { bumpWorkflowStatusLine(ctx); renderAllWorkflowWidgets(ctx); }
+			finally {
+				bumpWorkflowStatusLine(ctx);
+				renderAllWorkflowWidgets(ctx);
+				const active = latestActiveRuntimeWorkflow(ctx);
+				if (!active) clearWorkflowRuntime(ctx);
+			}
 		},
 	});
 }
