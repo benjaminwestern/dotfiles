@@ -10,8 +10,8 @@ Scoop scripts, mise scripts, and the user's PowerShell profile.
 #>
 
 function global:Get-LocalCodeSigningCert {
-  Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert -ErrorAction SilentlyContinue |
-    Where-Object Subject -eq 'CN=LocalScoopSigner' |
+  Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue |
+    Where-Object { $_.Subject -eq 'CN=LocalScoopSigner' -and $_.EnhancedKeyUsageList.FriendlyName -contains 'Code Signing' } |
     Select-Object -First 1
 }
 

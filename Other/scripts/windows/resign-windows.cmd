@@ -5,7 +5,7 @@ if /I "%~1"=="-h" goto usage
 if /I "%~1"=="--help" goto usage
 if /I "%~1"=="help" goto usage
 
-call "%~dp0bootstrap-windows.cmd" resign %*
+pwsh -NoLogo -NoProfile -File "%~dp0resign-windows.ps1" %*
 set "EXITCODE=%ERRORLEVEL%"
 
 endlocal & exit /b %EXITCODE%
