@@ -1,3 +1,0 @@
-[manager]
-# Show only current directory + preview (no parent pane)
-ratio = [0, 1, 1]

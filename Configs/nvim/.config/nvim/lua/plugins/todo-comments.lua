@@ -1,3 +1,8 @@
+-- =============================================================================
+-- ||                                                                         ||
+-- ||                      NVIM / PLUGIN / TODO COMMENTS                      ||
+-- ||                                                                         ||
+-- =============================================================================
 return {
   -- Highlight and search TODO, FIXME, HACK, NOTE, BUG in comments
   'folke/todo-comments.nvim',

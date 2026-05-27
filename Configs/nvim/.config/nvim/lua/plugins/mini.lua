@@ -1,14 +1,132 @@
+-- =============================================================================
+-- ||                                                                         ||
+-- ||                          NVIM / PLUGIN / MINI                           ||
+-- ||                                                                         ||
+-- =============================================================================
 return {
   -- Essential mini.nvim collection (base dependency)
   { 'echasnovski/mini.nvim', version = false },
 
-  -- Simple and beautiful statusline
+  -- Compact statusline: mode, repo/branch, path, diagnostics, filetype, location.
   {
     'echasnovski/mini.statusline',
     version = '*',
-    opts = {
-      use_icons = vim.g.have_nerd_font,
-    },
+    config = function()
+      local repo_cache = {}
+
+      local mode_map = {
+        n = 'N',
+        i = 'I',
+        v = 'V',
+        V = 'V-L',
+        ['\22'] = 'V-B',
+        c = 'C',
+        R = 'R',
+        t = 'T',
+      }
+
+      local function buf_path()
+        if vim.bo.filetype == 'netrw' then
+          local dir = vim.b.netrw_curdir or vim.fn.getcwd()
+          return ':Ex ' .. vim.fn.fnamemodify(dir, ':~:.')
+        end
+
+        local name = vim.api.nvim_buf_get_name(0)
+        if name == '' then
+          return '[No Name]'
+        end
+        return vim.fn.fnamemodify(name, ':~:.')
+      end
+
+      local function git_root()
+        local name = vim.api.nvim_buf_get_name(0)
+        local start = vim.bo.filetype == 'netrw' and vim.b.netrw_curdir
+          or name ~= '' and vim.fs.dirname(name)
+          or vim.fn.getcwd()
+        if not start or start == '' then
+          start = vim.fn.getcwd()
+        end
+        return vim.fs.root(start, '.git')
+      end
+
+      local function repo_name()
+        local root = git_root()
+        if not root then
+          return ''
+        end
+        if repo_cache[root] then
+          return repo_cache[root]
+        end
+        repo_cache[root] = vim.fn.fnamemodify(root, ':t')
+        return repo_cache[root]
+      end
+
+      local function git_label()
+        local repo = repo_name()
+        if repo == '' then
+          return ''
+        end
+        local branch = vim.b.gitsigns_head
+        if branch and branch ~= '' then
+          return repo .. ':' .. branch
+        end
+        return repo
+      end
+
+      local function diagnostics_label()
+        local counts = vim.diagnostic.count(0)
+        local errors = counts[vim.diagnostic.severity.ERROR] or 0
+        local warnings = counts[vim.diagnostic.severity.WARN] or 0
+        if errors == 0 and warnings == 0 then
+          return ''
+        end
+        local parts = {}
+        if errors > 0 then
+          table.insert(parts, 'E' .. errors)
+        end
+        if warnings > 0 then
+          table.insert(parts, 'W' .. warnings)
+        end
+        return table.concat(parts, ' ')
+      end
+
+      local function filetype_label()
+        return vim.bo.filetype ~= '' and vim.bo.filetype or ''
+      end
+
+      require('mini.statusline').setup({
+        use_icons = false,
+        content = {
+          active = function()
+            local _, mode_hl = MiniStatusline.section_mode({ trunc_width = 120 })
+            local mode = mode_map[vim.fn.mode()] or vim.fn.mode():upper()
+            local path = buf_path()
+            local modified = vim.bo.modified and '[+]' or ''
+            local readonly = vim.bo.readonly and vim.bo.buftype == '' and vim.bo.filetype ~= 'netrw' and '[RO]' or ''
+            local repo = git_label()
+            local diagnostics = diagnostics_label()
+            local filetype = filetype_label()
+            local location = vim.fn.line('.') .. ':' .. vim.fn.virtcol('.')
+
+            return MiniStatusline.combine_groups({
+              { hl = mode_hl, strings = { mode } },
+              { hl = 'MiniStatuslineDevinfo', strings = { repo } },
+              '%<',
+              { hl = 'MiniStatuslineFilename', strings = { path, modified, readonly } },
+              '%=',
+              { hl = 'MiniStatuslineDevinfo', strings = { diagnostics } },
+              { hl = 'MiniStatuslineFileinfo', strings = { filetype } },
+              { hl = mode_hl, strings = { location } },
+            })
+          end,
+          inactive = function()
+            return MiniStatusline.combine_groups({
+              { hl = 'MiniStatuslineInactive', strings = { buf_path() } },
+            })
+          end,
+        },
+      })
+    end,
   },
 
   -- Better Around/Inside textobjects (replaces nvim-treesitter-textobjects)

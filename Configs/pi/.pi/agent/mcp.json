@@ -80,12 +80,6 @@
       ],
       "enabled": false
     },
-    "agentic-interaction": {
-      "type": "remote",
-      "description": "Connect to the local agentic-interaction MCP service. Use for local workflow automation and agent coordination tools exposed by that server.",
-      "url": "http://127.0.0.1:8765/mcp",
-      "enabled": false
-    },
     "google-developer-knowledge": {
       "type": "remote",
       "description": "Search and retrieve official Google developer documentation. Use for Google Cloud, Firebase, Android, Chrome, Go, Gemini, TensorFlow, and web.dev answers.",
@@ -95,12 +89,6 @@
       },
       "enabled": true,
       "selectedTools": []
-    },
-    "solo": {
-      "type": "stdio",
-      "description": "Connect to Solo's local MCP integration. Use for tools and workflows exposed by the Solo desktop app.",
-      "command": "/Applications/Solo.app/Contents/MacOS/mcp",
-      "enabled": false
     }
   }
 }

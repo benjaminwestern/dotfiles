@@ -1,3 +1,8 @@
+-- =============================================================================
+-- ||                                                                         ||
+-- ||                       NVIM / PLUGIN / FORMATTING                        ||
+-- ||                                                                         ||
+-- =============================================================================
 return {
   {
     -- Autoformat
@@ -66,7 +71,9 @@ return {
     config = function(_, opts)
       require('conform').setup(opts)
 
-      -- [[ Indent / unindent whole file or selection ]]
+      -- -----------------------------------------------------------------------------
+      -- INDENT / UNINDENT WHOLE FILE OR SELECTION
+      -- -----------------------------------------------------------------------------
       -- Indent entire file (auto-indent based on syntax / LSP)
       vim.keymap.set('n', '<leader>=', function()
         local save_cursor = vim.api.nvim_win_get_cursor(0)

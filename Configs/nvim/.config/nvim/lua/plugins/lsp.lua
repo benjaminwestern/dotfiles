@@ -1,3 +1,8 @@
+-- =============================================================================
+-- ||                                                                         ||
+-- ||                           NVIM / PLUGIN / LSP                           ||
+-- ||                                                                         ||
+-- =============================================================================
 return {
   {
     -- `lazydev` configures Lua LSP for your Neovim config, runtime and plugins
@@ -37,7 +42,9 @@ return {
       local capabilities = vim.lsp.protocol.make_client_capabilities()
       capabilities = require('blink.cmp').get_lsp_capabilities(capabilities)
 
-      -- [[ Global LSP Attach Keymaps ]]
+      -- -----------------------------------------------------------------------------
+      -- GLOBAL LSP ATTACH KEYMAPS
+      -- -----------------------------------------------------------------------------
       -- Neovim 0.10+ provides a native LspAttach event. We use this instead of
       -- per-server on_attach callbacks.
       vim.api.nvim_create_autocmd('LspAttach', {
@@ -108,7 +115,9 @@ return {
         end,
       })
 
-      -- [[ Server Configurations ]]
+      -- -----------------------------------------------------------------------------
+      -- SERVER CONFIGURATIONS
+      -- -----------------------------------------------------------------------------
       -- Using vim.lsp.config (Neovim 0.11+ native API) instead of the
       -- deprecated lspconfig.setup() framework.
       local servers = {
@@ -184,7 +193,9 @@ return {
         automatic_installation = false,
       }
 
-      -- [[ Diagnostic keymaps ]]
+      -- -----------------------------------------------------------------------------
+      -- DIAGNOSTIC KEYMAPS
+      -- -----------------------------------------------------------------------------
       vim.keymap.set('n', '[d', function() vim.diagnostic.jump({ count = -1, float = true }) end, { desc = 'Go to previous diagnostic message' })
       vim.keymap.set('n', ']d', function() vim.diagnostic.jump({ count = 1, float = true }) end, { desc = 'Go to next diagnostic message' })
       vim.keymap.set('n', '<leader>df', vim.diagnostic.open_float, { desc = '[D]iagnostic [F]loating message' })

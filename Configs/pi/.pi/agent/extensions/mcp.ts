@@ -1,25 +1,25 @@
+/*
+===============================================================================
+  EXTENSION: MCP
+  PURPOSE: Bridge configured MCP servers into Pi router tools and direct tools.
+===============================================================================
+*/
+
+// -----------------------------------------------------------------------------
+// Imports
+// -----------------------------------------------------------------------------
+
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool, getAgentDir, type ExtensionAPI, type ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import type { SettingItem } from "@earendil-works/pi-tui";
-import { extractMcpText as extractCallText, linkedSignal, parseJsonOrSse, textResult } from "./common-core/core.js";
-import {
-	color,
-	keyMatches,
-	fitText,
-	padRight,
-	panelBlank,
-	panelContentLine,
-	panelRule,
-	panelTopRule,
-	showHud,
-	strong,
-	withPanelShadow,
-	type ThemeLike,
-} from "./modal-core/core.js";
+import { matchesKey, truncateToWidth, visibleWidth, type SettingItem } from "@earendil-works/pi-tui";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+
+// -----------------------------------------------------------------------------
+// Config paths, runtime caches, and schema types
+// -----------------------------------------------------------------------------
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const GLOBAL_CONFIG_PATH = join(getAgentDir(), "mcp.json");
@@ -30,6 +30,20 @@ const SHARED_PROJECT_CONFIG_FILE = ".mcp.json";
 const INVENTORY_CACHE_PATH = join(getAgentDir(), "mcp-inventory-cache.json");
 const INVENTORY_CACHE_VERSION = 1;
 const ROUTER_TOOL_NAMES = ["mcp_search", "mcp_inspect", "mcp_call"];
+
+type ThemeLike = {
+	fg?: (color: string, text: string) => string;
+	bg?: (color: string, text: string) => string;
+	bold?: (text: string) => string;
+};
+
+type TuiLike = { requestRender?: () => void };
+type HudResult = "close" | "markdown";
+
+type HudOptions = {
+	render: (width: number, theme: ThemeLike, tui: TuiLike) => string[];
+	handleInput?: (data: string, controls: { done: (result: HudResult) => void; requestRender: () => void }) => boolean | void;
+};
 
 type ImportKind = "cursor" | "claude-code" | "claude-desktop" | "codex" | "windsurf" | "vscode";
 
@@ -142,6 +156,74 @@ const stdioClients = new Map<string, StdioMcpClient>();
 const hydratedSurfaceTools = new Map<string, McpToolSurfaceConfig>();
 let inventoryCache: InventoryCache | undefined;
 const registeredSurfaceTools = new Map<string, string>();
+
+// -----------------------------------------------------------------------------
+// Local tool-result, timeout, and MCP response helpers
+// -----------------------------------------------------------------------------
+
+function textResult(text: string, details: Record<string, unknown> = {}) {
+	return {
+		content: [{ type: "text" as const, text }],
+		details,
+	};
+}
+
+function linkedSignal(parent: AbortSignal | undefined, timeoutMs: number) {
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(new Error(`Timed out after ${timeoutMs}ms`)), timeoutMs);
+	const abort = () => controller.abort(parent?.reason ?? new Error("Aborted"));
+
+	if (parent) {
+		if (parent.aborted) abort();
+		else parent.addEventListener("abort", abort, { once: true });
+	}
+
+	return {
+		signal: controller.signal,
+		cleanup: () => {
+			clearTimeout(timer);
+			parent?.removeEventListener("abort", abort);
+		},
+	};
+}
+
+function parseJsonOrSse(raw: string, errorMessage = "Response was not JSON or SSE"): any {
+	const trimmed = raw.trim();
+	if (trimmed.startsWith("{")) return JSON.parse(trimmed);
+
+	for (const line of trimmed.split(/\r?\n/)) {
+		if (!line.startsWith("data:")) continue;
+		const payload = line.slice("data:".length).trim();
+		if (!payload || payload === "[DONE]") continue;
+		return JSON.parse(payload);
+	}
+
+	throw new Error(errorMessage);
+}
+
+function extractMcpText(result: any): string {
+	const content = result?.content ?? result?.result?.content ?? result?.contents ?? result?.result?.contents;
+	if (Array.isArray(content)) {
+		const text = content
+			.map((item) => {
+				if (typeof item?.text === "string") return item.text;
+				if (typeof item === "string") return item;
+				return "";
+			})
+			.filter(Boolean)
+			.join("\n\n");
+		if (text.trim()) return text.trim();
+	}
+
+	if (typeof result?.text === "string") return result.text;
+	if (typeof result?.result === "string") return result.result;
+	if (typeof result === "string") return result;
+	return JSON.stringify(result?.result ?? result, null, 2);
+}
+
+// -----------------------------------------------------------------------------
+// Config loading, layering, validation, and writes
+// -----------------------------------------------------------------------------
 
 function stripJsonComments(raw: string): string {
 	return raw
@@ -314,6 +396,115 @@ function loadProjectLayers(cwd: string): McpProjectLayer[] {
 
 function mergeProjectLayers(layers: McpProjectLayer[]): McpConfig {
 	return layers.reduce((merged, layer) => mergeConfigs(merged, layer.config), emptyConfig());
+}
+
+// -----------------------------------------------------------------------------
+// Local TUI helpers for the /mcp selector
+// -----------------------------------------------------------------------------
+
+function isCloseKey(data: string) {
+	return data === "q" || data === "Q" || data === "\u0003" || matchesKey(data, "escape") || matchesKey(data, "ctrl+c");
+}
+
+function isMarkdownKey(data: string) {
+	return data === "m" || data === "M" || data === "e" || data === "E";
+}
+
+function keyMatches(data: string, keyName: string, aliases: string[] = []) {
+	return matchesKey(data, keyName) || aliases.includes(data);
+}
+
+async function showHud(ctx: ExtensionCommandContext, options: HudOptions) {
+	if (!ctx.hasUI) return "close" as HudResult;
+	const custom = (ctx.ui as unknown as {
+		custom: (
+			factory: (tui: TuiLike, theme: ThemeLike, keybindings: unknown, done: (value: HudResult) => void) => unknown,
+			options?: unknown,
+		) => Promise<HudResult>;
+	}).custom;
+
+	return custom(
+		(tui, theme, _keybindings, done) => ({
+			render: (width: number) => options.render(width, theme, tui),
+			handleInput: (data: string) => {
+				const requestRender = () => tui.requestRender?.();
+				const consumed = options.handleInput?.(data, { done, requestRender });
+				if (consumed) return;
+				if (isMarkdownKey(data)) done("markdown");
+				if (isCloseKey(data)) done("close");
+				requestRender();
+			},
+			invalidate: () => {},
+		}),
+		{
+			overlay: true,
+			overlayOptions: {
+				width: "94%",
+				maxHeight: "92%",
+				anchor: "top-center",
+				offsetY: 2,
+				margin: 2,
+			},
+		},
+	);
+}
+
+function color(theme: ThemeLike | undefined, name: string, text: string) {
+	return theme?.fg ? theme.fg(name, text) : text;
+}
+
+function strong(theme: ThemeLike | undefined, text: string) {
+	return theme?.bold ? theme.bold(text) : text;
+}
+
+function fitText(text: string | undefined, width: number) {
+	const value = text && text.trim() ? text : "none";
+	if (width <= 0) return "";
+	if (visibleWidth(value) <= width) return value;
+	return truncateToWidth(value, width);
+}
+
+function padRight(text: string, width: number) {
+	const visible = visibleWidth(text);
+	return visible >= width ? fitText(text, width) : text + " ".repeat(width - visible);
+}
+
+function fill(width: number, char = " ") {
+	return width > 0 ? char.repeat(width) : "";
+}
+
+function panelStyled(theme: ThemeLike | undefined, text: string, tone: "normal" | "accent" | "muted" | "warning" | "error" = "normal") {
+	const fg = tone === "normal" ? text : color(theme, tone === "accent" ? "accent" : tone, text);
+	return theme?.bg ? theme.bg("selectedBg", fg) : fg;
+}
+
+function panelContentLine(theme: ThemeLike | undefined, raw: string, width: number, tone: "normal" | "accent" | "muted" | "warning" | "error" = "normal") {
+	const inner = Math.max(1, width - 4);
+	const text = raw.trim() ? fitText(raw, inner) : "";
+	return panelStyled(theme, `│ ${padRight(text, inner)} │`, tone);
+}
+
+function panelRule(theme: ThemeLike | undefined, width: number, title?: string, top = false, bottom = false) {
+	const left = top ? "╭" : bottom ? "╰" : "├";
+	const right = top ? "╮" : bottom ? "╯" : "┤";
+	const label = title ? ` ${color(theme, "accent", strong(theme, title))} ` : "";
+	const middleWidth = Math.max(1, width - 2);
+	const rule = label ? `${label}${fill(Math.max(0, middleWidth - visibleWidth(label)), "─")}` : fill(middleWidth, "─");
+	return panelStyled(theme, `${left}${fitText(rule, middleWidth)}${right}`, "accent");
+}
+
+function panelTopRule(theme: ThemeLike | undefined, width: number, title: string, help: string) {
+	const middleWidth = Math.max(1, width - 2);
+	const leftLabel = ` ${color(theme, "accent", strong(theme, title))} `;
+	const rightLabel = ` ${color(theme, "muted", help)} `;
+	const rule = `${leftLabel}${fill(Math.max(1, middleWidth - visibleWidth(leftLabel) - visibleWidth(rightLabel)), "─")}${rightLabel}`;
+	return panelStyled(theme, `╭${fitText(rule, middleWidth)}╮`, "accent");
+}
+
+function withPanelShadow(lines: string[], width: number, theme?: ThemeLike) {
+	const sideShadow = color(theme, "dim", " ░");
+	const bottomShadow = color(theme, "dim", `${fill(2)}${"░".repeat(width)}`);
+	return [...lines.map((line) => `${line}${sideShadow}`), bottomShadow];
 }
 
 function compactMiddle(value: string, maxLength = 96): string {
@@ -626,6 +817,10 @@ async function chooseWriteTarget(ctx: ExtensionCommandContext, state = safeLoadM
 	const choice = await ctx.ui.select("Persist MCP change to", [...targets.keys()]);
 	return choice ? targets.get(choice) : undefined;
 }
+
+// -----------------------------------------------------------------------------
+// Runtime connection and inventory helpers
+// -----------------------------------------------------------------------------
 
 function resetRuntimeForConfigChange(closeClientsOnChange = true) {
 	inventoryCache = undefined;
@@ -1021,7 +1216,7 @@ function registerSurfaceTool(pi: ExtensionAPI, surface: McpToolSurfaceConfig): s
 			},
 			async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 				const result = await callMcpTool(ctx.cwd, surface.server, surface.tool, params ?? {}, signal);
-				return textResult(extractCallText(result), {
+				return textResult(extractMcpText(result), {
 					server: surface.server,
 					tool: surface.tool,
 					surface: name,
@@ -1282,6 +1477,10 @@ async function callMcpTool(cwd: string, serverName: string, toolName: string, ar
 	return remoteRequest(serverName, server, "tools/call", { name: toolName, arguments: args ?? {} }, signal);
 }
 
+// -----------------------------------------------------------------------------
+// Model-facing MCP router tools
+// -----------------------------------------------------------------------------
+
 const mcpSearchTool = defineTool({
 	name: "mcp_search",
 	label: "MCP Search",
@@ -1349,7 +1548,7 @@ const mcpCallTool = defineTool({
 
 	async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 		const result = await callMcpTool(ctx.cwd, params.server, params.tool, params.arguments ?? {}, signal);
-		return textResult(extractCallText(result), {
+		return textResult(extractMcpText(result), {
 			server: params.server,
 			tool: params.tool,
 		});
@@ -1646,6 +1845,10 @@ async function syncAfterMutation(pi: ExtensionAPI, cwd: string, signal: AbortSig
 	else syncActiveMcpTools(pi, config);
 }
 
+// -----------------------------------------------------------------------------
+// Interactive command UI helpers
+// -----------------------------------------------------------------------------
+
 async function showMcpSelector(pi: ExtensionAPI, ctx: ExtensionCommandContext) {
 	let state = safeLoadMcpState(ctx.cwd);
 	const items = buildMcpSelectorItems(state);
@@ -1934,6 +2137,10 @@ function formatMcpDoctor(state: McpState): string {
 	return lines.join("\n");
 }
 
+// -----------------------------------------------------------------------------
+// Manual command reports and handlers
+// -----------------------------------------------------------------------------
+
 function formatMcpHelp(): string {
 	return [
 		"# MCP Extension Help",
@@ -2105,7 +2312,7 @@ async function runManualMcpCall(ctx: ExtensionCommandContext, serverName: string
 
 	ctx.ui.notify(`Calling ${serverName}.${toolName}...`, "info");
 	const result = await callMcpTool(ctx.cwd, serverName, toolName, args, ctx.signal);
-	await ctx.ui.editor(`MCP call: ${serverName}.${toolName}`, extractCallText(result));
+	await ctx.ui.editor(`MCP call: ${serverName}.${toolName}`, extractMcpText(result));
 }
 
 function findDirectToolSelection(config: McpConfig, directName: string): { server: string; tool: string } | undefined {
@@ -2113,6 +2320,10 @@ function findDirectToolSelection(config: McpConfig, directName: string): { serve
 	if (selection) return { server: selection.serverName, tool: selection.toolName };
 	return undefined;
 }
+
+// -----------------------------------------------------------------------------
+// Extension registration
+// -----------------------------------------------------------------------------
 
 export default function (pi: ExtensionAPI) {
 	pi.registerTool(mcpSearchTool);

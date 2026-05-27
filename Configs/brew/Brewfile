@@ -49,14 +49,9 @@ brew "luarocks" # Required for rest.nvim
 brew "wget" # Required for neovim mason.nvim
 brew "pngpaste" # Required for neovim clipboard
 brew "coreutils"
-
-# Yazi Dependencies
 brew "ffmpeg" # Video and audio processing
-brew "sevenzip" # 7-Zip is a file archiver with a high compression ratio
-brew "poppler" # PDF rendering library
-brew "resvg" # SVG rendering tool and library
 brew "imagemagick" # Tools and libraries to manipulate images in many formats
-brew "yazi" # Terminal file manager written in Rust, based on async I/O
+brew "resvg" # SVG rendering tool and library
 brew "tlrc" # TLDR for common terminal commands
 
 # GUI applications — gated on HOMEBREW_GUI env var

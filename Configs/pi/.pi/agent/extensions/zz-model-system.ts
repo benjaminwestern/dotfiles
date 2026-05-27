@@ -1,6 +1,21 @@
+/*
+===============================================================================
+  EXTENSION: Model System Prompt
+  PURPOSE: Append model-scoped prompt files from global and project directories.
+===============================================================================
+*/
+
+// -----------------------------------------------------------------------------
+// Imports
+// -----------------------------------------------------------------------------
+
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
+
+// -----------------------------------------------------------------------------
+// Constants and types
+// -----------------------------------------------------------------------------
 
 const PROMPT_DIR = "model-system";
 const SECTION_START = "<!-- pi:model-system:start -->";
@@ -22,6 +37,10 @@ type PromptMatch = {
 	kind: PromptKind;
 	content: string;
 };
+
+// -----------------------------------------------------------------------------
+// Prompt discovery helpers
+// -----------------------------------------------------------------------------
 
 function ancestorDirs(cwd: string): string[] {
 	const dirs: string[] = [];
@@ -79,6 +98,10 @@ function promptDirs(cwd: string): Array<{ path: string; scope: PromptScope }> {
 	];
 }
 
+// -----------------------------------------------------------------------------
+// Prompt collection and replacement
+// -----------------------------------------------------------------------------
+
 function loadModelPrompts(ctx: Pick<ExtensionContext, "cwd" | "model">): PromptMatch[] {
 	const model = ctx.model;
 	if (!model) return [];
@@ -125,6 +148,10 @@ function appendModelPrompts(basePrompt: string, currentModelRef: string, matches
 
 	return `${stripOwnSection(basePrompt)}\n\n${SECTION_START}\n${SECTION_HEADING}\n\nThese additional instructions apply only because the current model is ${currentModelRef}.\n\n${sections.join("\n\n")}\n${SECTION_END}`;
 }
+
+// -----------------------------------------------------------------------------
+// Extension registration
+// -----------------------------------------------------------------------------
 
 export default function modelSystemPrompts(pi: ExtensionAPI) {
 	pi.on("before_agent_start", (event, ctx) => {

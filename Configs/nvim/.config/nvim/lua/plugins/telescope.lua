@@ -1,3 +1,8 @@
+-- =============================================================================
+-- ||                                                                         ||
+-- ||                        NVIM / PLUGIN / TELESCOPE                        ||
+-- ||                                                                         ||
+-- =============================================================================
 return {
   'nvim-telescope/telescope.nvim',
   branch = 'master',
@@ -103,13 +108,15 @@ return {
     pcall(require('telescope').load_extension, 'fzf')
     pcall(require('telescope').load_extension, 'ui-select')
 
-    -- ============================================================
+    -- -----------------------------------------------------------------------------
     -- CORE NAVIGATION KEYMAPS
-    -- ============================================================
+    -- -----------------------------------------------------------------------------
 
     local builtin = require 'telescope.builtin'
 
-    -- [[ Double-tap Space = Buffer Switching ]]
+    -- -----------------------------------------------------------------------------
+    -- DOUBLE-TAP SPACE = BUFFER SWITCHING
+    -- -----------------------------------------------------------------------------
     -- This is your primary navigation mechanism. Hit space twice and
     -- you get a beautiful modal list of open buffers ordered by MRU.
     vim.keymap.set('n', '<leader><space>', function()
@@ -121,7 +128,9 @@ return {
       }
     end, { desc = '[ ] Switch between open buffers (MRU)' })
 
-    -- [[ File Finding ]]
+    -- -----------------------------------------------------------------------------
+    -- FILE FINDING
+    -- -----------------------------------------------------------------------------
     vim.keymap.set('n', '<leader>sf', builtin.find_files, { desc = '[S]earch [F]iles' })
     vim.keymap.set('n', '<leader>s.', builtin.oldfiles, { desc = '[S]earch Recent Files ("." for repeat)' })
     vim.keymap.set('n', '<leader>?', builtin.oldfiles, { desc = '[?] Find recently opened files' })
@@ -152,7 +161,9 @@ return {
       end)
     end, { desc = '[G]it [H]unks in current buffer (loclist)' })
 
-    -- [[ Text Search ]]
+    -- -----------------------------------------------------------------------------
+    -- TEXT SEARCH
+    -- -----------------------------------------------------------------------------
     vim.keymap.set('n', '<leader>/', function()
       builtin.current_buffer_fuzzy_find(require('telescope.themes').get_dropdown {
         winblend = 10,
@@ -163,7 +174,9 @@ return {
     vim.keymap.set('n', '<leader>sg', builtin.live_grep, { desc = '[S]earch by [G]rep' })
     vim.keymap.set('n', '<leader>sw', builtin.grep_string, { desc = '[S]earch current [W]ord' })
 
-    -- [[ Open Files Search ]]
+    -- -----------------------------------------------------------------------------
+    -- OPEN FILES SEARCH
+    -- -----------------------------------------------------------------------------
     local function telescope_live_grep_open_files()
       builtin.live_grep {
         grep_open_files = true,
@@ -172,9 +185,9 @@ return {
     end
     vim.keymap.set('n', '<leader>s/', telescope_live_grep_open_files, { desc = '[S]earch [/] in Open Files' })
 
-    -- ============================================================
+    -- -----------------------------------------------------------------------------
     -- PROJECT / DIRECTORY HOPPING
-    -- ============================================================
+    -- -----------------------------------------------------------------------------
 
     -- Search files in a specific directory (prompted)
     vim.keymap.set('n', '<leader>sp', function()
@@ -223,7 +236,9 @@ return {
       }
     end, { desc = '[S]earch grep in current file\'s directory' })
 
-    -- [[ Git Root Search ]]
+    -- -----------------------------------------------------------------------------
+    -- GIT ROOT SEARCH
+    -- -----------------------------------------------------------------------------
     -- Function to find the git root directory based on the current buffer's path
     local function find_git_root()
       local current_file = vim.api.nvim_buf_get_name(0)
@@ -253,9 +268,9 @@ return {
     vim.api.nvim_create_user_command('LiveGrepGitRoot', live_grep_git_root, {})
     vim.keymap.set('n', '<leader>sG', ':LiveGrepGitRoot<cr>', { desc = '[S]earch by [G]rep on Git Root' })
 
-    -- ============================================================
+    -- -----------------------------------------------------------------------------
     -- LSP / DIAGNOSTIC SEARCH
-    -- ============================================================
+    -- -----------------------------------------------------------------------------
 
     -- Workspace diagnostics (all open buffers + project files LSP knows about)
     vim.keymap.set('n', '<leader>sd', function()
@@ -285,9 +300,9 @@ return {
       builtin.find_files { cwd = vim.fn.stdpath 'config' }
     end, { desc = '[S]earch [N]eovim files' })
 
-    -- ============================================================
+    -- -----------------------------------------------------------------------------
     -- CHANGE DIRECTORY / PROJECT HOPPING
-    -- ============================================================
+    -- -----------------------------------------------------------------------------
 
     -- Quick cd to a directory with tab completion, then optionally search
     vim.keymap.set('n', '<leader>cd', function()
@@ -310,9 +325,9 @@ return {
       print('Changed directory to: ' .. dir)
     end, { desc = '[C]hange [D]irectory to file location' })
 
-    -- ============================================================
+    -- -----------------------------------------------------------------------------
     -- LSP PICKERS (buffer-local, set up via autocmd in lsp.lua)
-    -- ============================================================
+    -- -----------------------------------------------------------------------------
     -- These are handled in lsp.lua's LspAttach autocmd to ensure they
     -- only exist when an LSP is active.
   end,

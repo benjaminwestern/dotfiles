@@ -1,52 +1,45 @@
-import {
-	createBashToolDefinition,
-	type ExtensionAPI,
-	type ExtensionCommandContext,
-} from "@earendil-works/pi-coding-agent";
+/*
+===============================================================================
+  EXTENSION: Utils
+  PURPOSE: Small user-facing utility commands that do not need their own file.
+===============================================================================
+*/
 
-const MISE_ENV_PREFIX = 'eval "$(mise env -s bash)"';
-const MISE_PROMPT_NOTE = `Mise tool hot-reload is enabled for Pi bash commands. Before each bash execution, Pi refreshes the shell environment with \`mise env -s bash\` for the command cwd, so newly installed or changed mise tools are available without restarting the session. Use bash normally; do not hard-code mise install paths.`;
+// -----------------------------------------------------------------------------
+// Imports
+// -----------------------------------------------------------------------------
 
-function requireMessage(command: string, args: string, ctx: ExtensionCommandContext): string | undefined {
-	const message = args.trim();
-	if (message) return message;
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { spawn } from "node:child_process";
+import { mkdirSync, realpathSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 
-	ctx.ui.notify(`Usage: /${command} <message>`, "warning");
-	return undefined;
+// -----------------------------------------------------------------------------
+// Local session export helpers
+// -----------------------------------------------------------------------------
+
+const EXPORT_DIR = join(homedir(), ".pi", "agent", "exported-sessions");
+
+function openPath(path: string): void {
+	const platform = process.platform;
+	const cmd = platform === "darwin" ? "open" : platform === "win32" ? "cmd" : "xdg-open";
+	const args = platform === "win32" ? ["/c", "start", "", path] : [path];
+	spawn(cmd, args, { detached: true, stdio: "ignore" });
 }
 
+function openDirectory(path: string): void {
+	const platform = process.platform;
+	const cmd = platform === "darwin" ? "open" : platform === "win32" ? "explorer" : "xdg-open";
+	spawn(cmd, [path], { detached: true, stdio: "ignore" });
+}
+
+// -----------------------------------------------------------------------------
+// Extension registration
+// -----------------------------------------------------------------------------
+
 export default function utils(pi: ExtensionAPI) {
-	pi.on("session_start", (_event, ctx) => {
-		const bashTool = createBashToolDefinition(ctx.cwd, {
-			commandPrefix: MISE_ENV_PREFIX,
-		});
-
-		pi.registerTool({
-			...bashTool,
-			description: `${bashTool.description}\n\nMise hot-reload: before each bash execution, Pi refreshes the environment with \`mise env -s bash\` for the command cwd.`,
-			promptGuidelines: [
-				"Bash commands run with mise hot-reload: Pi refreshes the environment with `mise env -s bash` before each bash execution.",
-			],
-		});
-	});
-
-	// Pi exposes two context-control paths we can lean on when needed:
-	// - before_agent_start may return a modified systemPrompt for each model turn.
-	// - active tools with promptSnippet/promptGuidelines are included in Pi's tool prompt section.
-	//
-	// Keep this utility hook narrow. The old skills-context extension used this
-	// same mechanism to strip/re-seed skills, but native Pi skills are the
-	// cleaner default unless we explicitly need custom context policy again.
-	pi.on("before_agent_start", (event) => {
-		if (event.systemPrompt.includes("Mise tool hot-reload is enabled for Pi bash commands.")) {
-			return;
-		}
-
-		return {
-			systemPrompt: `${event.systemPrompt}\n\n${MISE_PROMPT_NOTE}`,
-		};
-	});
-
 	pi.registerCommand("clear", {
 		description: "Alias for /new; starts a fresh session",
 		handler: async (_args, ctx) => {
@@ -62,25 +55,52 @@ export default function utils(pi: ExtensionAPI) {
 		},
 	});
 
-	pi.registerCommand("steer", {
-		description: "Send a steering message; while Pi is working it is delivered before the next model turn",
+	pi.registerCommand("lshare", {
+		description: "Export session to ~/.pi/agent/exported-sessions/ and open in browser",
 		handler: async (args, ctx) => {
-			const message = requireMessage("steer", args, ctx);
-			if (!message) return;
+			const sessionFile = ctx.sessionManager.getSessionFile();
+			if (!sessionFile) {
+				ctx.ui.notify("Cannot export: no session file (ephemeral mode)", "error");
+				return;
+			}
 
-			pi.sendUserMessage(message, { deliverAs: "steer" });
-			ctx.ui.notify("Steering message sent", "info");
+			mkdirSync(EXPORT_DIR, { recursive: true });
+
+			const sessionName = ctx.sessionManager.getSessionName() || "session";
+			const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+			const baseName = args.trim() || `${sessionName}-${timestamp}`;
+			const filename = `${baseName.replace(/\.html$/i, "")}.html`;
+			const outputPath = join(EXPORT_DIR, filename);
+
+			try {
+				ctx.ui.notify("Exporting session...", "info");
+
+				const piCliPath = process.argv[1];
+				if (!piCliPath) throw new Error("Cannot determine pi installation path");
+
+				const resolvedCliPath = realpathSync(piCliPath);
+				const piDistDir = dirname(resolvedCliPath);
+				const exportHtmlPath = join(piDistDir, "core", "export-html", "index.js");
+				const exportHtmlUrl = pathToFileURL(exportHtmlPath).href;
+
+				const { exportFromFile } = await import(exportHtmlUrl);
+				await exportFromFile(sessionFile, outputPath);
+
+				openPath(`file://${outputPath}`);
+				ctx.ui.notify(`Opened ${filename}`, "success");
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				ctx.ui.notify(`Export failed: ${message}`, "error");
+			}
 		},
 	});
 
-	pi.registerCommand("queue", {
-		description: "Send a follow-up message; while Pi is working it waits until the agent finishes",
-		handler: async (args, ctx) => {
-			const message = requireMessage("queue", args, ctx);
-			if (!message) return;
-
-			pi.sendUserMessage(message, { deliverAs: "followUp" });
-			ctx.ui.notify("Follow-up message queued", "info");
+	pi.registerCommand("lshare-list", {
+		description: "Open ~/.pi/agent/exported-sessions/ in the file manager",
+		handler: async (_args, ctx) => {
+			mkdirSync(EXPORT_DIR, { recursive: true });
+			openDirectory(EXPORT_DIR);
+			ctx.ui.notify("Opened exported sessions directory", "success");
 		},
 	});
 }

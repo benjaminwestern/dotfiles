@@ -1,9 +1,14 @@
+-- =============================================================================
+-- ||                                                                         ||
+-- ||                               NVIM / INIT                               ||
+-- ||                                                                         ||
+-- =============================================================================
 -- https://learnxinyminutes.com/docs/lua/
 -- https://neovim.io/doc/user/lua-guide.html
 
--- Disable netrw so yazi.nvim can handle directory opening
-vim.g.loaded_netrw          = 1
-vim.g.loaded_netrwPlugin    = 1
+-- Keep netrw enabled for :Explore / :Ex-style file browsing.
+vim.g.netrw_banner          = 0
+vim.g.netrw_liststyle       = 0
 
 -- See `:help mapleader`
 vim.g.mapleader             = ' '
@@ -24,7 +29,9 @@ vim.o.softtabstop           = 4
 vim.o.expandtab             = true
 vim.o.smartindent           = true
 
--- [[ Setting options ]]
+-- -----------------------------------------------------------------------------
+-- SETTING OPTIONS
+-- -----------------------------------------------------------------------------
 -- See `:help vim.o`
 
 -- Highlight current line for easy tracking
@@ -42,6 +49,10 @@ vim.o.mouse                 = 'a'
 
 -- Don't show mode in command line (already in statusline)
 vim.o.showmode              = false
+vim.o.showcmd               = false
+vim.o.ruler                 = false
+vim.o.laststatus            = 3
+vim.o.cmdheight             = 0
 
 -- NOTE: clipboard is NOT synced by default. We explicitly map yank keys
 -- to the + register so only intentional yanks go to the system clipboard.
@@ -64,10 +75,13 @@ vim.o.timeoutlen            = 300
 -- Set completeopt to have a better completion experience
 vim.o.completeopt           = 'menuone,noselect'
 
--- Command-line tab completion with menu (like bash/zsh)
+-- Command-line completion with a light popup menu.
 vim.o.wildmenu              = true
 vim.o.wildmode              = 'longest:full,full'
+vim.o.wildoptions           = 'pum'
 vim.o.wildignorecase        = true
+vim.o.pumheight             = 12
+vim.o.pumblend              = 0
 
 -- Configure how new splits should open
 vim.o.splitright            = true
@@ -86,7 +100,9 @@ vim.o.confirm               = true
 -- Set better colors for the command line
 vim.o.termguicolors         = true
 
--- [[ Folds — collapse/expand code blocks ]]
+-- -----------------------------------------------------------------------------
+-- FOLDS — COLLAPSE/EXPAND CODE BLOCKS
+-- -----------------------------------------------------------------------------
 -- Treesitter-powered folds. zc to close, zo to open, za to toggle.
 vim.o.foldmethod            = 'expr'
 vim.o.foldexpr              = 'v:lua.vim.treesitter.foldexpr()'
@@ -94,7 +110,9 @@ vim.o.foldenable            = true
 vim.o.foldlevel             = 99
 vim.o.foldlevelstart        = 99
 
--- [[ Configure LSP Diagnostics ]]
+-- -----------------------------------------------------------------------------
+-- CONFIGURE LSP DIAGNOSTICS
+-- -----------------------------------------------------------------------------
 vim.diagnostic.config {
   virtual_text = {
     spacing = 4,

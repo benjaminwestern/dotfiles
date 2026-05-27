@@ -1,3 +1,14 @@
+/*
+===============================================================================
+  EXTENSION: Prompt Expansion
+  PURPOSE: Inline $: completions and prompt/skill/tool marker expansion.
+===============================================================================
+*/
+
+// -----------------------------------------------------------------------------
+// Imports
+// -----------------------------------------------------------------------------
+
 import { readFileSync } from "node:fs";
 import {
 	CustomEditor,
@@ -10,6 +21,10 @@ import type {
 	EditorTheme,
 	TUI,
 } from "@earendil-works/pi-tui";
+
+// -----------------------------------------------------------------------------
+// Marker grammar and runtime types
+// -----------------------------------------------------------------------------
 
 const TOKEN_MARKER = /(^|[\s([{])\$:([A-Za-z0-9_.:/-]+)/g;
 const BRACED_MARKER = /\$\{:\s*([^}\s]+)(?:\s+([^}]*))?\}/g;
@@ -38,6 +53,10 @@ interface MarkerResult {
 	message?: string;
 	type: "skill" | "prompt" | "tool" | "slash" | "unknown";
 }
+
+// -----------------------------------------------------------------------------
+// Template and marker expansion helpers
+// -----------------------------------------------------------------------------
 
 function stripFrontmatter(content: string): string {
 	if (!content.startsWith("---")) return content.trim();
@@ -278,6 +297,10 @@ function shouldWakeDollarAutocomplete(text: string, cursorCol: number): boolean 
 	return dollarPrefix(text.slice(0, cursorCol)) !== null;
 }
 
+// -----------------------------------------------------------------------------
+// Editor autocomplete integration
+// -----------------------------------------------------------------------------
+
 class DollarCommandEditor extends CustomEditor {
 	constructor(tui: TUI, theme: EditorTheme, keybindings: KeybindingsManager) {
 		super(tui, theme, keybindings);
@@ -300,7 +323,11 @@ class DollarCommandEditor extends CustomEditor {
 	}
 }
 
-export default function inlineDollar(pi: ExtensionAPI) {
+// -----------------------------------------------------------------------------
+// Extension registration
+// -----------------------------------------------------------------------------
+
+export default function promptExpansion(pi: ExtensionAPI) {
 	pi.on("session_start", (_event, ctx) => {
 		ctx.ui.addAutocompleteProvider((current: AutocompleteProvider): AutocompleteProvider => ({
 			async getSuggestions(lines, cursorLine, cursorCol, options) {

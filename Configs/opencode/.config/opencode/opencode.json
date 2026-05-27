@@ -3,9 +3,32 @@
   "plugin": [
     "file:///Users/benjaminwestern/.config/opencode/plugins/mise.ts"
   ],
-  "model": "opencode-go/kimi-k2.6",
   "share": "disabled",
-  "provider": {},
+  "disabled_providers": [
+    "opencode"
+  ],
+  "provider": {
+    "opencode-go": {
+      "whitelist": [
+        "deepseek-v4-flash",
+        "deepseek-v4-pro",
+        "glm-5.1",
+        "mimo-v2.5-pro",
+        "minimax-m2.7",
+        "qwen3.6-plus"
+      ]
+    },
+    "openai": {
+      "whitelist": [
+        "gpt-5.5"
+      ]
+    },
+    "fireworks-ai": {
+      "whitelist": [
+        "accounts/fireworks/routers/kimi-k2p6-turbo"
+      ]
+    }
+  },
   "tools": {
     "bash": true,
     "edit": true,
@@ -24,5 +47,14 @@
     "bash": "allow",
     "webfetch": "allow"
   },
-  "mcp": {}
+  "mcp": {
+    "google-developer-knowledge": {
+      "type": "remote",
+      "url": "https://developerknowledge.googleapis.com/mcp",
+      "headers": {
+        "X-Goog-Api-Key": "{env:GOOGLE_MCP_DEV_SERVER_API_KEY}"
+      },
+      "enabled": true
+    }
+  }
 }
