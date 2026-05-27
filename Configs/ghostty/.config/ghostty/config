@@ -26,10 +26,10 @@ background-blur-radius = 40
 # Keymaps
 # keybind = global:cmd+grave_accent=toggle_quick_terminal
 keybind = ctrl+t=new_tab
-keybind = shift+left=previous_tab
-keybind = shift+right=next_tab
-keybind = ctrl+shift+left=move_tab:-1
-keybind = ctrl+shift+right=move_tab:1
+# keybind = shift+left=previous_tab          # conflicts with tmux window switching
+# keybind = shift+right=next_tab            # conflicts with tmux window switching
+# keybind = ctrl+shift+left=move_tab:-1     # conflicts with tmux window swap
+# keybind = ctrl+shift+right=move_tab:1     # conflicts with tmux window swap
 
 # Terminal Settings
 copy-on-select = clipboard

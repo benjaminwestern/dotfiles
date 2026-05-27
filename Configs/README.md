@@ -71,9 +71,8 @@ Each copy target is gated by an `ENABLE_*` environment variable (default:
 | `ghostty` | `~/.config/ghostty/config` | macOS | Ghostty terminal emulator configuration |
 | `git` | `~/.gitconfig` | Both | Git configuration (default branch, colour, push, pull, user, URL rewriting) |
 | `hypr` | `~/.config/hypr/hyprland.conf` | Linux | Hyprland Wayland compositor configuration (future) |
-| `mcporter` | `~/.mcporter/mcporter.jsonc` | macOS | Mcporter MCP server catalogue using environment-variable placeholders for credentials |
 | `mise` | `~/.config/mise/` | Both | Managed mise runtime config (`config.toml`), environment variables (`.env`), example env (`.example.env`), and task scripts (`scripts/`). This is separate from the repo-root `mise.toml` used for local contributor tasks |
-| `nvim` | `~/.config/nvim/` | macOS | Neovim configuration based on Kickstart.nvim, including `init.lua`, lazy-lock, and stylua config |
+| `nvim` | `~/.config/nvim/` | macOS | Neovim configuration based on Kickstart.nvim, including `init.lua`, plugin specs, keymaps, and [its own README](nvim/.config/nvim/README.md) |
 | `opencode` | `~/.config/opencode/` | Both | Opencode AI assistant configuration (`opencode.json`) and plugins (mise integration) |
 | `pi` | `~/.pi/agent/` | macOS | Pi coding agent settings, model registry, prompt appendix, and extensions. `auth.json` and `sessions/` remain machine-local |
 | `pitchfork` | `~/.config/pitchfork/` | macOS | Pitchfork configuration (Caddyfile and config.toml) |
@@ -81,7 +80,6 @@ Each copy target is gated by an `ENABLE_*` environment variable (default:
 | `ssh` | `~/.ssh/config` | Both | SSH client configuration for hosts, identity files, and tunnels. Keys are **not** included in this repo |
 | `tmux` | `~/.tmux.conf` | macOS | Tmux terminal multiplexer configuration |
 | `worktrunk` | `~/.config/worktrunk/config.toml` | macOS | Worktrunk (`wt`) worktree manager configuration including worktree path template and post-start hooks |
-| `yazi` | `~/.config/yazi/theme.toml` | macOS | Yazi file manager theme configuration |
 | `zsh` | `~/.zshrc`, `~/.zprofile` | Both | Zsh shell configuration with mise, zoxide, and worktrunk activation |
 
 ![Add config group banner](../assets/readme/configs-add-group.svg)

@@ -1,14 +1,14 @@
 # Disable fish greeting
 set fish_greeting ""
 
-# Tmux auto-launch (commented out for raw terminal usage)
-# if status is-interactive
-#     if not set -q TMUX
-#         if test $TERM_PROGRAM != "vscode"
-#             exec /opt/homebrew/bin/tmux new-session -As main
-#         end
-#     end
-# end
+# Tmux auto-launch
+if status is-interactive
+    if not set -q TMUX
+        if test $TERM_PROGRAM != "vscode"
+            exec /opt/homebrew/bin/tmux new-session -As main
+        end
+    end
+end
 #
 
 # Add ~/.local/bin to PATH
