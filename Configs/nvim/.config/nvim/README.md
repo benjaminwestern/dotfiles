@@ -33,7 +33,7 @@ The most common navigation keys are:
 ## Design goals
 
 - Keep the editor light and legible. The bottom bar shows only mode, repo/branch, path, diagnostics when present, filetype, and cursor location.
-- Prefer native Neovim behaviour where it is already good. Netrw remains enabled for `:Ex`, and the config only adds small helper mappings around it.
+- Prefer native Neovim behaviour where it is already good. `:Ex` uses stock netrw without config-level wrappers or helper mappings.
 - Use Telescope for fuzzy workflows. File search, grep, buffers, diagnostics, keymaps, commands, LSP symbols, and git pickers all route through Telescope.
 - Avoid duplicate file managers and git TUIs. Yazi and Lazygit are intentionally not part of this config.
 
@@ -41,7 +41,7 @@ The most common navigation keys are:
 
 ```text
 init.lua                  Core options, diagnostics, lazy.nvim bootstrap
-lua/keymaps.lua           Global mappings, Telescope shortcuts, netrw tweaks, macOS open helpers
+lua/keymaps.lua           Global mappings, Telescope shortcuts, macOS open helpers
 lua/health.lua            Local health checks
 lua/plugins/*.lua         Lazy plugin specs grouped by concern
 after/queries/            Treesitter query customisation
@@ -91,25 +91,7 @@ lazy-lock.json            Lazy lockfile when tracked/managed locally
 
 ### Explore files
 
-Netrw is enabled for the classic `:Ex` flow. The config adds small quality-of-life mappings inside netrw buffers.
-
-| Key | Action |
-| --- | --- |
-| `:Ex` | Open netrw explorer |
-| `Enter` / `l` | Open file or enter directory |
-| `-` / `h` / `Backspace` | Go to parent directory |
-| `u` / `H` | Go back in explorer history |
-| `U` / `L` | Go forward in explorer history |
-| `/` | Search the visible explorer list |
-| `n` / `N` | Move through search matches |
-| `Ctrl-f` | Telescope find files in the current explorer directory |
-| `Ctrl-g` | Telescope grep in the current explorer directory |
-| `sn` | Sort by name |
-| `se` | Sort by extension |
-| `sm` | Sort by modified time |
-| `ss` | Sort by size |
-| `sr` | Reverse sort direction |
-| `q` | Close explorer |
+`:Ex` opens stock netrw. This config does not add netrw-specific mappings, sort commands, Telescope hooks, or statusline wrappers.
 
 ### Code intelligence
 
@@ -121,7 +103,7 @@ Netrw is enabled for the classic `:Ex` flow. The config adds small quality-of-li
 | `gD` | Go to declaration |
 | `grn` | Rename symbol |
 | `K` | Hover documentation |
-| `Ctrl-k` | Signature help |
+| `Space k` | Signature help |
 | `Space ca` | Code action |
 | `Space D` | Type definition |
 | `Space ds` | Document symbols |

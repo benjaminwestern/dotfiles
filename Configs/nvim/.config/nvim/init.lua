@@ -6,10 +6,6 @@
 -- https://learnxinyminutes.com/docs/lua/
 -- https://neovim.io/doc/user/lua-guide.html
 
--- Keep netrw enabled for :Explore / :Ex-style file browsing.
-vim.g.netrw_banner          = 0
-vim.g.netrw_liststyle       = 0
-
 -- See `:help mapleader`
 vim.g.mapleader             = ' '
 vim.g.maplocalleader        = ' '

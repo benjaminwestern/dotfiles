@@ -223,7 +223,7 @@ return {
           desc = 'Hover docs — show type/docs in floating window',
         },
         {
-          '<C-k>',
+          '<leader>k',
           desc = 'Signature help — function parameters while typing',
         },
         {

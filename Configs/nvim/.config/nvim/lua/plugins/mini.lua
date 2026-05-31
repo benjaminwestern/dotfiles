@@ -26,11 +26,6 @@ return {
       }
 
       local function buf_path()
-        if vim.bo.filetype == 'netrw' then
-          local dir = vim.b.netrw_curdir or vim.fn.getcwd()
-          return ':Ex ' .. vim.fn.fnamemodify(dir, ':~:.')
-        end
-
         local name = vim.api.nvim_buf_get_name(0)
         if name == '' then
           return '[No Name]'
@@ -40,9 +35,7 @@ return {
 
       local function git_root()
         local name = vim.api.nvim_buf_get_name(0)
-        local start = vim.bo.filetype == 'netrw' and vim.b.netrw_curdir
-          or name ~= '' and vim.fs.dirname(name)
-          or vim.fn.getcwd()
+        local start = name ~= '' and vim.fs.dirname(name) or vim.fn.getcwd()
         if not start or start == '' then
           start = vim.fn.getcwd()
         end
@@ -102,7 +95,7 @@ return {
             local mode = mode_map[vim.fn.mode()] or vim.fn.mode():upper()
             local path = buf_path()
             local modified = vim.bo.modified and '[+]' or ''
-            local readonly = vim.bo.readonly and vim.bo.buftype == '' and vim.bo.filetype ~= 'netrw' and '[RO]' or ''
+            local readonly = vim.bo.readonly and vim.bo.buftype == '' and '[RO]' or ''
             local repo = git_label()
             local diagnostics = diagnostics_label()
             local filetype = filetype_label()
