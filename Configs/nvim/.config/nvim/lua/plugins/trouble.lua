@@ -29,12 +29,16 @@ return {
     },
     {
       ']q',
-      function() require('trouble').next({ skip_groups = true, jump = true }) end,
+      function()
+        require('trouble').next { skip_groups = true, jump = true }
+      end,
       desc = 'Next trouble / diagnostic item',
     },
     {
       '[q',
-      function() require('trouble').prev({ skip_groups = true, jump = true }) end,
+      function()
+        require('trouble').prev { skip_groups = true, jump = true }
+      end,
       desc = 'Previous trouble / diagnostic item',
     },
   },

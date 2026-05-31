@@ -27,7 +27,7 @@ return {
 
       -- Useful status updates for LSP
       -- NOTE: `opts = {}` is the same as calling `require('fidget').setup({})`
-      { 'j-hui/fidget.nvim',       opts = {} },
+      { 'j-hui/fidget.nvim', opts = {} },
 
       -- lazydev needs to be setup before lspconfig
       'folke/lazydev.nvim',
@@ -184,7 +184,7 @@ return {
       -- If `sourcekit-lsp` is on PATH, set it up manually.
       if vim.fn.executable 'sourcekit-lsp' == 1 then
         vim.lsp.config('sourcekit', { capabilities = capabilities })
-        vim.lsp.enable('sourcekit')
+        vim.lsp.enable 'sourcekit'
       end
 
       -- Ensure the servers are available for installation via Mason
@@ -196,10 +196,14 @@ return {
       -- -----------------------------------------------------------------------------
       -- DIAGNOSTIC KEYMAPS
       -- -----------------------------------------------------------------------------
-      vim.keymap.set('n', '[d', function() vim.diagnostic.jump({ count = -1, float = true }) end, { desc = 'Go to previous diagnostic message' })
-      vim.keymap.set('n', ']d', function() vim.diagnostic.jump({ count = 1, float = true }) end, { desc = 'Go to next diagnostic message' })
+      vim.keymap.set('n', '[d', function()
+        vim.diagnostic.jump { count = -1, float = true }
+      end, { desc = 'Go to previous diagnostic message' })
+      vim.keymap.set('n', ']d', function()
+        vim.diagnostic.jump { count = 1, float = true }
+      end, { desc = 'Go to next diagnostic message' })
       vim.keymap.set('n', '<leader>df', vim.diagnostic.open_float, { desc = '[D]iagnostic [F]loating message' })
       -- NOTE: <leader>q is handled by trouble.nvim for a beautiful diagnostics panel
-    end
+    end,
   },
 }

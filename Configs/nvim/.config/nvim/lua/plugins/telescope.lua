@@ -220,7 +220,7 @@ return {
         cwd = current_dir,
         hidden = true,
       }
-    end, { desc = '[S]earch files in current file\'s directory' })
+    end, { desc = "[S]earch files in current file's directory" })
 
     -- Live grep in the same directory as the current file
     vim.keymap.set('n', '<leader>s<', function()
@@ -234,7 +234,7 @@ return {
         prompt_title = 'Grep in ' .. current_dir,
         cwd = current_dir,
       }
-    end, { desc = '[S]earch grep in current file\'s directory' })
+    end, { desc = "[S]earch grep in current file's directory" })
 
     -- -----------------------------------------------------------------------------
     -- GIT ROOT SEARCH

@@ -24,7 +24,7 @@ return {
       strip_wrapping_quote_characters = { '"', "'", '`' },
     },
     config = function(_, opts)
-      local otter = require('otter')
+      local otter = require 'otter'
       otter.setup(opts)
 
       -- Auto-activate otter for mise files
@@ -33,9 +33,9 @@ return {
         callback = function()
           local bufnr = vim.api.nvim_get_current_buf()
           local filename = vim.api.nvim_buf_get_name(bufnr)
-          
+
           -- Only activate for mise-related TOML files
-          if filename:match('%.toml$') and filename:match('mise') then
+          if filename:match '%.toml$' and filename:match 'mise' then
             otter.activate({ 'bash', 'sh', 'python', 'javascript', 'typescript' }, true, true)
           end
         end,

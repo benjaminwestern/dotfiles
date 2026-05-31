@@ -25,7 +25,7 @@ The most common navigation keys are:
 | `Ctrl-f` | Find files with Telescope |
 | `Ctrl-g` | Live grep with Telescope |
 | `Space Space` | Switch open buffers in MRU order |
-| `:` | Command line with a centred fuzzy command menu from wilder.nvim |
+| `:` | Normal bottom command line with native completion |
 | `:Ex` | Native netrw file explorer |
 | `Space sk` | Search all keymaps |
 | `Space ??` | Show all which-key mappings |
@@ -71,7 +71,6 @@ lazy-lock.json            Lazy lockfile when tracked/managed locally
 | `treesitter.lua` | Treesitter parser install and highlighting/indent integration |
 | `trouble.lua` | Diagnostics, references, and quickfix panels |
 | `which-key.lua` | Discoverable keymap descriptions |
-| `wilder.lua` | Centred fuzzy command-line menu for `:` |
 
 ## Daily workflow
 
@@ -131,7 +130,7 @@ lazy-lock.json            Lazy lockfile when tracked/managed locally
 The UI stays deliberately sparse.
 
 - The statusline comes from `mini.statusline` and is customised in `mini.lua`. It shows mode, repo/branch, current path, diagnostics only when present, filetype, and `line:column`.
-- The command line uses `wilder.nvim` for a centred fuzzy command menu when you press `:`. It is a command-line completion UI, not Telescope itself.
+- The command line uses Neovim's normal bottom command line with native completion. There is no centred command popup.
 - Telescope uses dropdowns for quick pickers, an ivy layout for live grep, and previews only where context is useful.
 - Which-key documents mappings, but it does not replace learning the core keys. Use `Space ??` or `Space sk` when you forget something.
 
@@ -140,7 +139,7 @@ The UI stays deliberately sparse.
 - No Yazi integration. Native `:Ex` plus Telescope covers the current file browsing workflow.
 - No Lazygit integration. Git workflows use Telescope and Gitsigns inside Neovim.
 - No file-tree sidebar. The config favours fuzzy search, buffers, and netrw over a persistent tree.
-- No heavy command UI stack. `wilder.nvim` provides the command menu without bringing in a larger UI framework.
+- No command-line popup UI. Command completion stays native and lightweight.
 
 ## Maintenance
 
@@ -163,7 +162,7 @@ Useful verification commands from the repo root:
 ```bash
 nvim --headless '+checkhealth' +qa
 nvim --headless '+lua require("mini.statusline").active()' +qa
-nvim --headless '+lua assert(require("lazy.core.config").plugins["wilder.nvim"])' +qa
+nvim --headless '+lua assert(vim.o.cmdheight == 1)' '+lua assert(vim.o.wildoptions == "")' '+lua assert(require("blink.cmp.config").cmdline.enabled == false)' '+lua assert(not require("lazy.core.config").plugins["wilder.nvim"])' +qa
 ```
 
 ## Related docs

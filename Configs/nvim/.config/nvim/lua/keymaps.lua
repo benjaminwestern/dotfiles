@@ -34,7 +34,7 @@ vim.keymap.set({ 'n', 'v' }, '<leader>P', '"+P', { noremap = true, desc = 'Paste
 -- FAST TELESCOPE SEARCH
 -- -----------------------------------------------------------------------------
 vim.keymap.set('n', '<C-f>', function()
-  require('telescope.builtin').find_files({ hidden = true })
+  require('telescope.builtin').find_files { hidden = true }
 end, { desc = 'Find files' })
 
 vim.keymap.set('n', '<C-g>', function()

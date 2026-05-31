@@ -77,7 +77,7 @@ return {
       -- Indent entire file (auto-indent based on syntax / LSP)
       vim.keymap.set('n', '<leader>=', function()
         local save_cursor = vim.api.nvim_win_get_cursor(0)
-        vim.cmd('normal! gg=G')
+        vim.cmd 'normal! gg=G'
         vim.api.nvim_win_set_cursor(0, save_cursor)
       end, { desc = '[=] Auto-indent entire file' })
       -- Shift entire file right / left

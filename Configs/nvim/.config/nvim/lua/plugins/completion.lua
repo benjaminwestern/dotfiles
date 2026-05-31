@@ -14,13 +14,15 @@ return {
       keymap = { preset = 'default' },
       appearance = {
         use_nvim_cmp_as_default = true,
-        nerd_font_variant = 'mono'
+        nerd_font_variant = 'mono',
       },
       sources = {
         default = { 'lsp', 'path', 'snippets', 'buffer' },
       },
-      signature = { enabled = true }
+      -- Keep `:` on Neovim's native command line instead of blink's popup menu.
+      cmdline = { enabled = false },
+      signature = { enabled = true },
     },
-    opts_extend = { 'sources.default' }
+    opts_extend = { 'sources.default' },
   },
 }

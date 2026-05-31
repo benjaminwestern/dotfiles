@@ -46,6 +46,7 @@ brew "yt-dlp" # YouTube video downloader
 
 # Neovim Setup
 brew "luarocks" # Required for rest.nvim
+brew "stylua" # Lua formatter for Neovim config
 brew "wget" # Required for neovim mason.nvim
 brew "pngpaste" # Required for neovim clipboard
 brew "coreutils"

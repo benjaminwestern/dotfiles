@@ -17,9 +17,29 @@ return {
       -- Ensure basic parsers are installed.
       -- Add any languages you use regularly to this list.
       local parsers = {
-        'bash', 'c', 'cpp', 'go', 'lua', 'luadoc', 'markdown', 'markdown_inline',
-        'python', 'rust', 'terraform', 'tsx', 'javascript', 'typescript',
-        'vim', 'vimdoc', 'json', 'http', 'xml', 'graphql', 'query', 'diff', 'html',
+        'bash',
+        'c',
+        'cpp',
+        'go',
+        'lua',
+        'luadoc',
+        'markdown',
+        'markdown_inline',
+        'python',
+        'rust',
+        'terraform',
+        'tsx',
+        'javascript',
+        'typescript',
+        'vim',
+        'vimdoc',
+        'json',
+        'http',
+        'xml',
+        'graphql',
+        'query',
+        'diff',
+        'html',
       }
       require('nvim-treesitter').install(parsers)
 

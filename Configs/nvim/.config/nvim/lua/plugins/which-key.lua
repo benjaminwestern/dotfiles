@@ -82,11 +82,11 @@ return {
         },
         {
           '<leader>s,',
-          desc = 'Find files in THIS file\'s directory',
+          desc = "Find files in THIS file's directory",
         },
         {
           '<leader>s<',
-          desc = 'Grep in THIS file\'s directory',
+          desc = "Grep in THIS file's directory",
         },
         {
           '<leader>sG',
@@ -356,7 +356,7 @@ return {
         },
         {
           '<leader>oF',
-          desc = 'Open file\'s directory in Finder',
+          desc = "Open file's directory in Finder",
         },
         {
           '<leader>om',
@@ -384,7 +384,7 @@ return {
         },
         {
           '<leader>cD',
-          desc = 'Change cwd to THIS file\'s directory',
+          desc = "Change cwd to THIS file's directory",
         },
 
         -- -----------------------------------------------------------------------------
@@ -710,7 +710,7 @@ return {
       {
         '<leader>??',
         function()
-          require('which-key').show({ global = true })
+          require('which-key').show { global = true }
         end,
         desc = 'Show ALL keymaps (global + local) — double-tap ?',
       },

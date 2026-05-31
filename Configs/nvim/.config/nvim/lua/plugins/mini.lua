@@ -87,11 +87,11 @@ return {
         return vim.bo.filetype ~= '' and vim.bo.filetype or ''
       end
 
-      require('mini.statusline').setup({
+      require('mini.statusline').setup {
         use_icons = false,
         content = {
           active = function()
-            local _, mode_hl = MiniStatusline.section_mode({ trunc_width = 120 })
+            local _, mode_hl = MiniStatusline.section_mode { trunc_width = 120 }
             local mode = mode_map[vim.fn.mode()] or vim.fn.mode():upper()
             local path = buf_path()
             local modified = vim.bo.modified and '[+]' or ''
@@ -99,9 +99,9 @@ return {
             local repo = git_label()
             local diagnostics = diagnostics_label()
             local filetype = filetype_label()
-            local location = vim.fn.line('.') .. ':' .. vim.fn.virtcol('.')
+            local location = vim.fn.line '.' .. ':' .. vim.fn.virtcol '.'
 
-            return MiniStatusline.combine_groups({
+            return MiniStatusline.combine_groups {
               { hl = mode_hl, strings = { mode } },
               { hl = 'MiniStatuslineDevinfo', strings = { repo } },
               '%<',
@@ -110,15 +110,15 @@ return {
               { hl = 'MiniStatuslineDevinfo', strings = { diagnostics } },
               { hl = 'MiniStatuslineFileinfo', strings = { filetype } },
               { hl = mode_hl, strings = { location } },
-            })
+            }
           end,
           inactive = function()
-            return MiniStatusline.combine_groups({
+            return MiniStatusline.combine_groups {
               { hl = 'MiniStatuslineInactive', strings = { buf_path() } },
-            })
+            }
           end,
         },
-      })
+      }
     end,
   },
 
@@ -225,8 +225,20 @@ return {
       require('mini.bufremove').setup()
     end,
     keys = {
-      { '<leader>bd', function() require('mini.bufremove').delete() end, desc = '[B]uffer [D]elete (keep window)' },
-      { '<leader>bD', function() require('mini.bufremove').wipeout() end, desc = '[B]uffer [W]ipeout (keep window)' },
+      {
+        '<leader>bd',
+        function()
+          require('mini.bufremove').delete()
+        end,
+        desc = '[B]uffer [D]elete (keep window)',
+      },
+      {
+        '<leader>bD',
+        function()
+          require('mini.bufremove').wipeout()
+        end,
+        desc = '[B]uffer [W]ipeout (keep window)',
+      },
     },
   },
 }
