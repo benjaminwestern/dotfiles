@@ -4,7 +4,7 @@ set fish_greeting ""
 # Tmux auto-launch
 if status is-interactive
     if not set -q TMUX
-        if test $TERM_PROGRAM != "vscode"
+        if test "$TERM_PROGRAM" != "vscode"
             exec /opt/homebrew/bin/tmux new-session -As main
         end
     end
