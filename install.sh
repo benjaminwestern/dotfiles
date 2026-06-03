@@ -83,8 +83,21 @@ Examples:
 Windows:
   Use install.cmd instead.
 
-Linux:
-  Not yet implemented.
+### Linux (Debian / Raspberry Pi OS)
+
+```bash
+# Remote one-liner
+curl -fsSL https://raw.githubusercontent.com/benjaminwestern/dotfiles/main/install.sh \
+  | bash -s -- setup
+
+# Clone first, then run
+git clone https://github.com/benjaminwestern/dotfiles ~/.dotfiles
+~/.dotfiles/install.sh setup
+
+# Routine repair or inspection
+~/.dotfiles/install.sh ensure
+~/.dotfiles/install.sh update
+```
 EOF
 }
 
@@ -309,6 +322,14 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   display_message "DRY RUN — no changes will be made"
 fi
 
+run_linux_entrypoint() {
+  local exit_code
+  /bin/bash "$RUN_ROOT/Other/scripts/linux/foundation-debian.sh" "$MODE"
+  exit_code=$?
+  maybe_persist_repo_after_archive_run
+  exit "$exit_code"
+}
+
 case "$OS" in
   macos)
     run_macos_entrypoint
@@ -317,7 +338,7 @@ case "$OS" in
     fail "Windows detected. Use install.cmd instead."
     ;;
   linux)
-    fail "Linux is not implemented yet"
+    run_linux_entrypoint
     ;;
   *)
     fail "Unsupported OS: $(uname -s)"

@@ -1,11 +1,14 @@
 # Disable fish greeting
 set fish_greeting ""
 
-# Tmux auto-launch
+# Tmux auto-launch (macOS always; Linux only if DOTFILES_TMUX_AUTO=1)
 if status is-interactive
     if not set -q TMUX
         if test "$TERM_PROGRAM" != "vscode"
-            exec /opt/homebrew/bin/tmux new-session -As main
+            if test (uname) = Darwin -o "$DOTFILES_TMUX_AUTO" = "1"
+                set -l tmux_bin (command -v tmux || echo /usr/bin/tmux)
+                exec $tmux_bin new-session -As main
+            end
         end
     end
 end
@@ -31,4 +34,13 @@ if command -v zoxide &> /dev/null
   zoxide init --cmd cd fish | source
 end
 
-# macchina
+# System info (macchina on macOS, fastfetch on Linux)
+if command -v macchina >/dev/null
+    macchina
+else if command -v fastfetch >/dev/null
+    fastfetch
+end
+
+if test -d $HOME/.grok/bin
+    fish_add_path $HOME/.grok/bin
+end
