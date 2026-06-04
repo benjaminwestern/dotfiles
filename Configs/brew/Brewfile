@@ -8,7 +8,7 @@ brew "tpm" # Tmux plugin manager
 brew "fish" # Fish Shell
 brew "fisher" # Plugin manager for the Fish shell
 brew "neovim" # Neovim text editor
-brew "macchina" # System Information like neofetch
+brew "fastfetch" # System information like neofetch
 brew "graphviz" # Required for Flamegraph etc using pprof
 brew "lazygit" # Terminal UI for git commands
 

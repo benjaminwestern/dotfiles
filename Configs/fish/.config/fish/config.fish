@@ -34,12 +34,8 @@ if command -v zoxide &> /dev/null
   zoxide init --cmd cd fish | source
 end
 
-# System info (macchina on macOS, fastfetch on Linux)
-if command -v macchina >/dev/null
-    macchina
-else if command -v fastfetch >/dev/null
-    fastfetch
-end
+# System info
+fastfetch
 
 if test -d $HOME/.grok/bin
     fish_add_path $HOME/.grok/bin
