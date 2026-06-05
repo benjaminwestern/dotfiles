@@ -1,5 +1,16 @@
 {
-  "servers": {
+  "mcpServers": {
+    "google-developer-knowledge": {
+      "description": "Search and retrieve official Google developer documentation. Use for Google Cloud, Firebase, Android, Chrome, Go, Gemini, TensorFlow, and web.dev answers.",
+      "url": "https://developerknowledge.googleapis.com/mcp",
+      "headers": {
+        "X-Goog-Api-Key": "$env:GOOGLE_MCP_DEV_SERVER_API_KEY"
+      },
+      "auth": false,
+      "lifecycle": "lazy"
+    }
+  },
+  "_disabledServers": {
     "exa": {
       "type": "remote",
       "url": "https://mcp.exa.ai/mcp",
@@ -79,16 +90,6 @@
         "mcp"
       ],
       "enabled": false
-    },
-    "google-developer-knowledge": {
-      "type": "remote",
-      "description": "Search and retrieve official Google developer documentation. Use for Google Cloud, Firebase, Android, Chrome, Go, Gemini, TensorFlow, and web.dev answers.",
-      "url": "https://developerknowledge.googleapis.com/mcp",
-      "headers": {
-        "X-Goog-Api-Key": "$env:GOOGLE_MCP_DEV_SERVER_API_KEY"
-      },
-      "enabled": true,
-      "selectedTools": []
     }
   }
 }

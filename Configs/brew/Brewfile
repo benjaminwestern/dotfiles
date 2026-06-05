@@ -34,7 +34,7 @@ brew "worktrunk"
 
 # Additional CLI tools from current install
 brew "make" # Build automation tool
-brew "htop" # Interactive process viewer
+brew "btop" # Interactive process viewer
 brew "nmap" # Network discovery and security auditing
 brew "gum" # Tool for glamorous shell scripts
 brew "tokei" # Code counter based on language

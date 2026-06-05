@@ -1,7 +1,7 @@
 {
-  "lastChangelogVersion": "0.75.5",
-  "defaultProvider": "opencode-go",
-  "defaultModel": "qwen3.6-plus",
+  "lastChangelogVersion": "0.78.1",
+  "defaultProvider": "openai-codex",
+  "defaultModel": "gpt-5.5",
   "defaultThinkingLevel": "high",
   "compaction": {
     "reserveTokens": 50000,
@@ -23,5 +23,10 @@
     "opencode-go/qwen3.6-plus",
     "openai-codex/gpt-5.5",
     "fireworks/accounts/fireworks/routers/kimi-k2p6-turbo"
+  ],
+  "packages": [
+    "npm:pi-mcp-adapter",
+    "npm:pi-web-access",
+    "npm:pi-bar"
   ]
 }

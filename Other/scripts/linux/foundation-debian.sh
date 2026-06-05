@@ -63,7 +63,7 @@ MISE_ENV_PATH="$MISE_CONFIG_DIR/.env"
 
 # -- apt packages ------------------------------------------------------------
 FOUNDATION_PACKAGES=(
-  fish tmux git gh ripgrep fd-find fzf zoxide jq htop build-essential
+  fish tmux git gh ripgrep fd-find fzf zoxide jq btop build-essential
   curl wget unzip ca-certificates openssh-client xclip luarocks libclang-dev
   xz-utils nmap graphviz imagemagick yt-dlp ffmpeg tree zsh
 )
@@ -406,7 +406,7 @@ ensure_fish_default() {
 # =============================================================================
 
 validate_foundation() {
-  for tool in fish nvim tmux git gh rg fdfind zoxide jq htop mise wt tuckr; do
+  for tool in fish nvim tmux git gh rg fdfind zoxide jq btop mise wt tuckr; do
     local bin="$tool"
     case "$tool" in fdfind) bin="fdfind" ;; rg) bin="rg" ;; esac
     if command_exists "$bin"; then status_pass "Validate: $tool" "$(which "$bin")"
