@@ -100,3 +100,16 @@ defaults write com.apple.finder WarnOnEmptyTrash -bool false
 
 # Take screenshots as png (available: png, jpg, tiff, bmp, gif, pdf, none)
 defaults write com.apple.screencapture type png
+
+###############################################################################
+# Touch ID for sudo                                                           #
+###############################################################################
+
+# Enable Touch ID authentication for sudo in Terminal.
+# Inserts pam_tid.so as the first auth line if not already present.
+# Requires sudo — will prompt for password on first run.
+if ! grep -q 'pam_tid.so' /etc/pam.d/sudo 2>/dev/null; then
+  sudo sed -i '' '1a\
+auth       sufficient     pam_tid.so
+' /etc/pam.d/sudo
+fi

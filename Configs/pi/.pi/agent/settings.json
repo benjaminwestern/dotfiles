@@ -1,7 +1,7 @@
 {
   "lastChangelogVersion": "0.78.1",
-  "defaultProvider": "openai-codex",
-  "defaultModel": "gpt-5.5",
+  "defaultProvider": "opencode-go",
+  "defaultModel": "kimi-k2.6",
   "defaultThinkingLevel": "high",
   "compaction": {
     "reserveTokens": 50000,
@@ -22,11 +22,22 @@
     "opencode-go/glm-5.1",
     "opencode-go/qwen3.6-plus",
     "openai-codex/gpt-5.5",
-    "fireworks/accounts/fireworks/routers/kimi-k2p6-turbo"
+    "opencode-go/qwen3.7-plus",
+    "opencode-go/qwen3.7-max",
+    "opencode-go/minimax-m3",
+    "opencode-go/minimax-m2.5",
+    "opencode-go/mimo-v2.5",
+    "opencode-go/kimi-k2.6",
+    "opencode-go/kimi-k2.5",
+    "opencode-go/glm-5"
   ],
   "packages": [
     "npm:pi-mcp-adapter",
     "npm:pi-web-access",
     "npm:pi-bar"
-  ]
+  ],
+  "theme": "dark",
+  "enableSkillCommands": true,
+  "steeringMode": "all",
+  "treeFilterMode": "default"
 }

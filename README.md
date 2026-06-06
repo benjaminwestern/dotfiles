@@ -210,6 +210,51 @@ artifacts that do not belong in the repo.
 
 </details>
 
+<a id="manual-installs"></a>
+### Manual installs
+
+These tools are not automated by the bootstrap. Install them manually on each
+new machine.
+
+<details>
+<summary>agy (antigravity-cli)</summary>
+
+Google's official terminal-first CLI for Antigravity agents. Installed via the
+official script, which places a binary at `~/.local/bin/agy`.
+
+```bash
+curl -fsSL https://antigravity.google/cli/install.sh | bash
+```
+
+Also available as a brew cask (`brew install --cask antigravity-cli`) but
+the install-script path is preferred to keep it alongside other `~/.local/bin`
+tooling.
+
+`~/.local/bin` is already on `PATH` via `config.fish`.
+
+</details>
+
+<details>
+<summary>Cardo Update</summary>
+
+Firmware update tool for the Cardo Pactalk motorcycle Bluetooth headset.
+Downloaded from the Cardo Systems website at
+[https://www.cardosystems.com/update/](https://www.cardosystems.com/update/).
+
+Installs to `/Applications/Cardo Update.app`. Not available as a brew cask.
+
+</details>
+
+<details>
+<summary>Parallels Desktop</summary>
+
+Virtualisation for running Windows and Linux VMs on Apple Silicon. Installed
+manually from [https://www.parallels.com/](https://www.parallels.com/).
+
+Not available as a brew cask. Keep the license key in `Secrets/`.
+
+</details>
+
 ![References banner](./assets/readme/root-references.svg)
 
 These external tools define the bootstrap surfaces and config managers this

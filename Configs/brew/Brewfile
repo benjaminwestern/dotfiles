@@ -13,13 +13,10 @@ brew "graphviz" # Required for Flamegraph etc using pprof
 brew "lazygit" # Terminal UI for git commands
 
 # AI Tools
-brew "terraform-mcp-server" # Official Terraform MCP Server
-brew "mcp-toolbox" # Official GenAI Toolbox for Databases from Google
-brew "gemini-cli"
-cask "claude-code"
 cask "codex"
 brew "ollama", restart_service: true # Local LLM runtime with OpenAI-compatible API
 brew "hf" # HuggingFace CLI for model download/upload
+brew "llama.cpp" # Local LLM inference
 
 # Core Shell Utilities (moved from mise to break circular dependency)
 brew "jq" # JSON processor
@@ -36,13 +33,20 @@ brew "worktrunk"
 brew "make" # Build automation tool
 brew "btop" # Interactive process viewer
 brew "nmap" # Network discovery and security auditing
-brew "gum" # Tool for glamorous shell scripts
 brew "tokei" # Code counter based on language
 brew "caddy" # Proxy CLI tool
 brew "duckdb" # In-process SQL OLAP database
-brew "mysql-client" # MySQL client
-brew "youplot" # Command line plotting tool
 brew "yt-dlp" # YouTube video downloader
+brew "p7zip" # 7-Zip archive utility
+brew "kubernetes-cli" # kubectl
+brew "shellcheck" # Shell script static analysis
+
+# Build toolchain
+brew "automake" # Build tool
+brew "cmake" # Build system
+brew "gcc" # GNU C compiler
+brew "pkgconf" # Package compiler configuration
+brew "protobuf" # Protocol buffers
 
 # Neovim Setup
 brew "luarocks" # Required for rest.nvim
@@ -61,20 +65,22 @@ brew "tlrc" # TLDR for common terminal commands
 if ENV['HOMEBREW_GUI']
   # Fonts
   cask "font-symbols-only-nerd-font" # Symbols Nerd Font
+  cask "font-jetbrains-mono-nerd-font" # JetBrains Mono Nerd Font
   # psudoFont Liga Mono — manually installed from https://github.com/psudo-dev/psudofont-liga-mono (v2.2.0)
   # Not available as a brew cask; install: download .zip from releases, copy .ttf files to ~/Library/Fonts/
 
   # Standard Apps
   cask "ghostty" # Terminal Emulator
   cask "google-chrome" # Web Browser
-  cask "t3-code" # T3 Code editor
   brew "podman" # Container runtime
   brew "podman-compose" # Docker Compose for Podman
   cask "podman-desktop" # Containerisation GUI
-  brew "container" # Apple Native Container CLI
   cask "maccy" # Clipboard Manager
   cask "dbngin" # Database GUI
   cask "visual-studio-code" # Code Editor
+  cask "obsidian" # Knowledge base / notes
+  cask "rectangle" # Window manager
+  cask "ngrok" # Tunneling
 
   # Window Management
   tap "nikitabobko/tap" # Tap for aerospace
@@ -97,10 +103,20 @@ if ENV['HOMEBREW_HOME_APPS'] == "true"
   brew "msodbcsql18"
 
   cask "tableplus"
-  cask "google-drive"
   brew "mas" # Mac store manager
 
   # Mac App Store Apps
   mas "DaisyDisk", id: 411643860
   mas "Final Cut Pro", id: 424389933
+  mas "Xcode", id: 497799835
+  mas "Apple Configurator", id: 1037126344
+  mas "Developer", id: 640199958
+  mas "Keynote", id: 409183694
+  mas "Numbers", id: 409203825
+  mas "Pages", id: 409201541
+  mas "TestFlight", id: 899247664
+  mas "WireGuard", id: 1451685025
+
+  # LaTeX
+  cask "mactex" # Full TeX distribution
 end

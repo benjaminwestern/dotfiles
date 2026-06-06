@@ -37,6 +37,3 @@ end
 # System info
 fastfetch
 
-if test -d $HOME/.grok/bin
-    fish_add_path $HOME/.grok/bin
-end
