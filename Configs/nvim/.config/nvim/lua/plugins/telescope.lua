@@ -135,7 +135,6 @@ return {
     vim.keymap.set('n', '<leader>s.', builtin.oldfiles, { desc = '[S]earch Recent Files ("." for repeat)' })
     vim.keymap.set('n', '<leader>?', builtin.oldfiles, { desc = '[?] Find recently opened files' })
     vim.keymap.set('n', '<leader>gf', builtin.git_files, { desc = 'Search [G]it [F]iles' })
-    vim.keymap.set('n', '<leader>gs', builtin.git_status, { desc = '[G]it [S]tatus (modified files)' })
     vim.keymap.set('n', '<leader>gh', function()
       local bufnr = vim.api.nvim_get_current_buf()
       -- Guard: only work in regular file buffers

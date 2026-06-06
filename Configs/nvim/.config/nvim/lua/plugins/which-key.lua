@@ -493,7 +493,7 @@ return {
         },
         {
           '<leader>gs',
-          desc = 'Git status PICKER — fuzzy search modified files',
+          desc = 'Git status — open lazygit TUI',
         },
         {
           '<leader>gh',
