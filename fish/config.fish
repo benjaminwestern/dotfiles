@@ -33,6 +33,8 @@ if command -v zoxide &> /dev/null
   zoxide init --cmd cd fish | source
 end
 
-# System info
-fastfetch
+# System info (skip non-interactive sessions, e.g. scp over SSH)
+if status is-interactive
+    fastfetch
+end
 
