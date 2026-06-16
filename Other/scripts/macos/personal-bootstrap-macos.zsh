@@ -88,7 +88,13 @@ parse_personal_args "$@"
 # the RESOLVED_* variables will be empty and each step falls back to its
 # hard default from the flag catalog.
 # -----------------------------------------------------------------------------
+local env_enable_dotfiles="${ENABLE_DOTFILES:-}"
 state_read
+
+# The state file stores ENABLE_* keys, but this script consumes RESOLVED_*.
+# Foundation resolves them; when personal runs alone, mirror the dotfiles flag.
+# Env overrides state to match the public loader's resolution precedence.
+RESOLVED_DOTFILES="${RESOLVED_DOTFILES:-${env_enable_dotfiles:-${ENABLE_DOTFILES:-true}}}"
 
 
 # =============================================================================
@@ -133,25 +139,29 @@ ensure_repo() {
 
 
 # =============================================================================
-# SECTION 3: BREW BUNDLE (FULL)
+# SECTION 3: BREW BUNDLE (CASKS / TAPS / MAS / TAPPED FORMULAE)
 # =============================================================================
 
-# apply_brew_bundle -- Run the full Brewfile with feature-flag env vars
+# apply_brew_bundle -- Install Homebrew casks, taps, Mac App Store apps, and
+#                     tapped formulae that cannot be managed by mise.
 #
 # Checks: Whether brew and the Brewfile are available.
-# Gates: None — always runs. The Brewfile itself contains `if ENV[...]` blocks
-#        that conditionally include/exclude groups of formulae and casks. We
-#        just need to export the right env vars before invoking bundle.
-# Side effects: Installs/upgrades Homebrew packages. Exports HOMEBREW_GUI,
-#               HOMEBREW_WORK_APPS, HOMEBREW_HOME_APPS.
+# Gates: None — always runs.
+# Side effects: Installs/upgrades Homebrew casks/taps/formulae.
 # Idempotency: brew bundle is idempotent — already-installed packages are
 #              skipped.
+#
+# NOTE: Core Homebrew formulae are now managed by mise [bootstrap.packages] in
+#       ~/.config/mise/config.toml. Do NOT run `brew bundle cleanup` manually,
+#       because it will try to remove those mise-managed formulae. Use
+#       `mise run bundle-update` (or `mise bootstrap packages install` +
+#       `mise upgrade`) and `brew autoremove` instead.
 #
 # Status:
 #   pass -- bundle completed with package count
 #   fail -- brew or Brewfile not found
 apply_brew_bundle() {
-  local brewfile="$DOTFILES_DIR/Configs/brew/Brewfile"
+  local brewfile="$DOTFILES_DIR/brew/Brewfile"
 
   if ! command_exists brew; then
     status_fail "Brew bundle" "brew not found on PATH"
@@ -162,9 +172,6 @@ apply_brew_bundle() {
     status_fail "Brew bundle" "Brewfile not found at $brewfile"
     return 0
   fi
-
-  # Export env vars so the Brewfile's internal conditionals resolve correctly
-  export_brew_env_vars
 
   if dry_run_active; then
     local pkg_count
@@ -186,47 +193,58 @@ apply_brew_bundle() {
 
 
 # =============================================================================
-# SECTION 4: TUCKR
+# SECTION 4: DOTFILES (mise)
 # =============================================================================
 
-# apply_tuckr -- Symlink dotfiles into place using tuckr
+# apply_dotfiles -- Converge mise [dotfiles] symlinks
 #
-# Checks: Whether tuckr is installed; whether RESOLVED_TUCKR is enabled.
-# Gates: RESOLVED_TUCKR — skips entirely when "false" or empty (default: true).
-# Side effects: Creates ~/.ssh (mode 700), ~/.config, and ~/.codex if absent.
-#               Runs `tuckr add *` from the dotfiles directory.
-# Idempotency: tuckr add is idempotent — it skips existing symlinks.
+# What: Runs `mise dotfiles apply` so mise owns the dotfile layer.
+# Why:  Dotfile mappings are declared in ~/.config/mise/config.toml under
+#       [dotfiles]. This replaces the previous Tuckr-based symlink setup.
+# Checks: Whether mise is installed.
+# Gates: RESOLVED_DOTFILES — controls whether mise dotfiles are applied.
+#        (Older state files may contain ENABLE_TUCKR; it is honoured as a
+#        fallback during state migration.)
+# Side effects: Creates/converges symlinks declared in [dotfiles]. Pre-creates
+#               ~/.ssh and sets mode 700 because [dotfiles] does not guarantee
+#               directory permissions.
+# Idempotency: mise dotfiles apply is convergent — it skips targets already
+#              matching the desired state.
 #
 # Status:
-#   pass -- tuckr ran successfully
-#   skip -- RESOLVED_TUCKR is false
-#   fail -- tuckr not found on PATH despite being enabled
-apply_tuckr() {
-  local enabled="${RESOLVED_TUCKR:-true}"
+#   pass -- dotfiles applied
+#   skip -- RESOLVED_DOTFILES is false
+#   fail -- mise not found on PATH
+apply_dotfiles() {
+  local enabled="${RESOLVED_DOTFILES:-true}"
 
   if [[ "$enabled" != "true" ]]; then
-    status_skip "Tuckr symlinks" "disabled by flag"
+    status_skip "Mise dotfiles" "disabled by flag"
     return 0
   fi
 
-  if ! command_exists tuckr; then
-    status_fail "Tuckr symlinks" "tuckr not found on PATH"
+  if ! command_exists mise; then
+    status_fail "Mise dotfiles" "mise not found on PATH"
     return 0
   fi
 
   if dry_run_active; then
-    dry_run_log "mkdir -p ~/.ssh ~/.config ~/.codex && tuckr add *"
-    status_fix "Tuckr symlinks" "would apply"
+    dry_run_log "mkdir -p ~/.ssh && chmod 700 ~/.ssh && mise dotfiles apply"
+    status_fix "Mise dotfiles" "would apply"
     return 0
   fi
 
-  # Pre-create directories that tuckr targets may reference
-  mkdir -p "$HOME/.ssh" "$HOME/.config" "$HOME/.codex"
+  mkdir -p "$HOME/.ssh" "$HOME/.config" \
+           "$HOME/.config/borders" "$HOME/.config/gh" \
+           "$HOME/.config/ghostty" "$HOME/.config/git" \
+           "$HOME/.config/hypr" "$HOME/.config/opencode" \
+           "$HOME/.config/pitchfork" "$HOME/.config/worktrunk" \
+           "$HOME/.pi"
   chmod 700 "$HOME/.ssh"
 
-  (cd "$DOTFILES_DIR" && tuckr add \*) >/dev/null 2>&1
+  mise dotfiles apply >/dev/null 2>&1
 
-  status_pass "Tuckr symlinks" "applied"
+  status_pass "Mise dotfiles" "applied"
 }
 
 
@@ -428,8 +446,8 @@ main() {
   # Step 2: Full brew bundle with feature-flag env vars
   apply_brew_bundle
 
-  # Step 3: Tuckr symlinks (gated)
-  apply_tuckr
+  # Step 3: mise dotfiles (gated)
+  apply_dotfiles
 
   # Step 4: Set default shell (gated)
   apply_shell_default

@@ -4,7 +4,7 @@
 #
 # Performs a comprehensive, read-only audit of the current machine state. This
 # is the same pre-flight inventory used by foundation-macos.zsh, plus extended
-# checks for the personal layer (tuckr, brew bundle, mise tools, symlinks).
+# checks for the personal layer (mise dotfiles, brew bundle, mise tools, symlinks).
 #
 # Can be run at any time without making changes. Use it to:
 #   - See what's installed before running the bootstrap
@@ -95,7 +95,7 @@ Options:
                          tools    - Package managers, CLI tools, runtimes
                          shell    - Shell config, profile blocks, /etc/shells
                          configs  - Dotfiles, state file, mise config, certs
-                         personal - Tuckr, brew bundle, macOS defaults
+                         personal - mise dotfiles, brew bundle, macOS defaults
                          all      - Everything (default)
   --json               Output results as JSON (machine-readable)
   --non-interactive    Suppress gum-styled output
@@ -170,16 +170,16 @@ audit_tools() {
   fi
 
   # Additional tools (not in foundation but expected after personal layer)
-  local extra_tools=(tuckr tmux nvim yazi fish lazygit)
+  local extra_tools=(mise tmux nvim yazi fish lazygit)
   for tool in "${extra_tools[@]}"; do
     if command_exists "$tool"; then
       local ver=""
       case "$tool" in
         fish)    ver="$(fish --version 2>/dev/null | head -1)" ;;
+        mise)    ver="$(mise --version 2>/dev/null | head -1)" ;;
         tmux)    ver="$(tmux -V 2>/dev/null)" ;;
         nvim)    ver="$(nvim --version 2>/dev/null | head -1)" ;;
         lazygit) ver="$(lazygit --version 2>/dev/null | head -1)" ;;
-        tuckr)   ver="installed" ;;
         yazi)    ver="$(yazi --version 2>/dev/null | head -1)" ;;
       esac
       _inventory_line "$tool:" "${ver:-installed}"
@@ -354,11 +354,11 @@ audit_configs() {
 }
 
 
-# audit_personal -- Audit personal layer state (tuckr, brew bundle, defaults)
+# audit_personal -- Audit personal layer state (mise dotfiles, brew bundle, defaults)
 #
-# What: Checks tuckr symlink status, brew bundle satisfaction, and whether
+# What: Checks mise dotfiles status, brew bundle satisfaction, and whether
 #       macOS defaults have been applied.
-# Checks: tuckr status, brew bundle check, defaults read.
+# Checks: mise dotfiles status, brew bundle check, defaults read.
 # Gates: None.
 # Side effects: Writes to stdout only.
 # Idempotency: Pure detection.
@@ -366,18 +366,16 @@ audit_personal() {
   note "── Personal Layer ──"
   echo ""
 
-  # Tuckr symlinks
-  if command_exists tuckr; then
-    _inventory_line "Tuckr:" "installed"
-    # Run tuckr status and display its output directly — it has its own
-    # formatted table with symlink/not-symlinked columns.
-    (cd "$DOTFILES_DIR" 2>/dev/null && tuckr status 2>&1) || _inventory_line "  Status:" "could not run tuckr status"
+  # mise dotfiles
+  if command_exists mise; then
+    _inventory_line "Mise dotfiles:" "installed"
+    (mise dotfiles status 2>&1 | grep -E 'missing|conflict|applied' | head -20) || _inventory_line "  Status:" "could not run mise dotfiles status"
   else
-    _inventory_line "Tuckr:" "not installed"
+    _inventory_line "Mise dotfiles:" "not installed"
   fi
 
   # Brew bundle check
-  local brewfile="$DOTFILES_DIR/Configs/brew/Brewfile"
+  local brewfile="$DOTFILES_DIR/brew/Brewfile"
   if [[ -f "$brewfile" ]] && command_exists brew; then
     _inventory_line "Brewfile:" "present"
     local bundle_check
@@ -520,7 +518,7 @@ audit_json() {
     "homebrew": "${homebrew_version:-null}",
     "mise": "${mise_version:-null}",
     "foundation_packages": $pkg_json,
-    "tuckr": $(command_exists tuckr && echo "true" || echo "false"),
+    "mise_dotfiles": $(command_exists mise && mise dotfiles status --missing >/dev/null 2>&1 && echo "true" || echo "false"),
     "gum": $(command_exists gum && echo "true" || echo "false")
   },
   "configs": {

@@ -74,19 +74,16 @@ Temporary Items
 **/.vscode
 
 # SSH Keys - managed locally, not in git
-Configs/ssh/.ssh/*.pk
-Configs/ssh/.ssh/*.pub
-Configs/ssh/.ssh/id_*
+ssh/*.pk
+ssh/*.pub
+ssh/id_*
 
-Configs/ssh/.ssh/known_hosts*
+ssh/known_hosts*
 
 # Pi auth/session/cache/OAuth secret state is machine-local, not dotfile-managed.
-Configs/pi/.pi/agent/auth.json
-Configs/pi/.pi/agent/oauth.json
-Configs/pi/.pi/agent/client-credentials.json*
-Configs/pi/.pi/agent/mcp-inventory-cache.json
-Configs/pi/.pi/agent/sessions/
-Configs/pi/.pi/agent/*.bak
-
-# Codex authentication is machine-local, not dotfile-managed.
-Configs/codex/.codex/auth.json
+pi/auth.json
+pi/oauth.json
+pi/client-credentials.json*
+pi/mcp-inventory-cache.json
+pi/sessions/
+pi/*.bak

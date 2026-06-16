@@ -53,7 +53,7 @@ Options:
   --shell <fish|zsh>       Set preferred shell (persisted to state file)
   --profile <work|home|minimal>  Set device profile preset
   --enable-<flag>          Enable a feature flag (for example, --enable-zscaler)
-  --disable-<flag>         Disable a feature flag (for example, --disable-work-apps)
+  --disable-<flag>         Disable a feature flag (for example, --disable-zscaler)
   --personal               Run the personal layer after foundation
   --non-interactive        Disable all interactive prompts
   --dry-run                Show what would happen without making any changes
@@ -61,8 +61,8 @@ Options:
   --dotfiles-dir <path>    Override the local dotfiles checkout path
   --personal-script <path> Override personal bootstrap script path
 
-Feature flags: zscaler, work-apps, home-apps, gui, tuckr, macos-defaults,
-               rosetta, mise-tools, shell-default
+Feature flags: zscaler, dotfiles, macos-defaults, rosetta, mise-tools,
+               shell-default
 
 Repo-local scripts:
   Other/scripts/macos/bootstrap-macos.zsh
@@ -73,7 +73,7 @@ Repo-local scripts:
 Examples:
   install.sh setup --shell fish --profile work
   install.sh ensure --personal
-  install.sh update --enable-work-apps --disable-home-apps
+  install.sh update --dry-run
   install.sh personal --non-interactive --shell zsh
   install.sh setup --dry-run --shell fish --profile work
   install.sh audit
@@ -198,7 +198,6 @@ detect_os() {
 }
 
 export_flags() {
-  export MODE
   export PREFERRED_SHELL
   export DEVICE_PROFILE
   export NON_INTERACTIVE

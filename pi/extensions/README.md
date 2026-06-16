@@ -6,17 +6,17 @@ The design goal is to stay close to Pi's native extension model. Extensions regi
 
 ## Quick Start
 
-The live extension directory is normally symlinked from the tuckr-managed dotfiles source:
+The live extension directory is normally symlinked from the managed dotfiles source:
 
 ```sh
-~/.pi/agent/extensions -> ~/.dotfiles/Configs/pi/.pi/agent/extensions
+~/.pi/agent/extensions -> ~/.dotfiles/pi/extensions
 ```
 
-After changing these files, refresh the tuckr package:
+After changing these files, refresh the dotfiles symlink:
 
 ```sh
 cd ~/.dotfiles
-tuckr add pi
+mise dotfiles apply
 ```
 
 Check Pi can still load the extensions:

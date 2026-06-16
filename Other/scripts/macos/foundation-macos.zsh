@@ -31,16 +31,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib/common.zsh"
 
-# -- Foundation Homebrew packages ---------------------------------------------
-# The minimum set of CLI tools installed on every macOS machine. gum is included
-# here so there is no separate ensure_gum step -- it arrives with the rest of
-# the foundation packages.
-#
-# NOTE: mise is NOT in this list. It can be installed via Homebrew OR via the
-# shell installer (curl https://mise.run | sh). The ensure_mise() function
-# handles both paths and detects which method was used for updates.
-FOUNDATION_BREW_PACKAGES=(git gh jq yq fzf fd ripgrep zoxide lazygit openssl gum)
-
 # -- Mise paths ---------------------------------------------------------------
 MISE_CONFIG_DIR="$HOME/.config/mise"
 MISE_CONFIG_PATH="$MISE_CONFIG_DIR/config.toml"
@@ -77,17 +67,13 @@ MODE="${MODE:-}"
 # Idempotency: Overwrites CLI_* vars with the same values each time.
 #
 # Stores results in:
-#   CLI_SHELL, CLI_PROFILE, CLI_ENABLE_ZSCALER, CLI_ENABLE_WORK_APPS,
-#   CLI_ENABLE_HOME_APPS, CLI_ENABLE_GUI, CLI_ENABLE_TUCKR,
+#   CLI_SHELL, CLI_PROFILE, CLI_ENABLE_ZSCALER, CLI_ENABLE_DOTFILES,
 #   CLI_ENABLE_MACOS_DEFAULTS, CLI_ENABLE_ROSETTA, CLI_ENABLE_MISE_TOOLS,
 #   CLI_ENABLE_SHELL_DEFAULT, NON_INTERACTIVE, ENABLE_PERSONAL
 typeset -g CLI_SHELL=""
 typeset -g CLI_PROFILE=""
 typeset -g CLI_ENABLE_ZSCALER=""
-typeset -g CLI_ENABLE_WORK_APPS=""
-typeset -g CLI_ENABLE_HOME_APPS=""
-typeset -g CLI_ENABLE_GUI=""
-typeset -g CLI_ENABLE_TUCKR=""
+typeset -g CLI_ENABLE_DOTFILES=""
 typeset -g CLI_ENABLE_MACOS_DEFAULTS=""
 typeset -g CLI_ENABLE_ROSETTA=""
 typeset -g CLI_ENABLE_MISE_TOOLS=""
@@ -111,8 +97,7 @@ Options:
   --personal-script <path> Override the personal bootstrap script path
 
 Feature flags:
-  zscaler, work-apps, home-apps, gui, tuckr, macos-defaults,
-  rosetta, mise-tools, shell-default
+  zscaler, dotfiles, macos-defaults, rosetta, mise-tools, shell-default
 
 Examples:
   ./foundation-macos.zsh setup --shell fish --profile work
@@ -148,14 +133,8 @@ parse_foundation_args() {
         ;;
       --enable-zscaler)     CLI_ENABLE_ZSCALER="true";  shift ;;
       --disable-zscaler)    CLI_ENABLE_ZSCALER="false"; shift ;;
-      --enable-work-apps)   CLI_ENABLE_WORK_APPS="true";  shift ;;
-      --disable-work-apps)  CLI_ENABLE_WORK_APPS="false"; shift ;;
-      --enable-home-apps)   CLI_ENABLE_HOME_APPS="true";  shift ;;
-      --disable-home-apps)  CLI_ENABLE_HOME_APPS="false"; shift ;;
-      --enable-gui)         CLI_ENABLE_GUI="true";  shift ;;
-      --disable-gui)        CLI_ENABLE_GUI="false"; shift ;;
-      --enable-tuckr)       CLI_ENABLE_TUCKR="true";  shift ;;
-      --disable-tuckr)      CLI_ENABLE_TUCKR="false"; shift ;;
+      --enable-dotfiles)    CLI_ENABLE_DOTFILES="true";  shift ;;
+      --disable-dotfiles)   CLI_ENABLE_DOTFILES="false"; shift ;;
       --enable-macos-defaults)  CLI_ENABLE_MACOS_DEFAULTS="true";  shift ;;
       --disable-macos-defaults) CLI_ENABLE_MACOS_DEFAULTS="false"; shift ;;
       --enable-rosetta)     CLI_ENABLE_ROSETTA="true";  shift ;;
@@ -263,40 +242,27 @@ brew_shellenv() {
   fi
 }
 
-# ensure_foundation_packages -- Install missing packages from FOUNDATION_BREW_PACKAGES
+# ensure_mise_bootstrap_packages -- Install Homebrew formulae declared in mise [bootstrap.packages]
 #
-# What: Iterates the package list, checks each with `brew list`, installs any
-#       that are missing. Reports counts.
-# Why:  Ensures every machine has the baseline CLI toolset.
-# Checks: brew list per package.
+# What: Runs `mise bootstrap packages install` so mise owns the core Homebrew
+#       formula layer (git, jq, fzf, etc.).
+# Why:  Core CLI tools are defined in ~/.config/mise/config.toml under
+#       [bootstrap.packages]. They must be present before language runtimes
+#       (some mise tools expect these formulae on PATH) and before Zscaler
+#       TLS configuration.
+# Checks: None (mise bootstrap packages install is idempotent).
 # Gates: None (always runs).
-# Side effects: Installs Homebrew formulae.
-# Idempotency: Skips packages that are already installed.
+# Side effects: Installs/updates Homebrew formulae via mise.
+# Idempotency: mise bootstrap packages install skips packages already at the desired version.
 #
 # Status:
-#   pass -- "N/N present" if all packages already installed
-#   fix  -- "installed M missing" if some were installed this run
-ensure_foundation_packages() {
-  local pkg
-  local present=0
-  local missing=0
-  local total=${#FOUNDATION_BREW_PACKAGES[@]}
-
-  for pkg in "${FOUNDATION_BREW_PACKAGES[@]}"; do
-    if brew list "$pkg" >/dev/null 2>&1; then
-      (( present++ )) || true
-    else
-      run_or_dry brew install "$pkg"
-      (( missing++ )) || true
-    fi
-  done
-
-  if [[ "$missing" -eq 0 ]]; then
-    status_pass "Foundation packages" "${present}/${total} present"
-  elif dry_run_active; then
-    status_fix "Foundation packages" "would install ${missing} missing"
+#   pass -- mise bootstrap packages install succeeded
+ensure_mise_bootstrap_packages() {
+  run_or_dry mise bootstrap packages install
+  if dry_run_active; then
+    status_fix "Mise bootstrap packages" "would run mise bootstrap packages install"
   else
-    status_fix "Foundation packages" "installed ${missing} missing"
+    status_pass "Mise bootstrap packages" "installed"
   fi
 }
 
@@ -1061,11 +1027,11 @@ run_personal_layer() {
   note "Handing off to personal bootstrap: $script_path"
   DOTFILES_REPO="${DOTFILES_REPO:-}" \
     BOOTSTRAP_ROOT="$BOOTSTRAP_ROOT" \
-    MODE="$MODE" \
+    MODE="personal" \
     RESOLVED_SHELL="$RESOLVED_SHELL" \
     RESOLVED_PROFILE="$RESOLVED_PROFILE" \
     NON_INTERACTIVE="$NON_INTERACTIVE" \
-    /bin/zsh "$script_path" "$MODE"
+    /bin/zsh "$script_path"
   status_pass "Personal layer" "completed"
 }
 
@@ -1085,11 +1051,11 @@ run_personal_layer() {
 ensure_foundation() {
   ensure_homebrew
   brew_shellenv
-  ensure_foundation_packages
   ensure_mise
   ensure_profile_block
   activate_shell
   ensure_seed_mise_config
+  ensure_mise_bootstrap_packages
   handle_zscaler
   ensure_mise_tools
   validate_foundation
@@ -1109,11 +1075,11 @@ update_foundation() {
   ensure_homebrew
   brew_shellenv
   update_brew_packages
-  ensure_foundation_packages
   ensure_mise
   ensure_profile_block
   activate_shell
   ensure_seed_mise_config
+  ensure_mise_bootstrap_packages
   handle_zscaler
   update_mise
   validate_foundation
@@ -1181,10 +1147,7 @@ main() {
     "$CLI_SHELL" \
     "$CLI_PROFILE" \
     "$CLI_ENABLE_ZSCALER" \
-    "$CLI_ENABLE_WORK_APPS" \
-    "$CLI_ENABLE_HOME_APPS" \
-    "$CLI_ENABLE_GUI" \
-    "$CLI_ENABLE_TUCKR" \
+    "$CLI_ENABLE_DOTFILES" \
     "$CLI_ENABLE_MACOS_DEFAULTS" \
     "$CLI_ENABLE_ROSETTA" \
     "$CLI_ENABLE_MISE_TOOLS" \

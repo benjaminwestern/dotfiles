@@ -2,10 +2,17 @@
 
 [settings]
 experimental = true
-trusted_config_paths = [
-    "~/code/",
-    "~/.config/mise/config.toml",
-    "~/.dotfiles/Configs/mise/.config/mise/config.toml",
+# trusted_config_paths = [
+#     "~/code/",
+#     "~/.config/mise/config.toml",
+#     "~/.dotfiles/mise/config.toml",
+# ]
+minimum_release_age_excludes = [
+    "npm:opencode-ai",
+    "npm:@earendil-works/pi-coding-agent",
+    "hk",
+    "fnox",
+    "pitchfork",
 ]
 
 [env]
@@ -13,6 +20,87 @@ _.file = "~/.config/mise/.env"
 OPENCODE_ENABLE_EXPERIMENTAL_MODELS = "true"
 PITCHFORK_WEB_PORT=19876
 EDITOR = "nvim"
+
+[bootstrap.packages]
+"brew:bash" = "latest"
+"brew:git" = "latest"
+"brew:tree" = "latest"
+"brew:tmux" = "latest"
+"brew:tpm" = "latest"
+"brew:fish" = "latest"
+"brew:fisher" = "latest"
+"brew:neovim" = "latest"
+"brew:fastfetch" = "latest"
+"brew:graphviz" = "latest"
+"brew:lazygit" = "latest"
+"brew:hf" = "latest"
+"brew:llama.cpp" = "latest"
+"brew:jq" = "latest"
+"brew:yq" = "latest"
+"brew:gh" = "latest"
+"brew:gitleaks" = "latest"
+"brew:zoxide" = "latest"
+"brew:fzf" = "latest"
+"brew:fd" = "latest"
+"brew:ripgrep" = "latest"
+"brew:worktrunk" = "latest"
+"brew:make" = "latest"
+"brew:btop" = "latest"
+"brew:nmap" = "latest"
+"brew:tokei" = "latest"
+"brew:caddy" = "latest"
+"brew:duckdb" = "latest"
+"brew:yt-dlp" = "latest"
+"brew:p7zip" = "latest"
+"brew:kubernetes-cli" = "latest"
+"brew:shellcheck" = "latest"
+"brew:automake" = "latest"
+"brew:cmake" = "latest"
+"brew:gcc" = "latest"
+"brew:pkgconf" = "latest"
+"brew:protobuf" = "latest"
+"brew:luarocks" = "latest"
+"brew:stylua" = "latest"
+"brew:wget" = "latest"
+"brew:pngpaste" = "latest"
+"brew:coreutils" = "latest"
+"brew:ffmpeg" = "latest"
+"brew:imagemagick" = "latest"
+"brew:resvg" = "latest"
+"brew:tlrc" = "latest"
+"brew:podman" = "latest"
+"brew:podman-compose" = "latest"
+
+[dotfiles]
+"~/.aerospace.toml" = "~/.dotfiles/aerospace/.aerospace.toml"
+"~/.bash_profile" = "~/.dotfiles/bash/.bash_profile"
+"~/.bashrc" = "~/.dotfiles/bash/.bashrc"
+"~/.config/borders/bordersrc" = "~/.dotfiles/borders/bordersrc"
+"~/.config/fish" = "~/.dotfiles/fish"
+"~/.config/gh/config.yml" = "~/.dotfiles/gh/config.yml"
+"~/.config/gh/hosts.yml" = "~/.dotfiles/gh/hosts.yml"
+"~/.config/ghostty/config" = "~/.dotfiles/ghostty/config"
+"~/.config/git/ignore" = "~/.dotfiles/git/ignore"
+"~/.config/hypr/hyprland.conf" = "~/.dotfiles/hypr/hyprland.conf"
+"~/.config/mise" = "~/.dotfiles/mise"
+"~/.config/nvim" = "~/.dotfiles/nvim"
+"~/.config/opencode/opencode.json" = "~/.dotfiles/opencode/opencode.json"
+"~/.config/opencode/plugins" = "~/.dotfiles/opencode/plugins"
+"~/.config/pitchfork/Caddyfile" = "~/.dotfiles/pitchfork/Caddyfile"
+"~/.config/pitchfork/config.toml" = "~/.dotfiles/pitchfork/config.toml"
+"~/.config/worktrunk/config.toml" = "~/.dotfiles/worktrunk/config.toml"
+"~/.gitconfig" = "~/.dotfiles/git/.gitconfig"
+"~/.hushlogin" = "~/.dotfiles/bash/.hushlogin"
+"~/.pi/agent/APPEND_SYSTEM.md" = "~/.dotfiles/pi/APPEND_SYSTEM.md"
+"~/.pi/agent/extensions" = "~/.dotfiles/pi/extensions"
+"~/.pi/agent/mcp.json" = "~/.dotfiles/pi/mcp.json"
+"~/.pi/agent/model-system" = "~/.dotfiles/pi/model-system"
+"~/.pi/agent/settings.json" = "~/.dotfiles/pi/settings.json"
+"~/.ssh/config" = "~/.dotfiles/ssh/config"
+"~/.tmux.conf" = "~/.dotfiles/tmux/.tmux.conf"
+"~/.zprofile" = "~/.dotfiles/zsh/.zprofile"
+"~/.zshrc" = "~/.dotfiles/zsh/.zshrc"
+"~/Brewfile" = "~/.dotfiles/brew/Brewfile"
 
 [tools]
 go = "latest"
@@ -31,6 +119,8 @@ go = "latest"
 "go:github.com/charmbracelet/glow" = { version = "latest" }
 "go:github.com/charmbracelet/freeze" = { version = "latest" }
 "go:github.com/charmbracelet/vhs" = { version = "latest" }
+
+"go:github.com/hashicorp/terraform-mcp-server/cmd/terraform-mcp-server" = { version = "latest"}
 
 node = "latest"
 bun = "latest"
@@ -74,11 +164,12 @@ gcloud = "latest"
 
 # Homebrew Tasks
 [tasks.bundle-update]
-description = "Runs Update, Upgrade, Cleanup and Autoremove for Brew"
+description = "Update Brew casks/taps, mise bootstrap packages, and mise tools"
 run = """
 brew update
 brew upgrade
-brew cleanup
+mise bootstrap packages install
+mise upgrade
 brew autoremove
 """
 
@@ -125,83 +216,43 @@ git commit --allow-empty -m ':sparkles: :rocket:'
 git push
 """
 
-# Ollama / Local Model Tasks
-# Daemon ownership: Homebrew owns starting/stopping/restarting the Ollama server.
-# Use native commands for daemon lifecycle:
-#   brew services start ollama
-#   brew services stop ollama
-#   brew services restart ollama
-#
-# Note on Embedding Models:
-# The current recommended local RAG standard is `nomic-embed-text`.
-# It provides 768 dimensions, an 8192 context window, and uses the Apache 2.0 license.
-# To switch from the default `embeddinggemma:300m`, set:
-#   OLLAMA_EMBED_MODEL="nomic-embed-text"
-# in your ~/.config/mise/.env file.
-#
-# Mise tasks below only manage model workflows against that server.
+# Local Model Tasks (llama.cpp)
+# llama.cpp replaces the previous Homebrew-managed Ollama setup.
+# Use llama-server for an OpenAI-compatible local server and llama-cli for
+# one-off inference. Models are stored as GGUF files under ~/.models.
 [tasks.pull-hf]
-description = "Import a HuggingFace GGUF model into Ollama for use with Pi"
+description = "Download a HuggingFace GGUF model into ~/.models"
 usage = '''
 arg "<hf_repo>" "HuggingFace repo (e.g. bartowski/gemma-4-e4b-it-GGUF)"
 arg "<gguf_file>" "GGUF filename to download"
-arg "[ollama_name]" "Optional Ollama model name (defaults to filename)"
+arg "[model_name]" "Optional local directory name (defaults to filename without .gguf)"
 '''
-run = "$HOME/.config/mise/scripts/pull-hf.sh {{arg(name='hf_repo')}} {{arg(name='gguf_file')}} {{arg(name='ollama_name')}}"
+run = "$HOME/.config/mise/scripts/pull-hf.sh {{arg(name='hf_repo')}} {{arg(name='gguf_file')}} {{arg(name='model_name')}}"
 
-[tasks.ollama-pull-local-models]
-description = "Pull configured models; assumes the Homebrew-managed Ollama daemon is running"
-run = """
-ollama pull "${OLLAMA_GEMMA4_MODEL:-gemma4:e2b-it-q4_K_M}"
-ollama pull "${OLLAMA_EMBED_MODEL:-nomic-embed-text}"
-"""
+[tasks.llama-serve]
+description = "Start llama-server for a GGUF model"
+usage = '''
+arg "<model_path>" "Path to the GGUF model to serve"
+arg "[port]" "Port to listen on (default: 4096)"
+'''
+run = '''
+llama-server -m "{{arg(name='model_path')}}" --port "{{arg(name='port', default='4096')}}"
+'''
 
-[tasks.ollama-warm-local-models]
-description = "Load configured models; assumes the Homebrew-managed Ollama daemon is running"
-run = """
-ollama run "${OLLAMA_GEMMA4_MODEL:-gemma4:e2b-it-q4_K_M}" "Reply with OK." --keepalive "${OLLAMA_KEEP_ALIVE:-24h}"
-ollama run "${OLLAMA_EMBED_MODEL:-nomic-embed-text}" "warmup" --keepalive "${OLLAMA_KEEP_ALIVE:-24h}" >/dev/null
-"""
+[tasks.llama-cli]
+description = "Run a single prompt through llama-cli"
+usage = '''
+arg "<model_path>" "Path to the GGUF model"
+arg "<prompt>" "Prompt text"
+'''
+run = '''
+llama-cli -m "{{arg(name='model_path')}}" -p "{{arg(name='prompt')}}"
+'''
 
-[tasks.ollama-unload-local-models]
-description = "Unload the configured local Ollama models"
+[tasks.llama-stop]
+description = "Stop any running llama-server processes"
 run = """
-ollama stop "${OLLAMA_GEMMA4_MODEL:-gemma4:e2b-it-q4_K_M}" || true
-ollama stop "${OLLAMA_EMBED_MODEL:-nomic-embed-text}" || true
-"""
-
-[tasks.ollama-up]
-description = "Pull, warm, and show model status; daemon lifecycle stays with Homebrew"
-run = """
-ollama pull "${OLLAMA_GEMMA4_MODEL:-gemma4:e2b-it-q4_K_M}"
-ollama pull "${OLLAMA_EMBED_MODEL:-nomic-embed-text}"
-ollama run "${OLLAMA_GEMMA4_MODEL:-gemma4:e2b-it-q4_K_M}" "Reply with OK." --keepalive "${OLLAMA_KEEP_ALIVE:-24h}"
-ollama run "${OLLAMA_EMBED_MODEL:-nomic-embed-text}" "warmup" --keepalive "${OLLAMA_KEEP_ALIVE:-24h}" >/dev/null
-echo ""
-echo "Installed models:"
-ollama list
-echo ""
-echo "Loaded models:"
-ollama ps
-"""
-
-[tasks.ollama-status]
-description = "Show configured, installed, and loaded Ollama models"
-run = """
-echo "Chat model:      ${OLLAMA_GEMMA4_MODEL:-gemma4:e2b-it-q4_K_M}"
-echo "Embedding model: ${OLLAMA_EMBED_MODEL:-nomic-embed-text}"
-echo "Ollama host:     ${OLLAMA_HOST:-127.0.0.1:11434}"
-echo "Daemon owner:    Homebrew (brew services start/stop/restart ollama)"
-echo ""
-if ollama list >/dev/null 2>&1; then
-  echo "Installed models:"
-  ollama list
-  echo ""
-  echo "Loaded models:"
-  ollama ps
-else
-  echo "Ollama API is not reachable. Start the daemon with: brew services start ollama"
-fi
+pkill -f llama-server || true
 """
 
 # Terraform Tasks
@@ -290,11 +341,9 @@ git-check = "mise run check-all-repos"
 banish = "mise run banish-ds-store"
 git-empty = "mise run empty-commit"
 hf-pull = "mise run pull-hf"
-ollama-pull = "mise run ollama-pull-local-models"
-ollama-up = "mise run ollama-up"
-ollama-warm = "mise run ollama-warm-local-models"
-ollama-unload = "mise run ollama-unload-local-models"
-ollama-status = "mise run ollama-status"
+llama-serve = "mise run llama-serve"
+llama-cli = "mise run llama-cli"
+llama-stop = "mise run llama-stop"
 ti = "mise run terraform-init"
 tc = "mise run terraform-console"
 taa = "mise run terraform-auto-apply"

@@ -233,7 +233,7 @@ preflight_inventory() {
   typeset -g PREFLIGHT_FISH_IN_SHELLS=""
   typeset -g PREFLIGHT_ZSH_BREW_IN_SHELLS=""
   typeset -g PREFLIGHT_DOTFILES_DIR=""
-  typeset -g PREFLIGHT_TUCKR=""
+  typeset -g PREFLIGHT_MISE_DOTFILES=""
   typeset -g PREFLIGHT_STATE_FILE=""
   typeset -g PREFLIGHT_MISE_CONFIG=""
   typeset -g PREFLIGHT_ZSCALER=""
@@ -309,12 +309,12 @@ preflight_inventory() {
   fi
   _inventory_line "Gum:" "$PREFLIGHT_GUM"
 
-  if command_exists tuckr; then
-    PREFLIGHT_TUCKR="installed"
+  if command_exists mise; then
+    PREFLIGHT_MISE_DOTFILES="installed"
   else
-    PREFLIGHT_TUCKR="missing"
+    PREFLIGHT_MISE_DOTFILES="missing"
   fi
-  _inventory_line "Tuckr:" "$PREFLIGHT_TUCKR"
+  _inventory_line "Mise dotfiles:" "$PREFLIGHT_MISE_DOTFILES"
 
   # -- Shell state -------------------------------------------------------------
   PREFLIGHT_SHELL_CURRENT="$SHELL"
@@ -766,6 +766,10 @@ state_read() {
     # shellcheck disable=SC1090
     source "$STATE_FILE_PATH"
   fi
+  # Backwards compatibility: old state files used ENABLE_TUCKR for the dotfiles gate.
+  if [[ -z "${ENABLE_DOTFILES:-}" && -n "${ENABLE_TUCKR:-}" ]]; then
+    ENABLE_DOTFILES="$ENABLE_TUCKR"
+  fi
 }
 
 # state_get -- Retrieve a single value from the state file by key
@@ -840,9 +844,9 @@ state_set() {
 #
 # Takes no arguments. Reads from the following global variables that
 # resolve_all_flags populates:
-#   RESOLVED_SHELL, RESOLVED_PROFILE, RESOLVED_ZSCALER, RESOLVED_WORK_APPS,
-#   RESOLVED_HOME_APPS, RESOLVED_GUI, RESOLVED_TUCKR, RESOLVED_MACOS_DEFAULTS,
-#   RESOLVED_ROSETTA, RESOLVED_MISE_TOOLS, RESOLVED_SHELL_DEFAULT
+#   RESOLVED_SHELL, RESOLVED_PROFILE, RESOLVED_ZSCALER, RESOLVED_DOTFILES,
+#   RESOLVED_MACOS_DEFAULTS, RESOLVED_ROSETTA, RESOLVED_MISE_TOOLS,
+#   RESOLVED_SHELL_DEFAULT
 #
 # File format:
 #   - Header comment with generation timestamp.
@@ -860,10 +864,7 @@ state_write_all() {
 PREFERRED_SHELL=${RESOLVED_SHELL:-}
 DEVICE_PROFILE=${RESOLVED_PROFILE:-}
 ENABLE_ZSCALER=${RESOLVED_ZSCALER:-}
-ENABLE_WORK_APPS=${RESOLVED_WORK_APPS:-}
-ENABLE_HOME_APPS=${RESOLVED_HOME_APPS:-}
-ENABLE_GUI=${RESOLVED_GUI:-}
-ENABLE_TUCKR=${RESOLVED_TUCKR:-}
+ENABLE_DOTFILES=${RESOLVED_DOTFILES:-}
 ENABLE_MACOS_DEFAULTS=${RESOLVED_MACOS_DEFAULTS:-}
 ENABLE_ROSETTA=${RESOLVED_ROSETTA:-}
 ENABLE_MISE_TOOLS=${RESOLVED_MISE_TOOLS:-}
@@ -1075,12 +1076,9 @@ resolve_device_profile() {
 #   | Flag                  | work  | home  | minimal |
 #   |-----------------------|-------|-------|---------|
 #   | ENABLE_ZSCALER        | auto  | false | false   |
-#   | ENABLE_WORK_APPS      | true  | false | false   |
-#   | ENABLE_HOME_APPS      | false | true  | false   |
-#   | ENABLE_GUI            | true  | true  | false   |
-#   | ENABLE_TUCKR          | true  | true  | true    |
+#   | ENABLE_DOTFILES          | true  | true  | true    |
 #   | ENABLE_MACOS_DEFAULTS | true  | true  | false   |
-#   | ENABLE_ROSETTA         | true  | true  | false   |
+#   | ENABLE_ROSETTA        | true  | true  | false   |
 #   | ENABLE_MISE_TOOLS     | true  | true  | true    |
 #   | ENABLE_SHELL_DEFAULT  | true  | true  | true    |
 get_profile_default() {
@@ -1090,10 +1088,7 @@ get_profile_default() {
   case "${profile}:${flag_key}" in
     # -- work profile --
     work:ENABLE_ZSCALER)        printf 'auto'  ;;
-    work:ENABLE_WORK_APPS)      printf 'true'  ;;
-    work:ENABLE_HOME_APPS)      printf 'false' ;;
-    work:ENABLE_GUI)            printf 'true'  ;;
-    work:ENABLE_TUCKR)          printf 'true'  ;;
+    work:ENABLE_DOTFILES)          printf 'true'  ;;
     work:ENABLE_MACOS_DEFAULTS) printf 'true'  ;;
     work:ENABLE_ROSETTA)        printf 'true'  ;;
     work:ENABLE_MISE_TOOLS)     printf 'true'  ;;
@@ -1101,10 +1096,7 @@ get_profile_default() {
 
     # -- home profile --
     home:ENABLE_ZSCALER)        printf 'false' ;;
-    home:ENABLE_WORK_APPS)      printf 'false' ;;
-    home:ENABLE_HOME_APPS)      printf 'true'  ;;
-    home:ENABLE_GUI)            printf 'true'  ;;
-    home:ENABLE_TUCKR)          printf 'true'  ;;
+    home:ENABLE_DOTFILES)          printf 'true'  ;;
     home:ENABLE_MACOS_DEFAULTS) printf 'true'  ;;
     home:ENABLE_ROSETTA)        printf 'true'  ;;
     home:ENABLE_MISE_TOOLS)     printf 'true'  ;;
@@ -1112,10 +1104,7 @@ get_profile_default() {
 
     # -- minimal profile --
     minimal:ENABLE_ZSCALER)        printf 'false' ;;
-    minimal:ENABLE_WORK_APPS)      printf 'false' ;;
-    minimal:ENABLE_HOME_APPS)      printf 'false' ;;
-    minimal:ENABLE_GUI)            printf 'false' ;;
-    minimal:ENABLE_TUCKR)          printf 'true'  ;;
+    minimal:ENABLE_DOTFILES)          printf 'true'  ;;
     minimal:ENABLE_MACOS_DEFAULTS) printf 'false' ;;
     minimal:ENABLE_ROSETTA)        printf 'false' ;;
     minimal:ENABLE_MISE_TOOLS)     printf 'true'  ;;
@@ -1139,31 +1128,25 @@ get_profile_default() {
 #   $1  -- cli_shell          : --shell flag value
 #   $2  -- cli_profile        : --profile flag value
 #   $3  -- cli_enable_zscaler : --zscaler flag value
-#   $4  -- cli_enable_work    : --work-apps flag value
-#   $5  -- cli_enable_home    : --home-apps flag value
-#   $6  -- cli_enable_gui     : --gui flag value
-#   $7  -- cli_enable_tuckr   : --tuckr flag value
-#   $8  -- cli_enable_macos   : --macos-defaults flag value
-#   $9  -- cli_enable_rosetta : --rosetta flag value
-#   $10 -- cli_enable_mise    : --mise-tools flag value
-#   $11 -- cli_enable_shell_default : --shell-default flag value
+#   $4  -- cli_enable_dotfiles : --dotfiles flag value
+#   $5  -- cli_enable_macos   : --macos-defaults flag value
+#   $6  -- cli_enable_rosetta : --rosetta flag value
+#   $7  -- cli_enable_mise    : --mise-tools flag value
+#   $8  -- cli_enable_shell_default : --shell-default flag value
 #
 # After this function returns, the following globals are set:
-#   RESOLVED_SHELL, RESOLVED_PROFILE, RESOLVED_ZSCALER, RESOLVED_WORK_APPS,
-#   RESOLVED_HOME_APPS, RESOLVED_GUI, RESOLVED_TUCKR, RESOLVED_MACOS_DEFAULTS,
-#   RESOLVED_ROSETTA, RESOLVED_MISE_TOOLS, RESOLVED_SHELL_DEFAULT
+#   RESOLVED_SHELL, RESOLVED_PROFILE, RESOLVED_ZSCALER, RESOLVED_DOTFILES,
+#   RESOLVED_MACOS_DEFAULTS, RESOLVED_ROSETTA, RESOLVED_MISE_TOOLS,
+#   RESOLVED_SHELL_DEFAULT
 resolve_all_flags() {
   local cli_shell="${1:-}"
   local cli_profile="${2:-}"
   local cli_enable_zscaler="${3:-}"
-  local cli_enable_work="${4:-}"
-  local cli_enable_home="${5:-}"
-  local cli_enable_gui="${6:-}"
-  local cli_enable_tuckr="${7:-}"
-  local cli_enable_macos="${8:-}"
-  local cli_enable_rosetta="${9:-}"
-  local cli_enable_mise="${10:-}"
-  local cli_enable_shell_default="${11:-}"
+  local cli_enable_dotfiles="${4:-}"
+  local cli_enable_macos="${5:-}"
+  local cli_enable_rosetta="${6:-}"
+  local cli_enable_mise="${7:-}"
+  local cli_enable_shell_default="${8:-}"
 
   # Read current state file into environment (provides state_val fallbacks)
   state_read
@@ -1190,39 +1173,12 @@ resolve_all_flags() {
     "false" \
     "")"
 
-  typeset -g RESOLVED_WORK_APPS
-  RESOLVED_WORK_APPS="$(resolve_setting "ENABLE_WORK_APPS" \
-    "$cli_enable_work" \
-    "${ENABLE_WORK_APPS:-}" \
-    "$(state_get ENABLE_WORK_APPS)" \
-    "$(get_profile_default "$RESOLVED_PROFILE" ENABLE_WORK_APPS)" \
-    "false" \
-    "")"
-
-  typeset -g RESOLVED_HOME_APPS
-  RESOLVED_HOME_APPS="$(resolve_setting "ENABLE_HOME_APPS" \
-    "$cli_enable_home" \
-    "${ENABLE_HOME_APPS:-}" \
-    "$(state_get ENABLE_HOME_APPS)" \
-    "$(get_profile_default "$RESOLVED_PROFILE" ENABLE_HOME_APPS)" \
-    "false" \
-    "")"
-
-  typeset -g RESOLVED_GUI
-  RESOLVED_GUI="$(resolve_setting "ENABLE_GUI" \
-    "$cli_enable_gui" \
-    "${ENABLE_GUI:-}" \
-    "$(state_get ENABLE_GUI)" \
-    "$(get_profile_default "$RESOLVED_PROFILE" ENABLE_GUI)" \
-    "false" \
-    "")"
-
-  typeset -g RESOLVED_TUCKR
-  RESOLVED_TUCKR="$(resolve_setting "ENABLE_TUCKR" \
-    "$cli_enable_tuckr" \
-    "${ENABLE_TUCKR:-}" \
-    "$(state_get ENABLE_TUCKR)" \
-    "$(get_profile_default "$RESOLVED_PROFILE" ENABLE_TUCKR)" \
+  typeset -g RESOLVED_DOTFILES
+  RESOLVED_DOTFILES="$(resolve_setting "ENABLE_DOTFILES" \
+    "$cli_enable_dotfiles" \
+    "${ENABLE_DOTFILES:-}" \
+    "$(state_get ENABLE_DOTFILES)" \
+    "$(get_profile_default "$RESOLVED_PROFILE" ENABLE_DOTFILES)" \
     "true" \
     "")"
 
@@ -1264,30 +1220,6 @@ resolve_all_flags() {
 
   # Persist all resolved values to the state file
   state_write_all
-}
-
-# export_brew_env_vars -- Map resolved flags to Homebrew environment variables
-#
-# Checks: Reads RESOLVED_WORK_APPS, RESOLVED_HOME_APPS, RESOLVED_GUI.
-# Gates: Only exports a var when the corresponding resolved flag is "true".
-# Side effects: Exports HOMEBREW_WORK_APPS, HOMEBREW_HOME_APPS, HOMEBREW_GUI.
-# Idempotency: Overwrites the same env vars each time.
-#
-# Homebrew bundle taps and the Brewfile can read these env vars to conditionally
-# include/exclude groups of formulae and casks. For example:
-#   brew "slack", if: ENV["HOMEBREW_WORK_APPS"] == "true"
-export_brew_env_vars() {
-  if [[ "${RESOLVED_WORK_APPS:-}" == "true" ]]; then
-    export HOMEBREW_WORK_APPS=true
-  fi
-
-  if [[ "${RESOLVED_HOME_APPS:-}" == "true" ]]; then
-    export HOMEBREW_HOME_APPS=true
-  fi
-
-  if [[ "${RESOLVED_GUI:-}" == "true" ]]; then
-    export HOMEBREW_GUI=true
-  fi
 }
 
 

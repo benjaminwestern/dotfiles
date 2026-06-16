@@ -4,7 +4,7 @@ Cross-platform bootstrap and config repository for macOS and Windows. The
 public loaders take a fresh machine to a working shell, package manager,
 runtime manager, and personal config with one command.
 
-Use the linked docs by concern. Go to [Configs/README.md](Configs/README.md)
+Use the linked docs by concern. Go to [CONFIGS.md](CONFIGS.md)
 for config-group ownership and platform-specific config behaviour. Go to
 [Other/scripts/README.md](Other/scripts/README.md) for the bootstrap, audit,
 repair, and validation flows. Use `Other/repository/` for maintainer-only
@@ -85,7 +85,7 @@ assets so each layer stays easy to reason about.
 
 | Area | What it contains | Primary reference |
 | --- | --- | --- |
-| `Configs/` | Managed config groups used by Tuckr on macOS and selective copy on Windows | [Configs/README.md](Configs/README.md) |
+| Repo root groups | Managed config groups used by mise `[dotfiles]` on macOS, manual symlinks on Linux, and selective copy on Windows | [CONFIGS.md](CONFIGS.md) |
 | `Other/scripts/` | Repo-local operator entrypoints split into `macos/` and `windows/` | [Other/scripts/README.md](Other/scripts/README.md) |
 | `Other/repository/` | Maintainer-only repository tooling, including README asset generation | `Other/repository/` |
 | `assets/` | D2 sources and rendered SVGs used by the READMEs | `assets/*.d2` |
@@ -104,14 +104,14 @@ afterward.
   base.
 - The repo-local `mise.toml` installs the contributor toolchain for the README
   asset pipeline.
-- The managed home config at `Configs/mise/.config/mise/config.toml` defines
+- The managed home config at `mise/config.toml` defines
   the bootstrap-time runtimes, tasks, and shell aliases that land in
   `~/.config/mise/`.
-- The personal layer applies repo-specific config through Tuckr on macOS and
-  selective copy plus profile extras on Windows.
+- The personal layer applies repo-specific config through mise `[dotfiles]` on
+  macOS and selective copy plus profile extras on Windows.
 
-The package catalogues live in `Configs/brew/Brewfile`,
-`Configs/mise/.config/mise/config.toml`, and the repo-local `mise.toml`.
+The package catalogues live in `brew/Brewfile`,
+`mise/config.toml`, and the repo-local `mise.toml`.
 
 ![Daily operations banner](./assets/readme/root-daily-operations.svg)
 
@@ -124,7 +124,7 @@ same public entrypoints.
 ./install.sh update
 mise doctor
 mise up
-cd ~/.dotfiles && tuckr status
+mise dotfiles status
 ```
 
 ```powershell
@@ -154,61 +154,6 @@ before you reach for manual edits.
   the macOS overhaul closes the remaining automation gap.
 - Use [Other/scripts/README.md](Other/scripts/README.md) for direct wrapper
   help, audit sections, and the detailed platform flow diagrams.
-
-<a id="unmanaged-tools"></a>
-![Unmanaged tools banner](./assets/readme/root-unmanaged-tools.svg)
-
-Some tools mix stable configuration with runtime state, so the repo only
-manages the stable part. This keeps git history clean and avoids symlinking
-files that accumulate tokens, sessions, metrics, or caches every time the tool
-runs.
-
-<details>
-<summary>Claude Code</summary>
-
-`~/.claude/settings.json` is managed from
-`Configs/claude/.claude/settings.json`. It contains permissions, environment
-variables, and additional skill directories.
-
-`~/.claude.json` is not managed because it also stores runtime state such as
-startup counts, session metrics, feature flags, and OAuth tokens. If you want
-to inject MCP server definitions into that file, use `jq` or edit it manually.
-
-```bash
-jq '.mcpServers = {
-  "terraform": {
-    "type": "stdio",
-    "command": "terraform-mcp-server"
-  },
-  "google-developer-knowledge": {
-    "type": "http",
-    "url": "https://developerknowledge.googleapis.com/mcp",
-    "headers": {
-      "X-Goog-Api-Key": "${GOOGLE_MCP_DEV_SERVER_API_KEY}"
-    }
-  }
-}' ~/.claude.json > /tmp/claude.json.tmp && mv /tmp/claude.json.tmp ~/.claude.json
-```
-
-If you add or remove an MCP server, keep the shared definitions aligned with
-`Configs/opencode/.config/opencode/opencode.json` and
-`Configs/gemini/settings.json`.
-
-</details>
-
-<details>
-<summary>Codex CLI</summary>
-
-`~/.codex/config.toml` is managed from
-`Configs/codex/.codex/config.toml`. It contains the shared model defaults,
-approval and sandbox settings, trusted project roots, and the MCP definitions
-that mirror the other assistant configs as closely as Codex supports.
-
-The rest of `~/.codex/` stays machine-local. That includes authentication
-state, history, logs, caches, sessions, shell snapshots, and other local-only
-artifacts that do not belong in the repo.
-
-</details>
 
 <a id="manual-installs"></a>
 ### Manual installs
@@ -260,7 +205,6 @@ Not available as a brew cask. Keep the license key in `Secrets/`.
 These external tools define the bootstrap surfaces and config managers this
 repo builds on.
 
-- [Tuckr](https://github.com/RaphGL/Tuckr)
 - [Mise](https://mise.jdx.dev/)
 - [Homebrew](https://brew.sh/)
 - [Scoop](https://scoop.sh/)

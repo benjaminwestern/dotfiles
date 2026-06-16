@@ -1,0 +1,51 @@
+# Taps required for casks and tapped formulae. Core formulae are managed by
+# mise [bootstrap.packages] in mise/config.toml.
+tap "felixkratz/formulae"   # Window border highlight
+tap "microsoft/mssql-release" # SQL Server drivers
+tap "nikitabobko/tap"       # Aerospace window manager
+
+# Fonts
+cask "font-symbols-only-nerd-font" # Symbols Nerd Font
+cask "font-jetbrains-mono-nerd-font" # JetBrains Mono Nerd Font
+# psudoFont Liga Mono — manually installed from https://github.com/psudo-dev/psudofont-liga-mono (v2.2.0)
+# Not available as a brew cask; install: download .zip from releases, copy .ttf files to ~/Library/Fonts/
+
+# Standard Apps
+cask "ghostty" # Terminal Emulator
+cask "google-chrome" # Web Browser
+cask "podman-desktop" # Containerisation GUI
+cask "maccy" # Clipboard Manager
+cask "dbngin" # Database GUI
+cask "visual-studio-code" # Code Editor
+cask "obsidian" # Knowledge base / notes
+cask "rectangle" # Window manager
+cask "ngrok" # Tunneling
+cask "codex" # OpenAI coding agent
+
+# Work Apps
+cask "microsoft-edge"
+cask "microsoft-teams"
+
+# Window Management
+cask "aerospace" # Window Manager
+brew "felixkratz/formulae/borders" # Window Highlighting
+
+# Database Drivers
+brew "mssql-tools18"
+brew "msodbcsql18"
+
+# Mac App Store
+brew "mas" # Mac store manager
+mas "DaisyDisk", id: 411643860
+mas "Final Cut Pro", id: 424389933
+mas "Xcode", id: 497799835
+mas "Apple Configurator", id: 1037126344
+mas "Developer", id: 640199958
+mas "Keynote", id: 409183694
+mas "Numbers", id: 409203825
+mas "Pages", id: 409201541
+mas "TestFlight", id: 899247664
+mas "WireGuard", id: 1451685025
+
+# LaTeX
+cask "mactex" # Full TeX distribution
