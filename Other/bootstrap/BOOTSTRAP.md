@@ -90,6 +90,16 @@ mise run bootstrap
 exec fish
 ```
 
+### Install VS Code on Omarchy
+
+VS Code is not installed by the bootstrap. On Omarchy, install it with:
+
+```bash
+omarchy install vscode
+```
+
+This uses the Omarchy wrapper to install `visual-studio-code-bin` and apply the current theme.
+
 ### Platform-specific mise config
 
 `~/.config/mise` is a directory symlink to `~/.dotfiles/mise`. It contains:
@@ -224,6 +234,88 @@ unzip -q psudofont.zip
 cp psudoFont_Liga_Mono_V.2.2.0/*.ttf ~/.local/share/fonts/psudofont-liga-mono/
 fc-cache -fv ~/.local/share/fonts/psudofont-liga-mono
 ```
+
+## Purging Omarchy default apps
+
+Omarchy installs a mix of **pacman packages** and **web-app/TUI wrappers** that all show up in the `Super+Space` Walker launcher via `.desktop` files.
+
+| App source | Desktop file location | Removal |
+|---|---|---|
+| Pacman packages | `/usr/share/applications/*.desktop` | `sudo pacman -Rns <package>` or `omarchy pkg drop <package>` |
+| Web app / TUI wrappers | `~/.local/share/applications/*.desktop` | `rm ~/.local/share/applications/<name>.desktop` |
+
+Find what owns a system `.desktop` entry:
+
+```bash
+pacman -Qo /usr/share/applications/typora.desktop
+```
+
+List everything that appears in `Super+Space`:
+
+```bash
+find /usr/share/applications ~/.local/share/applications -name "*.desktop" -type f
+```
+
+### Web app wrappers installed by Omarchy
+
+Omarchy creates these in `~/.local/share/applications/` with icons in `~/.local/share/applications/icons/`:
+
+```bash
+rm ~/.local/share/applications/{HEY,Basecamp,ChatGPT,Fizzy,WhatsApp,YouTube,X,Discord,GitHub,Zoom,Google\ Contacts,Google\ Maps,Google\ Messages,Google\ Photos}.desktop
+rm ~/.local/share/applications/icons/{HEY,Basecamp,ChatGPT,Fizzy,WhatsApp,YouTube,X,Discord,GitHub,Zoom,Google\ Contacts,Google\ Maps,Google\ Messages,Google\ Photos}.png
+```
+
+HEY is also registered as the default `mailto:` handler. Remove that registration:
+
+```bash
+xdg-mime default xdg-open.desktop x-scheme-handler/mailto
+```
+
+Or edit `~/.config/mimeapps.list` and delete the `mailto=HEY.desktop` line.
+
+### TUI wrappers
+
+The Docker entry launches `lazydocker` inside a terminal tile. It is created by `omarchy-tui-install`. Remove the wrapper and, if desired, the underlying packages:
+
+```bash
+rm ~/.local/share/applications/Docker.desktop
+rm ~/.local/share/applications/icons/Docker.png
+sudo pacman -Rns docker docker-buildx docker-compose lazydocker
+```
+
+### Keybindings in Hyprland
+
+Some apps also have keyboard shortcuts in `~/.config/hypr/bindings.conf`, e.g.:
+
+```ini
+bindd = SUPER SHIFT, A, ChatGPT, exec, omarchy-launch-webapp "https://chatgpt.com"
+bindd = SUPER SHIFT, D, Docker, exec, omarchy-launch-tui lazydocker
+bindd = SUPER SHIFT, E, Email, exec, omarchy-launch-webapp "https://app.hey.com"
+bindd = SUPER SHIFT, C, Calendar, exec, omarchy-launch-webapp "https://app.hey.com/calendar/weeks/"
+```
+
+Delete the matching lines and reload:
+
+```bash
+hyprctl reload
+hyprctl configerrors
+```
+
+### Refresh the launcher
+
+After removing `.desktop` files, restart Walker so the changes appear in `Super+Space`:
+
+```bash
+omarchy restart walker
+```
+
+Or run:
+
+```bash
+omarchy-launch-walker
+```
+
+and press `Escape` to close it.
 
 ## Validation checklist
 
