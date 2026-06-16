@@ -19,10 +19,10 @@ PITCHFORK_WEB_PORT = "19876"
 
 [dotfiles]
 # Source paths use the flat repo layout (each group at repo root)
-"~/.aerospace.toml" = "~/.dotfiles/aerospace/.aerospace.toml"
+# Platform-specific dotfiles (macOS/Windows/Linux-only) live in the
+# respective config.{linux,macos,windows}.toml files.
 "~/.bash_profile" = "~/.dotfiles/bash/.bash_profile"
 "~/.bashrc" = "~/.dotfiles/bash/.bashrc"
-"~/.config/borders/bordersrc" = "~/.dotfiles/borders/bordersrc"
 "~/.config/fish" = "~/.dotfiles/fish"
 "~/.config/gh/config.yml" = "~/.dotfiles/gh/config.yml"
 "~/.config/gh/hosts.yml" = "~/.dotfiles/gh/hosts.yml"
@@ -46,7 +46,6 @@ PITCHFORK_WEB_PORT = "19876"
 "~/.tmux.conf" = "~/.dotfiles/tmux/.tmux.conf"
 "~/.zprofile" = "~/.dotfiles/zsh/.zprofile"
 "~/.zshrc" = "~/.dotfiles/zsh/.zshrc"
-"~/Brewfile" = "~/.dotfiles/brew/Brewfile"
 
 [tools]
 # Go

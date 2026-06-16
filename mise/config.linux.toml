@@ -1,3 +1,10 @@
+# Linux-only dotfiles
+# [dotfiles]
+# "~/.config/hypr" = "~/.dotfiles/hypr"
+# "~/.config/hypr/hyprland.conf" = "~/.dotfiles/hypr/hyprland.conf"
+# "~/.config/hypr/monitors.conf" = "~/.dotfiles/hypr/monitors.conf"
+# "~/.config/hypr/bindings.conf" = "~/.dotfiles/hypr/bindings.conf"
+
 # System packages — Arch (pacman)
 # These map to the macOS brew list. Names that differ are noted inline.
 [bootstrap.packages]
