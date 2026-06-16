@@ -1,0 +1,65 @@
+# System packages — Arch (pacman)
+# These map to the macOS brew list. Names that differ are noted inline.
+[bootstrap.packages]
+"pacman:bash" = "latest"        # brew:bash
+"pacman:git" = "latest"         # brew:git
+"pacman:tree" = "latest"        # brew:tree
+"pacman:tmux" = "latest"        # brew:tmux
+"pacman:fish" = "latest"        # brew:fish
+"pacman:fisher" = "latest"      # brew:fisher
+"pacman:neovim" = "latest"      # brew:neovim
+"pacman:fastfetch" = "latest"   # brew:fastfetch
+"pacman:graphviz" = "latest"    # brew:graphviz
+"pacman:lazygit" = "latest"     # brew:lazygit
+"pacman:jq" = "latest"          # brew:jq
+"pacman:yq" = "latest"          # brew:yq
+"pacman:github-cli" = "latest"  # brew:gh
+"pacman:gitleaks" = "latest"    # brew:gitleaks
+"pacman:zoxide" = "latest"      # brew:zoxide
+"pacman:fzf" = "latest"         # brew:fzf
+"pacman:fd" = "latest"          # brew:fd
+"pacman:ripgrep" = "latest"     # brew:ripgrep
+"pacman:worktrunk" = "latest"   # brew:worktrunk
+"pacman:btop" = "latest"        # brew:btop
+"pacman:nmap" = "latest"        # brew:nmap
+"pacman:tokei" = "latest"       # brew:tokei
+"pacman:caddy" = "latest"       # brew:caddy
+"pacman:duckdb" = "latest"      # brew:duckdb
+"pacman:yt-dlp" = "latest"      # brew:yt-dlp
+"pacman:7zip" = "latest"        # brew:p7zip
+"pacman:kubectl" = "latest"     # brew:kubernetes-cli
+"pacman:shellcheck" = "latest"  # brew:shellcheck
+"pacman:automake" = "latest"    # brew:automake
+"pacman:cmake" = "latest"       # brew:cmake
+"pacman:gcc" = "latest"         # brew:gcc
+"pacman:pkgconf" = "latest"     # brew:pkgconf
+"pacman:protobuf" = "latest"    # brew:protobuf
+"pacman:luarocks" = "latest"    # brew:luarocks
+"pacman:stylua" = "latest"      # brew:stylua
+"pacman:wget" = "latest"        # brew:wget
+"pacman:coreutils" = "latest"   # brew:coreutils
+"pacman:ffmpeg" = "latest"      # brew:ffmpeg
+"pacman:imagemagick" = "latest" # brew:imagemagick
+"pacman:resvg" = "latest"       # brew:resvg
+"pacman:tldr" = "latest"        # brew:tlrc
+"pacman:podman" = "latest"      # brew:podman
+"pacman:podman-compose" = "latest" # brew:podman-compose
+
+# Helpers already present on Omarchy/Arch installs
+"pacman:base-devel" = "latest"
+"pacman:curl" = "latest"
+"pacman:unzip" = "latest"
+"pacman:openssh" = "latest"
+"pacman:xclip" = "latest"
+"pacman:clang" = "latest"
+"pacman:xz" = "latest"
+"pacman:zsh" = "latest"
+
+# Not available in pacman/AUR equivalents:
+# - brew:tpm  → installed manually via git by the bootstrap task
+# - brew:hf   → not packaged; install manually (e.g. cargo install hf)
+# - brew:llama.cpp → not packaged; install manually (e.g. AUR llama.cpp-bin)
+# - brew:pngpaste → macOS-only
+
+[bootstrap.user]
+login_shell = "/usr/bin/fish"

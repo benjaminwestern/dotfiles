@@ -36,6 +36,10 @@ The bootstrap task generates an SSH key, but you must still register the public 
 Use the public loader on a fresh machine:
 
 ```bash
+# Install mise standalone first (do NOT use Homebrew for mise itself)
+curl https://mise.run | sh
+export PATH="$HOME/.local/bin:$PATH"
+
 curl -fsSL https://raw.githubusercontent.com/benjaminwestern/dotfiles/main/install.sh \
   | bash -s -- setup --shell fish --profile work --personal
 ```
@@ -43,6 +47,10 @@ curl -fsSL https://raw.githubusercontent.com/benjaminwestern/dotfiles/main/insta
 Or clone first and run locally:
 
 ```bash
+# Install mise standalone first (do NOT use Homebrew for mise itself)
+curl https://mise.run | sh
+export PATH="$HOME/.local/bin:$PATH"
+
 git clone https://github.com/benjaminwestern/dotfiles ~/.dotfiles
 ~/.dotfiles/install.sh setup --shell fish --profile work --personal
 ```
@@ -62,7 +70,7 @@ mise dotfiles status
 The Arch `mise` package in pacman is too old for `mise bootstrap` and `[dotfiles]`, so install the standalone binary first.
 
 ```bash
-# 1. Install mise standalone
+# 1. Install mise standalone (do NOT use pacman for mise itself)
 curl https://mise.run | sh
 export PATH="$HOME/.local/bin:$PATH"
 
@@ -75,12 +83,24 @@ mise bootstrap
 # 4. Install language runtimes and tools
 mise install
 
-# 5. Generate SSH key and install TPM
+# 5. Install TPM
 mise run bootstrap
 
-# 6. Register the new SSH key at GitHub, then restart the shell
+# 6. Register a new SSH key at GitHub manually, then restart the shell
 exec fish
 ```
+
+### Platform-specific mise config
+
+`~/.config/mise` is a directory symlink to `~/.dotfiles/mise`. It contains:
+
+- `config.toml` — shared config (tools, env, aliases, tasks, dotfiles)
+- `config.linux.toml` — pacman packages and Linux login shell
+- `config.macos.toml` — brew packages and macOS login shell
+- `miserc.toml` — enables `auto_env = true` so mise loads the right platform file
+
+`auto_env` is required because mise does not auto-load `mise.{linux,macos}.toml`
+by default. The `miserc.toml` turns it on early, before config discovery finishes.
 
 Routine maintenance:
 
@@ -112,9 +132,18 @@ Because `~/.config/mise` is a **directory** symlink, both `config.toml` and the 
 
 ## Gotchas we hit bringing this device online
 
-### 1. Pacman mise is too old
+### 1. Mise must be the standalone binary
 
-Arch's `mise` package did not support `mise bootstrap`, `[dotfiles]`, or `[bootstrap.packages]`. We replaced it with the standalone binary at `~/.local/bin/mise`.
+**Never install mise via a package manager** (pacman, Homebrew, etc.). The system packages are often too old and do not support `mise bootstrap`, `[dotfiles]`, or platform-specific config (`auto_env`). Always use the official installer:
+
+```bash
+curl https://mise.run | sh
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Then verify with `mise version` and `mise doctor`.
+
+### 2. Pacman mise is too old
 
 ### 2. Initial clone must bypass `~/.gitconfig`
 
@@ -172,9 +201,29 @@ cp ~/.dotfiles/mise/.example.env ~/.config/mise/.env
 
 `~/.local/share/omarchy/bin` may take precedence over mise shims in `PATH`. This is a warning, not an error, but be aware if tools resolve unexpectedly.
 
-### 11. SSH key registration is manual
+### 11. SSH key generation is manual
 
-`mise run bootstrap` generates `~/.ssh/id_ed25519`, but you must add the public key to GitHub before push/pull/clone work normally.
+`mise run bootstrap` no longer creates an SSH key. Generate one yourself when you need git push/pull access:
+
+```bash
+ssh-keygen -t ed25519 -C "$USER@$(hostname)"
+cat ~/.ssh/id_ed25519.pub
+```
+
+Then add the public key to GitHub at https://github.com/settings/keys.
+
+### 12. Manual font installs
+
+Some fonts are not packaged and must be installed from upstream releases. Example: `psudoFont Liga Mono` from <https://github.com/psudo-dev/psudofont-liga-mono>:
+
+```bash
+mkdir -p ~/.local/share/fonts/psudofont-liga-mono
+cd /tmp
+curl -sL -o psudofont.zip https://github.com/psudo-dev/psudofont-liga-mono/releases/download/v.2.2.0/psudoFont_Liga_Mono_V.2.2.0.zip
+unzip -q psudofont.zip
+cp psudoFont_Liga_Mono_V.2.2.0/*.ttf ~/.local/share/fonts/psudofont-liga-mono/
+fc-cache -fv ~/.local/share/fonts/psudofont-liga-mono
+```
 
 ## Validation checklist
 

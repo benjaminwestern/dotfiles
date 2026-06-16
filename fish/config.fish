@@ -1,6 +1,16 @@
 # Disable fish greeting
 set fish_greeting ""
 
+# Add ~/.local/bin to PATH
+if test -d "$HOME/.local/bin"
+    fish_add_path "$HOME/.local/bin"
+end
+
+# Initialise mise
+if command -v mise >/dev/null 2>&1
+  mise activate fish | source
+end
+
 # Tmux auto-launch (macOS always; Linux only if DOTFILES_TMUX_AUTO=1)
 if status is-interactive
     if not set -q TMUX
@@ -11,17 +21,6 @@ if status is-interactive
             end
         end
     end
-end
-#
-
-# Add ~/.local/bin to PATH
-if test -d "$HOME/.local/bin"
-    fish_add_path "$HOME/.local/bin"
-end
-
-# Initialise mise
-if command -v mise >/dev/null 2>&1
-  mise activate fish | source
 end
 
 # Initialise worktrunk

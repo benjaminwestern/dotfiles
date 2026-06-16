@@ -11,7 +11,7 @@ theme = Dracula
 font-family = "psudoFont Liga Mono"
 # window-title-font-family = "JetBrainsMono Nerd Font Mono"
 window-title-font-family = "psudoFont Liga Mono"
-font-size = 16
+font-size = 10
 
 # MacOS Settings
 confirm-close-surface = false
