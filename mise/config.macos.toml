@@ -1,3 +1,9 @@
+# macOS-only dotfiles
+[dotfiles]
+"~/.aerospace.toml" = "~/.dotfiles/aerospace/.aerospace.toml"
+"~/.config/borders/bordersrc" = "~/.dotfiles/borders/bordersrc"
+"~/Brewfile" = "~/.dotfiles/brew/Brewfile"
+
 # System packages — macOS (brew)
 [bootstrap.packages]
 "brew:bash" = "latest"
