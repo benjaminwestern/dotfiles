@@ -150,8 +150,8 @@ path when a machine needs something different.
 
 | Platform | Scope | Flags |
 | --- | --- | --- |
-| macOS | Foundation and package selection | `zscaler`, `work-apps`, `home-apps`, `gui`, `mise-tools` |
-| macOS | Personal layer | `tuckr`, `macos-defaults`, `rosetta`, `shell-default` |
+| macOS | Foundation and package selection | `zscaler`, `mise-tools` |
+| macOS | Personal layer | `dotfiles`, `macos-defaults`, `rosetta`, `shell-default` |
 | Windows | Foundation | `zscaler`, `mise-tools` |
 | Windows | Personal layer | `git-config`, `ssh-config`, `mise-config`, `opencode-config`, `profile-extras` |
 
@@ -248,7 +248,7 @@ on the signed `.cmd` wrappers documented elsewhere in this README.
 3. Install the base package layer and `mise`.
 
    ```bash
-   brew bundle --file=~/.dotfiles/Configs/brew/Brewfile
+   brew bundle --file=~/.dotfiles/brew/Brewfile
    curl https://mise.run | sh
    export PATH="$HOME/.local/bin:$PATH"
    eval "$(mise activate bash)"
@@ -267,10 +267,10 @@ on the signed `.cmd` wrappers documented elsewhere in this README.
 5. Apply the managed dotfiles and language toolchain.
 
    ```bash
-   cd ~/.dotfiles && tuckr add \*
+   mise dotfiles apply
    mise install
    mise doctor
-   tuckr status
+   mise dotfiles status
    ```
 
 6. Apply the machine-specific finishing steps.

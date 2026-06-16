@@ -154,7 +154,7 @@ Use Lazy to inspect and update plugins:
 Format Lua after larger edits:
 
 ```bash
-stylua Configs/nvim/.config/nvim
+stylua nvim
 ```
 
 Useful verification commands from the repo root:
@@ -168,5 +168,5 @@ nvim --headless '+lua assert(vim.o.cmdheight == 1)' '+lua assert(vim.o.wildoptio
 ## Related docs
 
 - `KEYBINDS.md` in the repo root is the printable keybinding cheat sheet.
-- `Configs/README.md` explains how this config group is linked into place.
+- `CONFIGS.md` explains how this config group is linked into place.
 - `README.md` explains the repository bootstrap and managed config model.

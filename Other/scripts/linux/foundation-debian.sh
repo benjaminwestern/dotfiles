@@ -2,7 +2,7 @@
 # =============================================================================
 # foundation-debian.sh -- Debian / Raspberry Pi OS foundation bootstrap
 #
-# Installs the core CLI toolchain and symlinks dotfile configs via tuckr.
+# Installs the core CLI toolchain and symlinks dotfile configs from the repo.
 #
 # Usage:
 #   ./foundation-debian.sh setup
@@ -16,7 +16,7 @@
 # Design:
 #   - apt packages for system-level tools
 #   - mise for language runtimes (go, node, python, rust, etc.)
-#   - tuckr for dotfile symlinks (same tool as macOS, keeps configs in the repo)
+#   - manual symlinks for dotfile configs (same groups as macOS, kept in the repo)
 #   - neovim from GitHub releases (apt ships 0.7.2, too old for kickstart)
 #   - tree-sitter-cli built via cargo (prebuilt binaries need glibc 2.39+)
 #
@@ -268,67 +268,65 @@ ensure_worktrunk() {
 
 
 # =============================================================================
-# SECTION 5: TUCKR — DOTFILE SYMLINKS
+# SECTION 5: DOTFILE SYMLINKS
 # =============================================================================
 
-# tuckr is the same symlink manager used on macOS.  It reads Configs/ groups
-# from ~/.dotfiles and creates symlinks into $HOME.  We build it from source
-# via cargo (no arm64 prebuilt binary) after mise + rust are available.
+# Dotfile configs live in $BOOTSTRAP_ROOT/<group> and are symlinked
+# into $HOME.  This replaces the previous Tuckr-based setup and uses the same
+# flattened layout that mise [dotfiles] consumes on macOS.
 #
 # Linux-compatible groups: bash fish gh git nvim opencode pi ssh tmux
 #                          worktrunk zsh
 # Managed manually: mise (Linux toolset differs from macOS)
 # Skipped: aerospace borders brew ghostty hypr (macOS-only or desktop)
 
-ensure_tuckr() {
-  if command_exists tuckr; then status_pass "Tuckr" "$(tuckr --version 2>/dev/null)"; return 0; fi
-  if ! command_exists cargo; then status_fail "Tuckr" "cargo not available — run mise tools first"; return 0; fi
-  if dry_run_active; then dry_run_log "cargo install tuckr"; status_fix "Tuckr" "would build"; return 0; fi
-
-  git config --global --unset url.git@github.com:.insteadOf 2>/dev/null || true
-  cargo install --git https://github.com/RaphGL/Tuckr --tag 0.13.1 tuckr 2>/dev/null
-  git config --global url."git@github.com:".insteadOf https://github.com 2>/dev/null || true
-
-  if [[ -f "$HOME/.cargo/bin/tuckr" ]]; then
-    cp "$HOME/.cargo/bin/tuckr" "$HOME/.local/bin/tuckr"
-    status_fix "Tuckr" "built from source ($(tuckr --version 2>/dev/null))"
-  else
-    status_fail "Tuckr" "build failed"
+_link() {
+  local src="$1" dst="$2"
+  if [[ ! -e "$src" ]]; then
+    status_skip "Dotfiles" "source missing: $src"
+    return 0
   fi
+  if dry_run_active; then
+    dry_run_log "ln -sf $src $dst"
+    return 0
+  fi
+  mkdir -p "$(dirname "$dst")"
+  if [[ -e "$dst" ]] || [[ -L "$dst" ]]; then
+    rm -rf "$dst"
+  fi
+  ln -sfn "$src" "$dst"
 }
 
-apply_tuckr_configs() {
-  if ! command_exists tuckr; then status_skip "Tuckr configs" "tuckr not installed"; return 0; fi
-  if dry_run_active; then dry_run_log "tuckr add <groups>"; status_fix "Tuckr configs" "would symlink"; return 0; fi
+apply_dotfiles() {
+  if dry_run_active; then
+    dry_run_log "apply dotfile symlinks"
+    status_fix "Dotfiles" "would symlink"
+    return 0
+  fi
 
-  cd "$BOOTSTRAP_ROOT"
-
-  # Pre-create directories tuckr needs
   mkdir -p "$HOME/.ssh" "$HOME/.config" "$HOME/code"
-  mkdir -p "$HOME/.config/nvim" "$HOME/.config/gh" "$HOME/.config/opencode"
-  mkdir -p "$HOME/.config/worktrunk" "$HOME/.pi/agent"
   chmod 700 "$HOME/.ssh"
 
-  local group
-  for group in bash fish gh git nvim opencode pi ssh tmux worktrunk zsh; do
-    # Remove stale real files so tuckr can create fresh symlinks
-    case "$group" in
-      nvim)     rm -rf "$HOME/.config/nvim" 2>/dev/null; mkdir -p "$HOME/.config/nvim" ;;
-      pi)       rm -rf "$HOME/.pi" 2>/dev/null; mkdir -p "$HOME/.pi" ;;
-      opencode) rm -rf "$HOME/.config/opencode" 2>/dev/null; mkdir -p "$HOME/.config/opencode" ;;
-      fish)     rm -rf "$HOME/.config/fish" 2>/dev/null; mkdir -p "$HOME/.config/fish" ;;
-      bash)     rm -f "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.hushlogin" 2>/dev/null ;;
-      git)      rm -f "$HOME/.gitconfig" "$HOME/.config/git/ignore" 2>/dev/null ;;
-      ssh)      rm -f "$HOME/.ssh/config" 2>/dev/null ;;
-      tmux)     rm -f "$HOME/.tmux.conf" 2>/dev/null ;;
-      worktrunk) rm -f "$HOME/.config/worktrunk/config.toml" 2>/dev/null ;;
-      zsh)      rm -f "$HOME/.zshrc" "$HOME/.zprofile" 2>/dev/null ;;
-      gh)       rm -f "$HOME/.config/gh/config.yml" "$HOME/.config/gh/hosts.yml" 2>/dev/null ;;
-    esac
-    tuckr add "$group" 2>&1 | tail -1
-  done
+  local base="$BOOTSTRAP_ROOT"
 
-  status_fix "Tuckr configs" "symlinked 12 groups"
+  _link "$base/bash/.bashrc"          "$HOME/.bashrc"
+  _link "$base/bash/.bash_profile"    "$HOME/.bash_profile"
+  _link "$base/bash/.hushlogin"       "$HOME/.hushlogin"
+  _link "$base/zsh/.zshrc"            "$HOME/.zshrc"
+  _link "$base/zsh/.zprofile"         "$HOME/.zprofile"
+  _link "$base/tmux/.tmux.conf"       "$HOME/.tmux.conf"
+  _link "$base/git/.gitconfig"        "$HOME/.gitconfig"
+  _link "$base/git/ignore"            "$HOME/.config/git/ignore"
+  _link "$base/ssh/config"            "$HOME/.ssh/config"
+  _link "$base/gh/config.yml"         "$HOME/.config/gh/config.yml"
+  _link "$base/gh/hosts.yml"          "$HOME/.config/gh/hosts.yml"
+  _link "$base/worktrunk/config.toml" "$HOME/.config/worktrunk/config.toml"
+  _link "$base/fish"                  "$HOME/.config/fish"
+  _link "$base/nvim"                  "$HOME/.config/nvim"
+  _link "$base/opencode"              "$HOME/.config/opencode"
+  _link "$base/pi"                    "$HOME/.pi/agent"
+
+  status_fix "Dotfiles" "symlinked Linux-compatible groups"
 }
 
 
@@ -406,7 +404,7 @@ ensure_fish_default() {
 # =============================================================================
 
 validate_foundation() {
-  for tool in fish nvim tmux git gh rg fdfind zoxide jq btop mise wt tuckr; do
+  for tool in fish nvim tmux git gh rg fdfind zoxide jq btop mise wt; do
     local bin="$tool"
     case "$tool" in fdfind) bin="fdfind" ;; rg) bin="rg" ;; esac
     if command_exists "$bin"; then status_pass "Validate: $tool" "$(which "$bin")"
@@ -453,10 +451,9 @@ main() {
       ensure_mise
       ensure_mise_config
       ensure_mise_env
-      ensure_mise_tools      # must run before tuckr (needs cargo)
+      ensure_mise_tools
       ensure_worktrunk
-      ensure_tuckr            # builds from source via cargo
-      apply_tuckr_configs     # symlinks all configs
+      apply_dotfiles          # symlinks Linux-compatible config groups
       ensure_tpm
       ensure_ssh_keys
       ensure_fish_default
@@ -465,7 +462,7 @@ main() {
     update)
       ensure_apt_updated; update_packages; install_foundation_packages
       ensure_neovim; ensure_mise; update_mise; ensure_worktrunk
-      ensure_tuckr; apply_tuckr_configs
+      apply_dotfiles
       validate_foundation
       ;;
     *) fail "Unknown mode: $MODE. Use setup, ensure, or update." ;;

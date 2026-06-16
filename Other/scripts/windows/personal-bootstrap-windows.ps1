@@ -46,7 +46,7 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 if ($DryRun -or $env:DRY_RUN -eq '1') { $global:DRY_RUN = $true }
 
 $DotfilesDir = if ($env:DOTFILES_DIR) { $env:DOTFILES_DIR } else { Join-Path $HOME '.dotfiles' }
-$ConfigsDir  = Join-Path $DotfilesDir 'Configs'
+$SourceDir = $DotfilesDir
 
 # Read the state file to consume RESOLVED_* variables from foundation.
 $State = Read-State
@@ -114,7 +114,7 @@ function Apply-GitConfig {
     return
   }
 
-  $src = Join-Path $ConfigsDir 'git\.gitconfig'
+  $src = Join-Path $SourceDir 'git\.gitconfig'
   $dst = Join-Path $HOME '.gitconfig'
 
   if (-not (Test-Path $src)) {
@@ -163,7 +163,7 @@ function Apply-SshConfig {
     return
   }
 
-  $src = Join-Path $ConfigsDir 'ssh\.ssh\config'
+  $src = Join-Path $SourceDir 'ssh\config'
   $dst = Join-Path $HOME '.ssh\config'
   $sshDir = Join-Path $HOME '.ssh'
 
@@ -219,7 +219,7 @@ function Apply-MiseConfig {
     return
   }
 
-  $srcDir = Join-Path $ConfigsDir 'mise\.config\mise'
+  $srcDir = Join-Path $SourceDir 'mise'
   $dstDir = Join-Path $HOME '.config\mise'
 
   if (-not (Test-Path $srcDir)) {
@@ -333,7 +333,7 @@ function Apply-OpencodeConfig {
     return
   }
 
-  $srcDir = Join-Path $ConfigsDir 'opencode\.config\opencode'
+  $srcDir = Join-Path $SourceDir 'opencode'
   $dstDir = Join-Path $HOME '.config\opencode'
 
   if (-not (Test-Path $srcDir)) {
