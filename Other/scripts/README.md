@@ -1,7 +1,7 @@
 ![Bootstrap scripts banner](../../assets/readme/scripts-hero.svg)
 
 This directory contains the repo-local bootstrap, audit, and repair scripts
-for macOS and Windows. Start with the public loaders at the repository root for
+for macOS and Linux. Start with the public loaders at the repository root for
 normal use. Use the scripts here when you need to inspect the flow, run a
 single stage directly, or debug a failed run. Repository-maintainer tooling now
 lives separately under [`../repository/`](../repository/).

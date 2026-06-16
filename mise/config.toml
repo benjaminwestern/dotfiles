@@ -1,12 +1,8 @@
-# curl https://mise.jdx.dev/mise-latest-macos-arm64 -o $HOME/.local/bin/mise
+min_version = "2026.3.0"
 
 [settings]
 experimental = true
-# trusted_config_paths = [
-#     "~/code/",
-#     "~/.config/mise/config.toml",
-#     "~/.dotfiles/mise/config.toml",
-# ]
+dotfiles.default_mode = "symlink"
 minimum_release_age_excludes = [
     "npm:opencode-ai",
     "npm:@earendil-works/pi-coding-agent",
@@ -17,11 +13,41 @@ minimum_release_age_excludes = [
 
 [env]
 _.file = "~/.config/mise/.env"
-OPENCODE_ENABLE_EXPERIMENTAL_MODELS = "true"
-PITCHFORK_WEB_PORT=19876
 EDITOR = "nvim"
+OPENCODE_ENABLE_EXPERIMENTAL_MODELS = "true"
+PITCHFORK_WEB_PORT = "19876"
 
 [bootstrap.packages]
+# System packages — Arch (pacman)
+"pacman:base-devel" = "latest"
+"pacman:fish" = "latest"
+"pacman:tmux" = "latest"
+"pacman:git" = "latest"
+"pacman:github-cli" = "latest"
+"pacman:ripgrep" = "latest"
+"pacman:fd" = "latest"
+"pacman:fzf" = "latest"
+"pacman:zoxide" = "latest"
+"pacman:jq" = "latest"
+"pacman:btop" = "latest"
+"pacman:curl" = "latest"
+"pacman:wget" = "latest"
+"pacman:unzip" = "latest"
+"pacman:openssh" = "latest"
+"pacman:xclip" = "latest"
+"pacman:luarocks" = "latest"
+"pacman:clang" = "latest"
+"pacman:xz" = "latest"
+"pacman:nmap" = "latest"
+"pacman:graphviz" = "latest"
+"pacman:imagemagick" = "latest"
+"pacman:yt-dlp" = "latest"
+"pacman:ffmpeg" = "latest"
+"pacman:tree" = "latest"
+"pacman:zsh" = "latest"
+"pacman:neovim" = "latest"
+
+# System packages — macOS (brew)
 "brew:bash" = "latest"
 "brew:git" = "latest"
 "brew:tree" = "latest"
@@ -72,6 +98,7 @@ EDITOR = "nvim"
 "brew:podman-compose" = "latest"
 
 [dotfiles]
+# Source paths use the flat repo layout (each group at repo root)
 "~/.aerospace.toml" = "~/.dotfiles/aerospace/.aerospace.toml"
 "~/.bash_profile" = "~/.dotfiles/bash/.bash_profile"
 "~/.bashrc" = "~/.dotfiles/bash/.bashrc"
@@ -81,7 +108,6 @@ EDITOR = "nvim"
 "~/.config/gh/hosts.yml" = "~/.dotfiles/gh/hosts.yml"
 "~/.config/ghostty/config" = "~/.dotfiles/ghostty/config"
 "~/.config/git/ignore" = "~/.dotfiles/git/ignore"
-"~/.config/hypr/hyprland.conf" = "~/.dotfiles/hypr/hyprland.conf"
 "~/.config/mise" = "~/.dotfiles/mise"
 "~/.config/nvim" = "~/.dotfiles/nvim"
 "~/.config/opencode/opencode.json" = "~/.dotfiles/opencode/opencode.json"
@@ -102,75 +128,118 @@ EDITOR = "nvim"
 "~/.zshrc" = "~/.dotfiles/zsh/.zshrc"
 "~/Brewfile" = "~/.dotfiles/brew/Brewfile"
 
+[bootstrap.user]
+login_shell = "/usr/bin/fish"
+
 [tools]
+# Go
 go = "latest"
 "go:golang.org/x/tools/gopls" = { version = "latest" }
-
-"go:github.com/GoogleCloudPlatform/cloud-sql-proxy/v2" = { version = "latest" }
-
 "go:github.com/air-verse/air" = { version = "latest" }
 "go:github.com/golangci/golangci-lint/v2/cmd/golangci-lint" = { version = "latest" }
 "go:mvdan.cc/gofumpt" = { version = "latest" }
-"go:github.com/swaggo/swag/cmd/swag" = { version = "latest" }
-"go:github.com/sqlc-dev/sqlc/cmd/sqlc" = { version = "latest" }
-
-"go:oss.terrastruct.com/d2" = { version = "latest"}
-
 "go:github.com/charmbracelet/glow" = { version = "latest" }
 "go:github.com/charmbracelet/freeze" = { version = "latest" }
 "go:github.com/charmbracelet/vhs" = { version = "latest" }
+"go:github.com/hashicorp/terraform-mcp-server/cmd/terraform-mcp-server" = { version = "latest" }
+"go:oss.terrastruct.com/d2" = { version = "latest" }
+"go:github.com/mikefarah/yq/v4" = { version = "latest" }
+"go:github.com/swaggo/swag/cmd/swag" = { version = "latest" }
+"go:github.com/sqlc-dev/sqlc/cmd/sqlc" = { version = "latest" }
+"go:github.com/GoogleCloudPlatform/cloud-sql-proxy/v2" = { version = "latest" }
 
-"go:github.com/hashicorp/terraform-mcp-server/cmd/terraform-mcp-server" = { version = "latest"}
+# Cargo
+"cargo:stylua" = { version = "latest" }
+"cargo:tree-sitter-cli" = { version = "latest" }
 
+# Node / npm
 node = "latest"
 bun = "latest"
-
-"npm:@dataform/cli" = "latest"
 "npm:opencode-ai" = "latest"
-"npm:wrangler" = "latest"
+"npm:@earendil-works/pi-coding-agent" = "latest"
 "npm:@playwright/cli" = "latest"
+"npm:@dataform/cli" = "latest"
+"npm:wrangler" = "latest"
 "npm:@googleworkspace/cli" = "latest"
 "npm:markit-ai" = "latest"
-"npm:@earendil-works/pi-coding-agent" = "latest"
 "npm:@kitlangton/ghui" = "latest"
 "npm:hunkdiff" = "latest"
 "npm:@kitlangton/motel" = "latest"
 
+# Python ecosystem
 python = "latest"
 uv = "latest"
-pipx = "latest" # Python package manager - required for mise backend
-"pipx:sqlfluff/sqlfluff" = "latest" # used for Dataform Extension to lint SQLX files
+pipx = "latest"
+"pipx:sqlfluff/sqlfluff" = "latest"
 "pipx:mitmproxy" = "latest"
 
-lua = "5.1" # Leaving this as 5.1 as Neovim requires 5.1 for now.
-
+# Languages / runtimes
+lua = "5.1"
 rust = "latest"
 
+# Infrastructure
 terraform = "latest"
-
-# JDX Tools
 pitchfork = "latest"
+gcloud = "latest"
+skaffold = "latest"
+pkl = "latest"
+
+# Mise ecosystem
 hk = "latest"
 fnox = "latest"
 communique = "latest"
 usage = "latest"
 
-# HK Requirements
-pkl = "latest"
+[shell_alias]
+docker = "podman"
+docker-compose = "podman compose"
+cls = "clear"
+vim = "nvim"
+vi = "nvim"
+v = "nvim"
+python = "python3"
+vc = "open $1 -a 'Visual Studio Code'"
+opencode-a = "opencode attach http://localhost:4096 --dir ./"
+tf = "terraform"
+dfc = "dataform compile"
+dfr = "dataform run"
+dft = "dataform test"
+dff = "dataform format"
+dfi = "dataform install"
+gadc = "gcloud auth application-default login"
+gauth = "gcloud auth login"
+gsqp = "gcloud auth application-default set-quota-project"
+gsgp = "gcloud config set project"
+gssa = "gcloud auth activate-service-account"
+unsetgsgp = "gcloud config unset project"
+gsai = "gcloud config set auth/impersonate_service_account"
+unsetgsai = "gcloud config unset auth/impersonate_service_account"
+buu = "mise run bundle-update"
+rda = "mise run readme-assets"
+gsp = "mise run set-gcp-project"
+git-pull = "mise run pull-all-repos"
+git-check = "mise run check-all-repos"
+banish = "mise run banish-ds-store"
+git-empty = "mise run empty-commit"
+hf-pull = "mise run pull-hf"
+llama-serve = "mise run llama-serve"
+llama-cli = "mise run llama-cli"
+llama-stop = "mise run llama-stop"
+ti = "mise run terraform-init"
+tc = "mise run terraform-console"
+taa = "mise run terraform-auto-apply"
+ta = "mise run terraform-apply"
+tp = "mise run terraform-plan"
 
-# CLI Tools
-skaffold = "latest" # building tool for container services
-gcloud = "latest"
-
-# Homebrew Tasks
 [tasks.bundle-update]
-description = "Update Brew casks/taps, mise bootstrap packages, and mise tools"
+description = "Updates system packages and mise tools"
 run = """
-brew update
-brew upgrade
-mise bootstrap packages install
-mise upgrade
-brew autoremove
+if command -v brew &>/dev/null; then
+  brew update && brew upgrade && brew cleanup && brew autoremove
+elif command -v pacman &>/dev/null; then
+  sudo pacman -Syu --noconfirm
+fi
+mise up
 """
 
 [tasks.readme-assets]
@@ -179,7 +248,19 @@ run = """
 python "$HOME/.dotfiles/Other/repository/generate_readme_banners.py"
 """
 
-# Google Cloud Tasks
+[tasks.bootstrap]
+description = "Post-bootstrap setup: SSH key, TPM, and shell"
+run = """
+if [ ! -d "$HOME/.tmux/plugins/tpm" ]; then
+  GIT_CONFIG_GLOBAL=/dev/null git clone https://github.com/tmux-plugins/tpm "$HOME/.tmux/plugins/tpm"
+fi
+if [ ! -f "$HOME/.ssh/id_ed25519" ]; then
+  ssh-keygen -t ed25519 -C "$USER@$(hostname)" -f "$HOME/.ssh/id_ed25519" -N ""
+  echo "  SSH key generated: ~/.ssh/id_ed25519.pub"
+  echo "  Register it at https://github.com/settings/keys"
+fi
+"""
+
 [tasks.set-gcp-project]
 description = "Sets the active Google Cloud project and ADC quota project."
 usage = '''
@@ -187,7 +268,6 @@ arg "<project_id>" "The Google Cloud Project ID to set."
 '''
 run = "$HOME/.config/mise/scripts/set_gcp_project.sh {{arg(name='project_id')}}"
 
-# Git Tasks
 [tasks.pull-all-repos]
 description = "Uses Git to pull all changes for repositories listed in the $HOME/code directory"
 run = "$HOME/.config/mise/scripts/pull_github_status.sh"
@@ -216,10 +296,6 @@ git commit --allow-empty -m ':sparkles: :rocket:'
 git push
 """
 
-# Local Model Tasks (llama.cpp)
-# llama.cpp replaces the previous Homebrew-managed Ollama setup.
-# Use llama-server for an OpenAI-compatible local server and llama-cli for
-# one-off inference. Models are stored as GGUF files under ~/.models.
 [tasks.pull-hf]
 description = "Download a HuggingFace GGUF model into ~/.models"
 usage = '''
@@ -235,9 +311,9 @@ usage = '''
 arg "<model_path>" "Path to the GGUF model to serve"
 arg "[port]" "Port to listen on (default: 4096)"
 '''
-run = '''
+run = """
 llama-server -m "{{arg(name='model_path')}}" --port "{{arg(name='port', default='4096')}}"
-'''
+"""
 
 [tasks.llama-cli]
 description = "Run a single prompt through llama-cli"
@@ -245,9 +321,9 @@ usage = '''
 arg "<model_path>" "Path to the GGUF model"
 arg "<prompt>" "Prompt text"
 '''
-run = '''
+run = """
 llama-cli -m "{{arg(name='model_path')}}" -p "{{arg(name='prompt')}}"
-'''
+"""
 
 [tasks.llama-stop]
 description = "Stop any running llama-server processes"
@@ -255,7 +331,6 @@ run = """
 pkill -f llama-server || true
 """
 
-# Terraform Tasks
 [tasks.terraform-init]
 description = "Runs Terraform fmt, init and validation"
 dir = "{{cwd}}"
@@ -296,56 +371,3 @@ description = "Runs Terraform console (plus pre-cursor checks)"
 run = """
 terraform console
 """
-
-# Shell Aliases - migrated from fish config
-[shell_alias]
-# Container Aliases
-docker = "podman"
-docker-compose = "podman compose"
-
-# OS Aliases
-cls = "clear"
-vim = "nvim"
-vi = "nvim"
-v = "nvim"
-python = "python3"
-vc = "open $1 -a 'Visual Studio Code'"
-opencode-a = "opencode attach http://localhost:4096 --dir ./"
-
-# Terraform Aliases
-tf = "terraform"
-
-# Dataform Aliases
-dfc = "dataform compile"
-dfr = "dataform run"
-dft = "dataform test"
-dff = "dataform format"
-dfi = "dataform install"
-
-# Google Cloud Aliases
-gadc = "gcloud auth application-default login"
-gauth = "gcloud auth login"
-gsqp = "gcloud auth application-default set-quota-project"
-gsgp = "gcloud config set project"
-gssa = "gcloud auth activate-service-account"
-unsetgsgp = "gcloud config unset project"
-gsai = "gcloud config set auth/impersonate_service_account"
-unsetgsai = "gcloud config unset auth/impersonate_service_account"
-
-# Mise Task Aliases
-buu = "mise run bundle-update"
-rda = "mise run readme-assets"
-gsp = "mise run set-gcp-project"
-git-pull = "mise run pull-all-repos"
-git-check = "mise run check-all-repos"
-banish = "mise run banish-ds-store"
-git-empty = "mise run empty-commit"
-hf-pull = "mise run pull-hf"
-llama-serve = "mise run llama-serve"
-llama-cli = "mise run llama-cli"
-llama-stop = "mise run llama-stop"
-ti = "mise run terraform-init"
-tc = "mise run terraform-console"
-taa = "mise run terraform-auto-apply"
-ta = "mise run terraform-apply"
-tp = "mise run terraform-plan"

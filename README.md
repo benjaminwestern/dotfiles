@@ -1,6 +1,6 @@
 ![Dotfiles banner](./assets/readme/root-hero.svg)
 
-Cross-platform bootstrap and config repository for macOS and Windows. The
+Cross-platform bootstrap and config repository for macOS and Linux. The
 public loaders take a fresh machine to a working shell, package manager,
 runtime manager, and personal config with one command.
 
@@ -38,6 +38,29 @@ git clone https://github.com/benjaminwestern/dotfiles ~/.dotfiles
 ~/.dotfiles/install.sh update
 ~/.dotfiles/install.sh audit --json
 ```
+
+### Linux (Arch)
+
+```bash
+# Install mise standalone
+curl https://mise.run | sh
+export PATH="$HOME/.local/bin:$PATH"
+
+# Clone with HTTPS (SSH key doesn't exist yet)
+GIT_CONFIG_GLOBAL=/dev/null git clone https://github.com/benjaminwestern/dotfiles ~/.dotfiles
+
+# Bootstrap: system packages (pacman), dotfile symlinks, tools
+mise bootstrap
+mise install
+
+# Post-bootstrap: SSH key, TPM, shell
+mise run bootstrap
+
+# Register the SSH key, then:
+exec fish
+```
+
+See [`Other/bootstrap/BOOTSTRAP.md`](Other/bootstrap/BOOTSTRAP.md) for the full ordering gotchas, recovery steps, and validation checklist.
 
 ### Windows
 
@@ -85,7 +108,7 @@ assets so each layer stays easy to reason about.
 
 | Area | What it contains | Primary reference |
 | --- | --- | --- |
-| Repo root groups | Managed config groups used by mise `[dotfiles]` on macOS, manual symlinks on Linux, and selective copy on Windows | [CONFIGS.md](CONFIGS.md) |
+| Repo root groups | Config source directories symlinked into `$HOME` by mise `[dotfiles]` | [CONFIGS.md](CONFIGS.md) |
 | `Other/scripts/` | Repo-local operator entrypoints split into `macos/` and `windows/` | [Other/scripts/README.md](Other/scripts/README.md) |
 | `Other/repository/` | Maintainer-only repository tooling, including README asset generation | `Other/repository/` |
 | `assets/` | D2 sources and rendered SVGs used by the READMEs | `assets/*.d2` |
@@ -100,13 +123,13 @@ The bootstrap keeps immediate tools and long-lived runtimes separate so the
 shell comes online early and the heavier language toolchain install can follow
 afterward.
 
-- Homebrew on macOS and Scoop on Windows install the immediate command-line
-  base.
+- `mise bootstrap` on Linux (pacman) and Homebrew on macOS (Brewfile) install the
+  immediate command-line base.
 - The repo-local `mise.toml` installs the contributor toolchain for the README
   asset pipeline.
 - The managed home config at `mise/config.toml` defines
   the bootstrap-time runtimes, tasks, and shell aliases that land in
-  `~/.config/mise/`.
+  `~/.config/mise/`. Both platforms share this single config via symlink.
 - The personal layer applies repo-specific config through mise `[dotfiles]` on
   macOS and selective copy plus profile extras on Windows.
 
@@ -125,6 +148,13 @@ same public entrypoints.
 mise doctor
 mise up
 mise dotfiles status
+
+
+# Linux
+mise doctor
+mise up
+mise dotfiles status
+mise run bundle-update
 ```
 
 ```powershell
@@ -141,12 +171,8 @@ The bootstrap is idempotent, so the first response to most partial failures is
 to re-run the same public entrypoint in `ensure` mode. Use these recovery paths
 before you reach for manual edits.
 
-- Re-run `./install.sh ensure --personal` or `.\install.cmd ensure` after a
-  partial install.
-- Restart your shell or terminal after shell-default changes, shell
-  activation, or Windows Terminal profile repair.
-- Use `.\Other\scripts\windows\resign-windows.cmd` when `AllSigned` blocks newly
-  updated local PowerShell wrappers.
+- Re-run `./install.sh ensure --personal` after a partial install.
+- Restart your shell or terminal after shell-default changes.
 - If `mise` is on disk but not on `PATH`, re-open the shell first, then run the
   correct `mise activate` command for your shell.
 - The temporary manual macOS fallback now lives in
@@ -154,6 +180,12 @@ before you reach for manual edits.
   the macOS overhaul closes the remaining automation gap.
 - Use [Other/scripts/README.md](Other/scripts/README.md) for direct wrapper
   help, audit sections, and the detailed platform flow diagrams.
+- Use [Other/bootstrap/BOOTSTRAP.md](Other/bootstrap/BOOTSTRAP.md) for the full
+  bootstrap ordering gotchas, recovery steps, and validation checklist.
+- Use `mise dotfiles status` to inspect symlink state.
+- Use `GIT_CONFIG_GLOBAL=/dev/null` before any git operation that fetches from
+  GitHub on a machine where the SSH key hasn't been registered yet (the managed
+  `~/.gitconfig` rewrites all HTTPS to SSH via `insteadOf`).
 
 <a id="manual-installs"></a>
 ### Manual installs
@@ -207,7 +239,6 @@ repo builds on.
 
 - [Mise](https://mise.jdx.dev/)
 - [Homebrew](https://brew.sh/)
-- [Scoop](https://scoop.sh/)
 - [Fish Shell](https://fishshell.com/)
 - [Neovim](https://neovim.io/)
 - [Kickstart.nvim](https://github.com/nvim-lua/kickstart.nvim)
