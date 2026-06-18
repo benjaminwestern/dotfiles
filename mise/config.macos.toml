@@ -3,6 +3,9 @@
 "~/.aerospace.toml" = "~/.dotfiles/aerospace/.aerospace.toml"
 "~/.config/borders/bordersrc" = "~/.dotfiles/borders/bordersrc"
 "~/Brewfile" = "~/.dotfiles/brew/Brewfile"
+"~/Library/Application Support/Code/User/keybindings.json" = "~/.dotfiles/vscode/keybindings.json"
+"~/Library/Application Support/Code/User/settings.json" = "~/.dotfiles/vscode/settings.json"
+"~/Library/Application Support/Code/User/snippets" = "~/.dotfiles/vscode/snippets"
 
 # System packages — macOS (brew)
 [bootstrap.packages]

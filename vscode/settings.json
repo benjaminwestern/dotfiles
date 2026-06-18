@@ -1,0 +1,96 @@
+{
+  "explorer.confirmDragAndDrop": false,
+  "explorer.confirmDelete": false,
+  "python.languageServer": "Pylance",
+  "[javascript]": {
+    "editor.defaultFormatter": "vscode.typescript-language-features"
+  },
+  "editor.formatOnSave": true,
+  "git.autofetch": true,
+  "json.schemas": [],
+  "[jsonc]": {},
+  "files.autoSave": "onFocusChange",
+  "editor.bracketPairColorization.enabled": true,
+  "editor.guides.bracketPairs": "active",
+  "editor.inlineSuggest.enabled": true,
+  "github.copilot.enable": {
+    "*": true,
+    "plaintext": true,
+    "markdown": true,
+    "scminput": false,
+    "yaml": false
+  },
+  "git.enableSmartCommit": true,
+  "debug.javascript.autoAttachFilter": "smart",
+  "editor.bracketPairColorization.independentColorPoolPerBracketType": true,
+  "go.toolsManagement.autoUpdate": true,
+  "security.workspace.trust.untrustedFiles": "open",
+  "editor.unicodeHighlight.ambiguousCharacters": false,
+  "workbench.editorLargeFileConfirmation": 4096,
+  "[python]": {
+    "editor.formatOnType": true
+  },
+  "git.openRepositoryInParentFolders": "always",
+  "extensions.ignoreRecommendations": true,
+  "[go]": {
+    "editor.insertSpaces": false,
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit"
+    },
+    "editor.suggest.snippetsPreventQuickSuggestions": false
+  },
+  "git.confirmSync": false,
+  "javascript.updateImportsOnFileMove.enabled": "always",
+  "editor.accessibilitySupport": "off",
+  "editor.inlineSuggest.suppressSuggestions": true,
+  "window.zoomLevel": 1,
+  "workbench.sideBar.location": "right",
+  "editor.minimap.enabled": false,
+  "workbench.layoutControl.enabled": false,
+  "window.commandCenter": false,
+  "go.gopath": "/opt/homebrew/bin",
+  "go.inferGopath": true,
+  "go.trace.server": "verbose",
+  "go.toolsGopath": "/Users/benjaminwestern/Go/bin",
+  "go.lintOnSave": "file",
+  "go.lintTool": "golint",
+  "terminal.integrated.inheritEnv": false,
+  "terminal.integrated.defaultProfile.osx": "fish",
+  "terminal.integrated.profiles.osx": {
+    "fish": {
+      "path": "/opt/homebrew/bin/fish"
+    }
+  },
+  "debug.internalConsoleOptions": "openOnSessionStart",
+  "[dart]": {
+    "editor.formatOnSave": true,
+    "editor.formatOnType": true,
+    "editor.rulers": [
+      80
+    ],
+    "editor.selectionHighlight": false,
+    "editor.tabCompletion": "onlySnippets",
+    "editor.wordBasedSuggestions": "off"
+  },
+  "vscode-dataform-tools.sourceAutoCompletionPreference": "${ref({schema:'dataset_name', name:'table_name'})}",
+  "workbench.editor.enablePreview": false,
+  "vscode-dataform-tools.showCompiledQueryInVerticalSplitOnSave": false,
+  "workbench.startupEditor": "none",
+  "mise.binPath": "/Users/benjaminwestern/.local/bin/mise",
+  "python.analysis.typeCheckingMode": "off",
+  "yaml.schemas": {
+    "file:///Users/benjaminwestern/.vscode/extensions/atlassian.atlascode-3.8.3/resources/schemas/pipelines-schema.json": "bitbucket-pipelines.yml"
+  },
+  "atlascode.jira.lastCreateSiteAndProject": {
+    "siteId": "064e41d6-d59c-4a24-999f-33275bfed93d",
+    "projectKey": "AAP"
+  },
+  "geminicodeassist.project": "bw-vertex-core",
+  "cloudcode.project": "bw-vertex-core",
+  "terminal.external.osxExec": "Ghostty.app",
+  "terminal.explorerKind": "external",
+  "github.copilot.nextEditSuggestions.enabled": true,
+  "workbench.secondarySideBar.defaultVisibility": "hidden",
+  "explorer.confirmPasteNative": false
+}

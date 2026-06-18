@@ -4,11 +4,11 @@ Cross-platform bootstrap and config repository for macOS and Linux. The
 public loaders take a fresh machine to a working shell, package manager,
 runtime manager, and personal config with one command.
 
-Use the linked docs by concern. Go to [CONFIGS.md](CONFIGS.md)
-for config-group ownership and platform-specific config behaviour. Go to
+Use the linked docs by concern. Go to
 [Other/scripts/README.md](Other/scripts/README.md) for the bootstrap, audit,
-repair, and validation flows. Use `Other/repository/` for maintainer-only
-repository tooling such as README asset generation.
+repair, and validation flows. Managed config mappings live in `mise/config.toml`
+and the platform-specific `mise/config.*.toml` files. Use `Other/repository/`
+for maintainer-only repository tooling such as README asset generation.
 
 If you clone the repo to work on the docs assets, run `mise install` in the
 repo root. The top-level `mise.toml` installs the local Python and D2 toolchain
@@ -108,7 +108,7 @@ assets so each layer stays easy to reason about.
 
 | Area | What it contains | Primary reference |
 | --- | --- | --- |
-| Repo root groups | Config source directories symlinked into `$HOME` by mise `[dotfiles]` | [CONFIGS.md](CONFIGS.md) |
+| Repo root groups | Config source directories symlinked into `$HOME` by mise `[dotfiles]` | `mise/config.toml`, `mise/config.*.toml` |
 | `Other/scripts/` | Repo-local operator entrypoints split into `macos/` and `windows/` | [Other/scripts/README.md](Other/scripts/README.md) |
 | `Other/repository/` | Maintainer-only repository tooling, including README asset generation | `Other/repository/` |
 | `assets/` | D2 sources and rendered SVGs used by the READMEs | `assets/*.d2` |

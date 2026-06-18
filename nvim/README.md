@@ -168,5 +168,4 @@ nvim --headless '+lua assert(vim.o.cmdheight == 1)' '+lua assert(vim.o.wildoptio
 ## Related docs
 
 - `KEYBINDS.md` in the repo root is the printable keybinding cheat sheet.
-- `CONFIGS.md` explains how this config group is linked into place.
 - `README.md` explains the repository bootstrap and managed config model.
