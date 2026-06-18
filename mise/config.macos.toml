@@ -33,7 +33,7 @@
 "brew:make" = "latest"
 "brew:btop" = "latest"
 "brew:nmap" = "latest"
-"brew:yubikey-manager" = "latest"    # ykman CLI for YubiKey management
+"brew:ykman" = "latest"              # YubiKey Manager CLI
 "brew:gnupg" = "latest"              # GPG for OpenPGP applet + ssh-agent
 "brew:pinentry-mac" = "latest"       # macOS GPG passphrase entry
 "brew:mssql-tools18" = "latest"      # SQL Server command-line tools

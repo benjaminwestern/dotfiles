@@ -12,6 +12,7 @@ cask "font-jetbrains-mono-nerd-font" # JetBrains Mono Nerd Font
 # Standard Apps
 cask "ghostty"             # Terminal Emulator
 cask "google-chrome"       # Web Browser
+cask "yubico-authenticator" # YubiKey GUI
 cask "podman-desktop"      # Containerisation GUI
 cask "maccy"               # Clipboard Manager
 cask "dbngin"              # Database GUI
