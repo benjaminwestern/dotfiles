@@ -1,5 +1,44 @@
 # Hyprland tweaks for usability
 
+These tweaks layer on top of Omarchy's default Hyprland configuration. Omarchy sources its defaults from `~/.local/share/omarchy/default/hypr/` first, then loads user overrides from `~/.config/hypr/`.
+
+## Trackpad
+
+File: `~/.config/hypr/input.conf`
+
+Overrides Omarchy's touchpad defaults for a macOS-like feel:
+
+```ini
+input {
+  natural_scroll = true
+
+  touchpad {
+    natural_scroll = true
+
+    # Disable tap-to-click; require physical clicks
+    tap-to-click = false
+
+    # Single physical click = left click; two-finger click = right click
+    clickfinger_behavior = true
+
+    # Disable tap-and-drag and drag lock
+    tap-and-drag = false
+    drag_lock = false
+
+    scroll_factor = 0.4
+  }
+}
+
+# macOS-style 3-finger trackpad gestures
+gesture = 3, horizontal, workspace
+gesture = 3, up, fullscreen
+gesture = 3, down, fullscreen, 0
+```
+
+- 3-finger swipe left/right → switch workspaces
+- 3-finger swipe up → fullscreen active window
+- 3-finger swipe down → un-fullscreen active window
+
 ## Monitor scaling
 
 File: `~/.config/hypr/monitors.conf`

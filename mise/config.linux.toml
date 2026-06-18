@@ -1,9 +1,6 @@
 # Linux-only dotfiles
 # [dotfiles]
-# "~/.config/hypr" = "~/.dotfiles/hypr"
 # "~/.config/hypr/hyprland.conf" = "~/.dotfiles/hypr/hyprland.conf"
-# "~/.config/hypr/monitors.conf" = "~/.dotfiles/hypr/monitors.conf"
-# "~/.config/hypr/bindings.conf" = "~/.dotfiles/hypr/bindings.conf"
 
 # System packages — Arch (pacman)
 # These map to the macOS brew list. Names that differ are noted inline.
@@ -28,6 +25,15 @@
 "pacman:ripgrep" = "latest"     # brew:ripgrep
 "pacman:worktrunk" = "latest"   # brew:worktrunk
 "pacman:btop" = "latest"        # brew:btop
+"pacman:usbutils" = "latest"    # lsusb (fingerprint troubleshooting)
+"pacman:fprintd" = "latest"           # fingerprint daemon (includes PAM module)
+"pacman:libfprint" = "latest"         # fingerprint driver library
+"pacman:yubikey-manager" = "latest"      # ykman CLI for YubiKey management
+"pacman:python-pyscard" = "latest"       # smart card Python bindings used by YubiKey tooling
+"pacman:ccid" = "latest"                 # smart card driver for YubiKey
+"pacman:pcsclite" = "latest"          # PC/SC smart card daemon
+"pacman:gnupg" = "latest"             # GPG for OpenPGP applet + ssh-agent
+"pacman:pinentry" = "latest"          # GPG passphrase entry
 "pacman:nmap" = "latest"        # brew:nmap
 "pacman:tokei" = "latest"       # brew:tokei
 "pacman:caddy" = "latest"       # brew:caddy

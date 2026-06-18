@@ -205,7 +205,7 @@ cp ~/.dotfiles/mise/.example.env ~/.config/mise/.env
 
 ### 9. Some dotfiles are platform-only
 
-`~/.aerospace.toml`, `~/.config/borders/bordersrc`, `~/.config/ghostty/config`, and `~/Brewfile` are declared for macOS. On Arch they show as `applied` symlinks even though the tools themselves may not be installed.
+`~/.aerospace.toml`, `~/.config/ghostty/config`, and `~/Brewfile` are declared for macOS. On Arch they show as `applied` symlinks even though the tools themselves may not be installed.
 
 ### 10. `mise doctor` PATH warning
 
@@ -222,7 +222,24 @@ cat ~/.ssh/id_ed25519.pub
 
 Then add the public key to GitHub at https://github.com/settings/keys.
 
-### 12. Manual font installs
+### 12. Scroll direction defaults to Apple-style natural scrolling
+
+The Hyprland input config in `~/.config/hypr/input.conf` enables natural scrolling for both mice and trackpads:
+
+```ini
+input {
+  natural_scroll = true
+
+  touchpad {
+    natural_scroll = true
+    # ...
+  }
+}
+```
+
+This makes content follow your finger, matching macOS / Apple trackpad behavior. To revert to traditional scrolling, set both values to `false` and run `hyprctl reload`.
+
+### 13. Manual font installs
 
 Some fonts are not packaged and must be installed from upstream releases. Example: `psudoFont Liga Mono` from <https://github.com/psudo-dev/psudofont-liga-mono>:
 
@@ -339,6 +356,264 @@ echo $SHELL
 
 # SSH key exists
 ls ~/.ssh/id_ed25519
+```
+
+## Fingerprint authentication (Arch / fprintd)
+
+On supported hardware, fingerprint auth can replace or supplement passwords for `sudo`, `su`, login, SDDM, and Hyprlock.
+
+### Supported devices
+
+Check the device with `lsusb` and the libfprint device list at <https://fprint.freedesktop.org/supported-devices.html>.
+
+### Bootstrap packages
+
+Add these to `mise/config.linux.toml` under `[bootstrap.packages]`:
+
+```toml
+"pacman:usbutils" = "latest"    # lsusb
+"pacman:fprintd" = "latest"     # fingerprint daemon (includes PAM module on Arch)
+"pacman:libfprint" = "latest"   # fingerprint driver library
+```
+
+Then install them:
+
+```bash
+mise bootstrap packages install -y
+```
+
+### Enroll fingers
+
+```bash
+fprintd-list $(whoami)
+fprintd-enroll -f right-index-finger $(whoami)
+fprintd-enroll -f left-index-finger $(whoami)
+fprintd-verify $(whoami)
+```
+
+### Configure PAM
+
+Arch bundles `pam_fprintd.so` with the `fprintd` package. Add fingerprint as `sufficient` in `/etc/pam.d/system-auth`:
+
+```
+-auth      [success=3 default=ignore]  pam_systemd_home.so
+auth       sufficient                  pam_fprintd.so
+auth       [success=1 default=bad]     pam_unix.so          try_first_pass nullok
+```
+
+Also add it to `/etc/pam.d/su` so `su` supports fingerprint:
+
+```
+auth       sufficient      pam_fprintd.so
+auth       required        pam_unix.so
+```
+
+This enables fingerprint for:
+
+- `sudo` (via `system-auth`)
+- `su` (direct)
+- TTY login → `system-local-login` → `system-login` → `system-auth`
+- SDDM graphical login → `system-login` → `system-auth`
+- `hyprlock` → `login` → `system-auth`
+
+### Test
+
+```bash
+sudo -k
+sudo whoami
+su - $(whoami)
+```
+
+Fingerprint runs first; password fallback still works if you cancel or the scan fails.
+
+## YubiKey (Arch / macOS)
+
+### Bootstrap packages
+
+Add these to `mise/config.linux.toml` under `[bootstrap.packages]`:
+
+```toml
+"pacman:yubikey-manager" = "latest"   # ykman CLI for YubiKey management
+"pacman:python-pyscard" = "latest"    # smart card Python bindings
+"pacman:ccid" = "latest"              # smart card driver for YubiKey
+"pacman:pcsclite" = "latest"          # PC/SC smart card daemon
+"pacman:gnupg" = "latest"             # GPG for OpenPGP applet + ssh-agent
+"pacman:pinentry" = "latest"          # GPG passphrase entry
+```
+
+Then install them:
+
+```bash
+mise bootstrap packages install -y
+```
+
+### YubiKey tools on Arch
+
+Use `ykman` as the reliable full YubiKey manager on Arch. The CLI detects the key correctly and covers OpenPGP, PIV, FIDO2, and OATH:
+
+```bash
+ykman list
+ykman info
+ykman openpgp info
+ykman piv info
+ykman fido info
+ykman oath accounts list
+```
+
+For a supported GUI, use **Yubico Authenticator**. Install the source-built AUR package, not `yubico-authenticator-bin`; the `-bin` package pulls in `zenity`, which is intentionally not part of this setup.
+
+```bash
+omarchy pkg aur add yubico-authenticator
+```
+
+If `zenity` was installed while testing the `-bin` package, remove it:
+
+```bash
+omarchy pkg drop zenity
+```
+
+Keep `pcscd` enabled for OpenPGP/PIV/smartcard access:
+
+```bash
+sudo systemctl enable --now pcscd
+```
+
+Because this dotfiles setup puts mise shims before `/usr/bin`, Yubico Authenticator's helper can accidentally launch with mise Python. Use a launcher wrapper that forces system Python:
+
+```bash
+cat > ~/.local/bin/yubico-authenticator-launcher <<'EOF'
+#!/bin/bash
+export PATH="/usr/bin:$PATH"
+exec /usr/bin/yubico-authenticator
+EOF
+chmod +x ~/.local/bin/yubico-authenticator-launcher
+```
+
+Override the desktop entry so `Super+Space` launches the wrapper:
+
+```ini
+[Desktop Entry]
+Name=Yubico Authenticator
+GenericName=Yubico Authenticator
+Exec=/home/benjaminwestern/.local/bin/yubico-authenticator-launcher
+Icon=com.yubico.yubioath
+Type=Application
+Categories=Utility;
+Keywords=Yubico;Authenticator;
+```
+
+Save that as `~/.local/share/applications/com.yubico.yubioath.desktop`.
+
+### Omarchy / Hyprland integration for Yubico Authenticator
+
+On Omarchy, Hyprland config lives under `~/.config/hypr/` and should not be managed by this dotfiles repo. The default files can always be restored from Omarchy's shipped config:
+
+```bash
+cp ~/.local/share/omarchy/config/hypr/hyprland.conf ~/.config/hypr/hyprland.conf
+cp ~/.local/share/omarchy/config/hypr/bindings.conf ~/.config/hypr/bindings.conf
+```
+
+To add a quick keybind for Yubico Authenticator, edit `~/.config/hypr/bindings.conf` (restore the Omarchy file first if you overwrote it):
+
+```ini
+bindd = SUPER ALT, Y, Yubico Authenticator, exec, uwsm-app -- /home/benjaminwestern/.local/bin/yubico-authenticator-launcher
+```
+
+Then restart Walker and reload Hyprland:
+
+```bash
+omarchy restart walker
+hyprctl reload
+```
+
+Current HP setup notes:
+
+- Removed the broken/deprecated `yubikey-manager-qt` package.
+- Do not use `yubico-authenticator-bin`; it pulled in `zenity`, which was removed.
+- Installed `yubico-authenticator` from AUR source build, plus its AUR dependency `python-zxing-cpp`.
+- Added `~/.local/bin/yubico-authenticator-launcher` so the app helper uses system Python instead of mise Python.
+- Overrode `~/.local/share/applications/com.yubico.yubioath.desktop` so Walker launches the wrapper.
+- Added `SUPER ALT + Y` in `~/.config/hypr/bindings.conf` to launch the wrapper.
+- Verified `ykman list` sees `YubiKey 5C NFC (5.7.1)` and Yubico Authenticator opens correctly.
+
+### macOS YubiKey tools
+
+On macOS, `mise` installs `yubikey-manager` via Homebrew. The Homebrew formula includes both the `ykman` CLI and the Qt GUI, so no extra GUI package is required. Launch the GUI from the terminal with:
+
+```bash
+ykman gui
+```
+
+or open **YubiKey Manager** from Launchpad / Applications.
+
+## Trackpad configuration (Hyprland)
+
+The local `~/.config/hypr/input.conf` overrides Omarchy's default touchpad behavior. The current setup uses macOS-style physical clicks and 3-finger gestures:
+
+```ini
+input {
+  natural_scroll = true
+
+  touchpad {
+    natural_scroll = true
+
+    # Disable tap-to-click; require physical clicks
+    tap-to-click = false
+
+    # Single physical click = left click; two-finger click = right click
+    clickfinger_behavior = true
+
+    # Disable tap-and-drag and drag lock
+    tap-and-drag = false
+    drag_lock = false
+
+    scroll_factor = 0.4
+  }
+}
+
+# macOS-style 3-finger trackpad gestures
+gesture = 3, horizontal, workspace
+gesture = 3, up, fullscreen
+gesture = 3, down, fullscreen, 0
+```
+
+- 3-finger swipe left/right → switch workspaces
+- 3-finger swipe up → fullscreen active window
+- 3-finger swipe down → un-fullscreen active window
+
+To pop a window out as floating and pinned above others, use Omarchy's `SUPER + O` binding or `hyprctl dispatch togglefloating && hyprctl dispatch pin`.
+
+## Waybar configuration
+
+`~/.config/waybar/config.jsonc` overrides Omarchy's default Waybar config. The current tweaks are:
+
+### Battery percentage always visible
+
+Battery shows `{capacity}%` in every state (charging, discharging, plugged, full) instead of only an icon when unplugged:
+
+```json
+"battery": {
+  "format": "{capacity}% {icon}",
+  "format-discharging": "{capacity}% {icon}",
+  "format-charging": "{capacity}% {icon}",
+  "format-plugged": "{capacity}% 🔌",
+  "format-full": "{capacity}% 🔋"
+}
+```
+
+### Plain system tray
+
+The default Omarchy `group/tray-expander` drawer (a clickable arrow that reveals tray icons) is unreliable — clicks do not open it. Replaced with a plain `tray` module in `modules-right` so tray icons are always visible:
+
+```json
+"modules-right": [
+  "tray",
+  "bluetooth",
+  "network",
+  "pulseaudio",
+  "cpu",
+  "battery"
+]
 ```
 
 ## Recovering from a partial bootstrap

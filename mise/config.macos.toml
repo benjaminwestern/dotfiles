@@ -1,7 +1,6 @@
 # macOS-only dotfiles
 [dotfiles]
 "~/.aerospace.toml" = "~/.dotfiles/aerospace/.aerospace.toml"
-"~/.config/borders/bordersrc" = "~/.dotfiles/borders/bordersrc"
 "~/Brewfile" = "~/.dotfiles/brew/Brewfile"
 "~/Library/Application Support/Code/User/keybindings.json" = "~/.dotfiles/vscode/keybindings.json"
 "~/Library/Application Support/Code/User/settings.json" = "~/.dotfiles/vscode/settings.json"
@@ -34,6 +33,11 @@
 "brew:make" = "latest"
 "brew:btop" = "latest"
 "brew:nmap" = "latest"
+"brew:yubikey-manager" = "latest"    # ykman CLI for YubiKey management
+"brew:gnupg" = "latest"              # GPG for OpenPGP applet + ssh-agent
+"brew:pinentry-mac" = "latest"       # macOS GPG passphrase entry
+"brew:mssql-tools18" = "latest"      # SQL Server command-line tools
+"brew:msodbcsql18" = "latest"        # SQL Server ODBC driver
 "brew:tokei" = "latest"
 "brew:caddy" = "latest"
 "brew:duckdb" = "latest"
