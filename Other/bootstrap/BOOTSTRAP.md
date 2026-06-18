@@ -538,13 +538,19 @@ Current HP setup notes:
 
 ### macOS YubiKey tools
 
-On macOS, `mise` installs `yubikey-manager` via Homebrew. The Homebrew formula includes both the `ykman` CLI and the Qt GUI, so no extra GUI package is required. Launch the GUI from the terminal with:
+On macOS, `mise` installs the `ykman` Homebrew formula for CLI management:
 
-```bash
-ykman gui
+```toml
+"brew:ykman" = "latest"
 ```
 
-or open **YubiKey Manager** from Launchpad / Applications.
+The GUI is a separate Homebrew cask in `brew/Brewfile`:
+
+```ruby
+cask "yubico-authenticator"
+```
+
+Use `ykman` for full CLI management and **Yubico Authenticator** for the supported GUI.
 
 ## Trackpad configuration (Hyprland)
 
