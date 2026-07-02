@@ -16,12 +16,14 @@
     "patch": true,
     "todowrite": true,
     "todoread": true,
-    "webfetch": true
+    "webfetch": true,
+    "websearch": true
   },
   "permission": {
     "edit": "allow",
     "bash": "allow",
-    "webfetch": "allow"
+    "webfetch": "allow",
+    "websearch": "allow"
   },
   "mcp": {
     "google-developer-knowledge": {
