@@ -15,6 +15,7 @@ minimum_release_age_excludes = [
 _.file = "~/.config/mise/.env"
 EDITOR = "nvim"
 OPENCODE_ENABLE_EXPERIMENTAL_MODELS = "true"
+OPENCODE_ENABLE_EXA = "1"
 PITCHFORK_WEB_PORT = "19876"
 
 [dotfiles]
@@ -71,8 +72,8 @@ go = "latest"
 # Node / npm
 node = "latest"
 bun = "latest"
-"npm:opencode-ai" = "latest"
-"npm:@earendil-works/pi-coding-agent" = "latest"
+"npm:opencode-ai" = { version = "latest", minimum_release_age = "0s", npm_args = "--ignore-scripts=false" }
+"npm:@earendil-works/pi-coding-agent" = { version = "latest", minimum_release_age = "0s" }
 "npm:@playwright/cli" = "latest"
 "npm:@dataform/cli" = "latest"
 "npm:wrangler" = "latest"
