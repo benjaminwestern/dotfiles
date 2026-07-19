@@ -64,6 +64,10 @@ param(
   [string]$Mode,
   [string]$Shell,
   [string]$Profile_,   # "Profile" conflicts with PS auto-var
+  [string]$DeviceName,
+  [string]$GitName,
+  [string]$GitEmail,
+  [string]$DownloadsTarget,
   [switch]$NonInteractive,
   [switch]$Personal,
   [switch]$TakeoverMiseConfig,
@@ -83,6 +87,10 @@ $PrecursorArgs = @()
 if ($PSBoundParameters.ContainsKey('Mode')) { $PrecursorArgs += @('-Mode', $Mode) }
 if ($PSBoundParameters.ContainsKey('Shell')) { $PrecursorArgs += @('-Shell', $Shell) }
 if ($PSBoundParameters.ContainsKey('Profile_')) { $PrecursorArgs += @('-Profile_', $Profile_) }
+if ($PSBoundParameters.ContainsKey('DeviceName')) { $PrecursorArgs += @('-DeviceName', $DeviceName) }
+if ($PSBoundParameters.ContainsKey('GitName')) { $PrecursorArgs += @('-GitName', $GitName) }
+if ($PSBoundParameters.ContainsKey('GitEmail')) { $PrecursorArgs += @('-GitEmail', $GitEmail) }
+if ($PSBoundParameters.ContainsKey('DownloadsTarget')) { $PrecursorArgs += @('-DownloadsTarget', $DownloadsTarget) }
 if ($NonInteractive) { $PrecursorArgs += '-NonInteractive' }
 if ($Personal) { $PrecursorArgs += '-Personal' }
 if ($TakeoverMiseConfig) { $PrecursorArgs += '-TakeoverMiseConfig' }
@@ -97,9 +105,13 @@ Invoke-PwshPrecursor -ScriptPath $MyInvocation.MyCommand.Path -ArgumentList $Pre
 if ($DryRun -or $env:DRY_RUN -eq '1') { $global:DRY_RUN = $true }
 
 $FoundationPackages = @(
-  'git', 'gh', 'jq', 'jid', 'yq', 'fzf', 'fd', 'ripgrep', 'zoxide',
-  'lazygit', 'charm-gum', 'vscode', 'openssl', 'pwsh'
+  # Scoop is the Windows-native precursor because mise does not currently
+  # expose Scoop/WinGet as built-in bootstrap package managers. Portable CLIs
+  # live in mise/config.windows.toml instead of being duplicated here.
+  'git', 'openssl', 'pwsh'
 )
+$OptionalNativePackages = @('jid')
+$ApplicationPackages = @('vscode', 'googlechrome')
 
 $EffectiveExecutionPolicy = Get-ExecutionPolicy
 $RequiresSigning = @(
@@ -277,6 +289,97 @@ function Ensure-FoundationPackages {
     $action = if (Test-DryRun) { "would install ${missing} missing" } else { "installed ${missing} missing" }
     Write-StatusFix 'Foundation packages' -Action $action
   }
+}
+
+function Ensure-OptionalNativePackages {
+  if ($global:RESOLVED_PACKAGES -ne 'true') {
+    Write-StatusSkip 'Optional native packages' -Reason 'disabled by plan'
+    return
+  }
+  $missing = 0
+  foreach ($package in $OptionalNativePackages) {
+    if (Test-ScoopPackageInstalled -Name $package) { continue }
+    Invoke-OrDry -Label "scoop install $package" -Command { scoop install $package 2>$null }
+    $missing++
+  }
+  if ($missing -eq 0) { Write-StatusPass 'Optional native packages' -Detail 'all present' }
+  else { Write-StatusFix 'Optional native packages' -Action $(if (Test-DryRun) { "would install $missing" } else { "installed $missing" }) }
+}
+
+function Ensure-WindowsApplications {
+  if ($global:RESOLVED_APPLICATIONS -ne 'true') {
+    Write-StatusSkip 'Windows applications' -Reason 'disabled by plan'
+    return
+  }
+  Ensure-ScoopBucket -Name 'extras'
+  $missing = 0
+  foreach ($package in $ApplicationPackages) {
+    if (Test-ScoopPackageInstalled -Name $package) { continue }
+    Invoke-OrDry -Label "scoop install $package" -Command { scoop install $package 2>$null }
+    $missing++
+  }
+  if ($missing -eq 0) { Write-StatusPass 'Windows applications' -Detail 'VS Code and Chrome present' }
+  else { Write-StatusFix 'Windows applications' -Action $(if (Test-DryRun) { "would install $missing" } else { "installed $missing" }) }
+}
+
+function Ensure-CodeDirectory {
+  if ($global:RESOLVED_CODE_DIRECTORY -ne 'true') { Write-StatusSkip 'Code directory' -Reason 'disabled by plan'; return }
+  $path = Join-Path $HOME 'code'
+  if (Test-Path $path) { Write-StatusPass 'Code directory' -Detail $path; return }
+  Invoke-OrDry -Label "mkdir $path" -Command { New-Item -ItemType Directory -Force $path | Out-Null }
+  Write-StatusFix 'Code directory' -Action $(if (Test-DryRun) { 'would create' } else { 'created' })
+}
+
+function Ensure-DownloadsLink {
+  if ($global:RESOLVED_DOWNLOADS_LINK -ne 'true') { Write-StatusSkip 'Downloads link' -Reason 'disabled by plan'; return }
+  $link = Join-Path $HOME 'Downloads'
+  $target = $global:RESOLVED_DOWNLOADS_TARGET
+  if ((Test-Path $link) -and (Test-Path $target)) {
+    $linkItem = Get-Item $link -Force
+    if ($linkItem.LinkType -and $linkItem.Target -contains $target) { Write-StatusPass 'Downloads link' -Detail "$link -> $target"; return }
+    Write-StatusSkip 'Downloads link' -Reason "existing $link preserved; move its contents and rerun"
+    return
+  }
+  Invoke-OrDry -Label "create directory junction $link -> $target" -Command {
+    New-Item -ItemType Directory -Force $target | Out-Null
+    New-Item -ItemType Junction -Path $link -Target $target | Out-Null
+  }
+  Write-StatusFix 'Downloads link' -Action $(if (Test-DryRun) { "would link to $target" } else { "linked to $target" })
+}
+
+function Ensure-WindowsComputerName {
+  if ($global:RESOLVED_WINDOWS_DEFAULTS -ne 'true') { Write-StatusSkip 'Computer name' -Reason 'Windows defaults disabled'; return }
+  $desired = $global:RESOLVED_DEVICE_NAME
+  if ($desired -notmatch '^[A-Za-z0-9][A-Za-z0-9-]{0,14}$') { Write-StatusFail 'Computer name' -Detail 'must be 1-15 letters, digits, or hyphens' }
+  if ($env:COMPUTERNAME -and $env:COMPUTERNAME.Equals($desired, [System.StringComparison]::OrdinalIgnoreCase)) {
+    Write-StatusPass 'Computer name' -Detail $env:COMPUTERNAME
+    return
+  }
+  Invoke-OrDry -Label "Rename-Computer -NewName $desired (restart required)" -Command { Rename-Computer -NewName $desired -Force }
+  Write-StatusFix 'Computer name' -Action $(if (Test-DryRun) { "would rename to $desired" } else { "renamed to $desired; restart required" })
+}
+
+function Ensure-RemoteAccess {
+  if ($global:RESOLVED_REMOTE_ACCESS -ne 'true') { Write-StatusSkip 'Remote access' -Reason 'disabled by plan'; return }
+  $capability = Get-WindowsCapability -Online -Name 'OpenSSH.Server*' -ErrorAction SilentlyContinue | Select-Object -First 1
+  if (-not $capability -or $capability.State -ne 'Installed') {
+    Invoke-OrDry -Label 'Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0 (administrator)' -Command {
+      Add-WindowsCapability -Online -Name 'OpenSSH.Server~~~~0.0.1.0' | Out-Null
+    }
+  }
+  $service = Get-Service sshd -ErrorAction SilentlyContinue
+  if ($service -and $service.Status -eq 'Running' -and $service.StartType -eq 'Automatic') {
+    Write-StatusPass 'Remote access' -Detail 'OpenSSH Server enabled and running'
+    return
+  }
+  Invoke-OrDry -Label 'Set-Service sshd Automatic; Start-Service sshd (administrator)' -Command {
+    Set-Service -Name sshd -StartupType Automatic
+    Start-Service sshd
+    if (-not (Get-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -ErrorAction SilentlyContinue)) {
+      New-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -DisplayName 'OpenSSH Server (sshd)' -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22 | Out-Null
+    }
+  }
+  Write-StatusFix 'Remote access' -Action $(if (Test-DryRun) { 'would enable OpenSSH Server' } else { 'enabled OpenSSH Server' })
 }
 
 function Ensure-Mise {
@@ -861,9 +964,29 @@ function Ensure-MiseTools {
     return
   }
 
-  Write-Host '  Running mise install...' -ForegroundColor Cyan
-  Invoke-OrDry -Label 'mise install' -Command {
-    mise install 2>$null
+  $repoConfig = Join-Path $BootstrapRoot 'mise\config.toml'
+  $useRepoConfig = $global:RESOLVED_PROFILE -in @('home', 'work') -and (Test-Path $repoConfig)
+  $label = if ($useRepoConfig) { 'mise install (repository Windows toolset)' } else { 'mise install (user seed toolset)' }
+
+  Write-Host "  Running $label..." -ForegroundColor Cyan
+  Invoke-OrDry -Label $label -Command {
+    if ($useRepoConfig) {
+      $previousConfig = $env:MISE_GLOBAL_CONFIG_FILE
+      $previousRoot = $env:MISE_GLOBAL_CONFIG_ROOT
+      $previousAutoEnv = $env:MISE_AUTO_ENV
+      try {
+        $env:MISE_GLOBAL_CONFIG_FILE = $repoConfig
+        $env:MISE_GLOBAL_CONFIG_ROOT = $HOME
+        $env:MISE_AUTO_ENV = 'true'
+        mise -C $HOME install 2>$null
+      } finally {
+        $env:MISE_GLOBAL_CONFIG_FILE = $previousConfig
+        $env:MISE_GLOBAL_CONFIG_ROOT = $previousRoot
+        $env:MISE_AUTO_ENV = $previousAutoEnv
+      }
+    } else {
+      mise -C $HOME install 2>$null
+    }
   }
 
   if ($RequiresSigning) {
@@ -1024,6 +1147,12 @@ function Invoke-FoundationEnsureFlow {
   Ensure-Scoop
   Ensure-FoundationPackages
   Ensure-Mise
+  Ensure-OptionalNativePackages
+  Ensure-WindowsApplications
+  Ensure-CodeDirectory
+  Ensure-DownloadsLink
+  Ensure-WindowsComputerName
+  Ensure-RemoteAccess
   Ensure-Profile
   Ensure-CurrentPwshActivation
   Ensure-WindowsTerminalPwshDefault
@@ -1050,7 +1179,10 @@ function Invoke-FoundationUpdate {
   }
 
   if ($global:RESOLVED_MISE_TOOLS -eq 'true' -and (Test-CommandExists 'mise')) {
-    Invoke-OrDry -Label 'mise upgrade' -Command { mise upgrade 2>$null }
+    Invoke-OrDry -Label 'mise upgrade --yes; mise prune --yes' -Command {
+      mise upgrade --yes 2>$null
+      mise prune --yes 2>$null
+    }
     if ($RequiresSigning) {
       Invoke-OrDry -Label 'Sign-MiseScripts' -Command { Sign-MiseScripts }
     }
@@ -1102,9 +1234,34 @@ function Main {
   Resolve-AllFlags `
     -CliShell $Shell `
     -CliProfile $Profile_ `
+    -CliDeviceName $DeviceName `
+    -CliGitName $GitName `
+    -CliGitEmail $GitEmail `
+    -CliDownloadsTarget $DownloadsTarget `
     -EnableFlags $EnableFlags `
     -DisableFlags $DisableFlags `
     -ZscalerDetection $script:ZscalerDetection
+
+  if ($global:RESOLVED_GIT_IDENTITY -eq 'true') {
+    if (-not $global:RESOLVED_GIT_USER_NAME -and (Test-CommandExists 'git')) {
+      $global:RESOLVED_GIT_USER_NAME = git config --global --includes --get user.name 2>$null
+    }
+    if (-not $global:RESOLVED_GIT_USER_EMAIL -and (Test-CommandExists 'git')) {
+      $global:RESOLVED_GIT_USER_EMAIL = git config --global --includes --get user.email 2>$null
+    }
+    if (-not $NonInteractive) {
+      if (-not $global:RESOLVED_GIT_USER_NAME) { $global:RESOLVED_GIT_USER_NAME = Read-Host 'Git author name' }
+      if (-not $global:RESOLVED_GIT_USER_EMAIL) { $global:RESOLVED_GIT_USER_EMAIL = Read-Host 'Git author email' }
+    }
+    if (-not $global:RESOLVED_GIT_USER_NAME -or $global:RESOLVED_GIT_USER_EMAIL -notmatch '^[^@]+@[^@]+\.[^@]+$') {
+      Write-Fatal 'A Git author name and valid email are required when git-identity is enabled.'
+    }
+  }
+  if ($global:RESOLVED_DOWNLOADS_LINK -eq 'true' -and -not $global:RESOLVED_DOWNLOADS_TARGET) {
+    if (-not $NonInteractive) { $global:RESOLVED_DOWNLOADS_TARGET = Read-Host 'Absolute directory for the Downloads link' }
+    if (-not $global:RESOLVED_DOWNLOADS_TARGET) { Write-Fatal 'DownloadsTarget is required when downloads-link is enabled.' }
+  }
+  Write-AllState
 
   Write-Host ''
   Write-Host '---' -ForegroundColor DarkGray
@@ -1112,6 +1269,9 @@ function Main {
   Write-Host "  Mode:    $Mode" -ForegroundColor DarkGray
   Write-Host "  Shell:   $global:RESOLVED_SHELL" -ForegroundColor DarkGray
   Write-Host "  Profile: $global:RESOLVED_PROFILE" -ForegroundColor DarkGray
+  Write-Host "  Device:  $global:RESOLVED_DEVICE_NAME" -ForegroundColor DarkGray
+  Write-Host "  Packages/apps: $global:RESOLVED_PACKAGES / $global:RESOLVED_APPLICATIONS" -ForegroundColor DarkGray
+  Write-Host "  Mise tools/dotfiles: $global:RESOLVED_MISE_TOOLS / $global:RESOLVED_DOTFILES" -ForegroundColor DarkGray
   Write-Host "  Zscaler: $global:RESOLVED_ZSCALER" -ForegroundColor DarkGray
   Write-Host "  Policy:  $EffectiveExecutionPolicy" -ForegroundColor DarkGray
   if (Test-DryRun) {

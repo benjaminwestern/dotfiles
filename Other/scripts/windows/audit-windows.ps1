@@ -56,8 +56,7 @@ Invoke-PwshPrecursor -ScriptPath $MyInvocation.MyCommand.Path -ArgumentList $Pre
 . (Join-Path $ScriptDir 'lib\signing-helpers-windows.ps1')
 
 $FoundationPackages = @(
-  'git', 'gh', 'jq', 'jid', 'yq', 'fzf', 'fd', 'ripgrep', 'zoxide',
-  'lazygit', 'charm-gum', 'vscode', 'openssl', 'pwsh'
+  'git', 'jid', 'vscode', 'openssl', 'pwsh'
 )
 
 $DotfilesDir        = Join-Path $HOME '.dotfiles'

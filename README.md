@@ -68,28 +68,38 @@ include. Ben's existing tracked symlink remains supported.
 Vendor-self-updating casks such as Chrome stay declared for installation and
 removal, while their own privileged updater—not Homebrew—owns version changes.
 
-### Linux (Arch)
+### Linux
 
 ```bash
-# Install mise standalone
-curl https://mise.run | sh
-export PATH="$HOME/.local/bin:$PATH"
+# Fresh Ubuntu, Debian, Mint, Arch, CachyOS, or a supported derivative.
+curl -fsSL https://raw.githubusercontent.com/benjaminwestern/dotfiles/main/install.sh \
+  | bash
 
-# Clone with HTTPS (SSH key doesn't exist yet)
-GIT_CONFIG_GLOBAL=/dev/null git clone https://github.com/benjaminwestern/dotfiles ~/.dotfiles
+# Fully specified home-profile example for unattended plan selection.
+curl -fsSL https://raw.githubusercontent.com/benjaminwestern/dotfiles/main/install.sh \
+  | bash -s -- setup --profile home --shell fish --device-name dev-linux \
+      --git-name "Ada Lovelace" --git-email ada@example.com --non-interactive
 
-# Bootstrap: system packages (pacman), dotfile symlinks, tools
-mise bootstrap
-mise install
-
-# Post-bootstrap: TPM and declared extras (SSH keys remain manual)
-mise run bootstrap
-
-# Register the SSH key, then:
-exec fish
+# Audit and idempotent repair after the checkout exists.
+~/.dotfiles/install.sh audit --general
+~/.dotfiles/install.sh audit --profile home
+~/.dotfiles/install.sh audit --expect-state
+~/.dotfiles/install.sh ensure --dry-run
 ```
 
-See [`Other/bootstrap/BOOTSTRAP.md`](Other/bootstrap/BOOTSTRAP.md) for the full ordering gotchas, recovery steps, and validation checklist.
+The loader installs standalone mise and mise-managed Gum itself. System
+packages remain declarative through mise's `apt` or `pacman` manager; desktop
+applications use mise's system-wide Flatpak manager. `home` and `work` install
+Ben's full tool and dotfile catalogues, create `~/code`, enable SSH, configure
+Fish and Fisher, and make Chrome/Chromium the browser and PDF handler. On
+Linux ARM64, Chromium is used because Google's Flatpak is x86_64-only.
+
+The interactive Gum plan can edit every preset stage. For a non-interactive
+run, provide the device name and Git identity on the command line or in the
+documented environment variables. Administrator and login-shell prompts stay
+visible; secrets are never command-line inputs. See
+[`Other/bootstrap/BOOTSTRAP.md`](Other/bootstrap/BOOTSTRAP.md) for the complete
+ordering, recovery, and validation contract.
 
 ### Windows
 
@@ -140,7 +150,7 @@ assets so each layer stays easy to reason about.
 | Area | What it contains | Primary reference |
 | --- | --- | --- |
 | Repo root groups | Config source directories symlinked into `$HOME` by mise `[dotfiles]` | `mise/config.toml`, `mise/config.*.toml` |
-| `Other/scripts/` | Repo-local operator entrypoints split into `macos/` and `windows/` | [Other/scripts/README.md](Other/scripts/README.md) |
+| `Other/scripts/` | Repo-local operator entrypoints split into `macos/`, `linux/`, and `windows/` | [Other/scripts/README.md](Other/scripts/README.md) |
 | `Other/repository/` | Maintainer-only repository tooling, including README asset generation | `Other/repository/` |
 | `assets/` | D2 sources and rendered SVGs used by the READMEs | `assets/*.d2` |
 
@@ -155,9 +165,10 @@ shell comes online early and the heavier language toolchain install can follow
 afterward.
 
 - Every macOS profile receives Homebrew, standalone mise, and mise-managed Gum.
-- Ben's macOS command-line catalogue is an optional mise
-  `[bootstrap.packages]` stage; the separate Brewfile apps/fonts catalogue is
-  also optional. Linux continues to use its direct mise bootstrap path.
+- Ben's command-line catalogues are optional mise `[bootstrap.packages]`
+  stages: Homebrew on macOS and native `apt`/`pacman` packages on Linux. macOS
+  keeps a separate Brewfile apps/fonts catalogue; Linux applications are
+  declared as system Flatpaks through mise.
 - The repo-local `mise.toml` installs the contributor toolchain for the README
   asset pipeline.
 - The managed home config at `mise/config.toml` defines runtimes, tasks, and
@@ -188,10 +199,10 @@ mise dotfiles status
 
 
 # Linux
-mise doctor
-mise up
-mise dotfiles status
-mise run bundle-update
+./install.sh ensure
+./install.sh ensure --dry-run
+./install.sh update
+./install.sh audit --expect-state
 ```
 
 ```powershell

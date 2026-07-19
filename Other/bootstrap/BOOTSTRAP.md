@@ -1,6 +1,6 @@
 # Unified Bootstrap Guide
 
-This is the single source of truth for taking a fresh machine to a working shell, runtime manager, and personal config. It covers both macOS and Arch Linux, plus every ordering gotcha and manual workaround we hit while bringing this repo online.
+This is the single source of truth for taking a fresh machine to a working shell, runtime manager, and personal config. It covers macOS and the supported apt/pacman Linux families, plus every ordering gotcha and manual workaround we hit while bringing this repo online.
 
 ## The SSH chicken-and-egg problem
 
@@ -115,74 +115,104 @@ mise up
 mise dotfiles status
 ```
 
-## Arch Linux bootstrap
+## Linux bootstrap
 
-The Arch `mise` package in pacman is too old for `mise bootstrap` and `[dotfiles]`, so install the standalone binary first.
-
-```bash
-# 1. Install mise standalone (do NOT use pacman for mise itself)
-curl https://mise.run | sh
-export PATH="$HOME/.local/bin:$PATH"
-
-# 2. Clone dotfiles with HTTPS (SSH key doesn't exist yet)
-GIT_CONFIG_GLOBAL=/dev/null git clone https://github.com/benjaminwestern/dotfiles ~/.dotfiles
-
-# 3. Bootstrap system packages, dotfile symlinks, and default shell
-mise bootstrap
-
-# 4. Install language runtimes and tools
-mise install
-
-# 5. Install TPM and the declared post-bootstrap extras
-mise run bootstrap
-
-# 6. Generate or copy an SSH key, register it at GitHub, then restart the shell
-ssh-keygen -t ed25519 -C "$USER@$(hostname)"
-exec fish
-```
-
-### Install VS Code on Omarchy
-
-VS Code is not installed by the bootstrap. On Omarchy, install it with:
+Ubuntu, Debian, Mint, Raspberry Pi OS, Arch, CachyOS, Manjaro, and
+EndeavourOS use the same public loader. Do not pre-install mise or manually
+replay its package commands: the loader installs standalone mise, installs Gum
+through mise, detects `apt` versus `pacman`, and then presents the editable
+profile plan.
 
 ```bash
-omarchy install vscode
+# Canonical fresh-machine path
+curl -fsSL https://raw.githubusercontent.com/benjaminwestern/dotfiles/main/install.sh \
+  | bash
+
+# Non-interactive plan selection (sudo/chsh authentication remains visible)
+curl -fsSL https://raw.githubusercontent.com/benjaminwestern/dotfiles/main/install.sh \
+  | bash -s -- setup --profile home --shell fish --device-name dev-linux \
+      --git-name "Ada Lovelace" --git-email ada@example.com --non-interactive
 ```
 
-This uses the Omarchy wrapper to install `visual-studio-code-bin` and apply the current theme.
+The Linux `home` preset reconciles native packages with mise's system-package
+manager, system-wide Flatpak applications with mise's Flatpak manager, the
+shared versioned toolset, Ben's dotfiles, `~/code`, Git identity, hostname,
+SSH service, Fish/Fisher, TPM, and browser/PDF defaults. `work` adds Zscaler
+auto-detection. `minimal` leaves Ben's catalogues disabled and collects only
+the adopter-owned identity and naming values. Every stage can be toggled in
+the Gum plan or with the same `--enable-*`/`--disable-*` overrides as macOS.
+
+Administrator authentication can appear when native packages, system
+Flatpaks, hostname, SSH, or login-shell state changes. The script deliberately
+does not put the password in configuration or feed it through a pipe. A full
+home toolset on a small ARM64 VM can take several minutes because `resvg` and
+`tlrc` compile from their official Rust crates when no upstream ARM64 archive
+exists.
+
+Desktop applications are architecture-aware: VS Code is installed everywhere,
+Google Chrome is selected on x86_64, and Chromium is selected on ARM64. The
+selected browser becomes the HTTP/HTTPS/HTML and PDF handler. Flatpak is
+system-wide because that is the ownership model of mise's Flatpak backend.
+
+After convergence, run all three audit perspectives and the idempotence check:
+
+```bash
+~/.dotfiles/install.sh audit --general
+~/.dotfiles/install.sh audit --profile home
+~/.dotfiles/install.sh audit --expect-state
+~/.dotfiles/install.sh ensure --dry-run
+```
+
+The general audit inventories the machine without declaring intentional
+omissions as drift. The profile audit compares with a clean preset. The saved
+plan audit compares with the exact previous customisation. A converged dry run
+reports zero fixes.
+
+### Omarchy and other existing desktops
+
+The bootstrap now installs VS Code through system Flatpak, including on ARM64.
+Existing non-skeleton shell files and directories are preserved; untouched
+`/etc/skel` shell files are safe to replace with the selected dotfile links.
+Distribution desktop customisation outside the declared bootstrap surfaces is
+left alone.
 
 ### Platform-specific mise config
 
 `~/.config/mise` is a directory symlink to `~/.dotfiles/mise`. It contains:
 
 - `config.toml` — shared config (tools, env, aliases, tasks, dotfiles)
-- `config.linux.toml` — pacman packages and Linux login shell
+- `config.linux.toml` — apt/pacman packages, Flatpak apps, Linux tools, and login shell
 - `config.macos.toml` — brew packages and macOS login shell
 - `miserc.toml` — enables `auto_env = true` so mise loads the right platform file
 
 `auto_env` is required because mise does not auto-load `mise.{linux,macos}.toml`
 by default. The `miserc.toml` turns it on early, before config discovery finishes.
 
-Routine maintenance:
+Routine maintenance goes through the same public contract:
 
 ```bash
-mise doctor
-mise up
-mise dotfiles status
-mise run bundle-update
+~/.dotfiles/install.sh ensure
+~/.dotfiles/install.sh ensure --dry-run
+~/.dotfiles/install.sh update
+~/.dotfiles/install.sh audit --expect-state
 ```
 
 ## What `mise bootstrap` does
 
-The generic `mise bootstrap` command, used directly by the Linux path:
+The Linux orchestrator uses mise's bootstrap capabilities in bounded stages:
 
-1. Reads the active platform's `[bootstrap.packages]` declarations and installs
-   its system packages (`pacman:*` on Arch; `brew:*` declarations are available
-   to the separately orchestrated macOS path).
-2. Reads `[bootstrap.user]` and sets the login shell.
-3. Reads `[dotfiles]` and symlinks config from `~/.dotfiles/` into `$HOME`.
+1. A minimal explicit `apt:*` or `pacman:*` set brings Git and download tools
+   online.
+2. The selected native catalogue is reconciled from
+   `[bootstrap.packages]` with `mise bootstrap packages apply`.
+3. The selected system Flatpaks are applied through the same mise interface.
+4. `mise install` reconciles the shared and Linux-specific `[tools]` set.
+5. `mise bootstrap user apply` owns Fish registration and the login-shell
+   change when Fish is selected.
 
-Then `mise install` installs everything in `[tools]`.
+Dotfile collision policy, Git identity, Fisher, TPM, host settings, services,
+and desktop defaults remain explicit script stages so they can be audited and
+enabled independently.
 
 The macOS loader does not run that monolithic sequence. It links the repository
 mise config only when Ben's packages, tools, or dotfiles were selected, invokes
@@ -191,12 +221,12 @@ dotfile, identity, layout, and system stages to the personal layer.
 
 ## The unified config layout
 
-A single file, `~/.dotfiles/mise/config.toml`, is shared by both platforms:
+A single file, `~/.dotfiles/mise/config.toml`, is shared across platforms:
 
 - On macOS, the foundation links `~/.config/mise` to `~/.dotfiles/mise`
   before using any selected Ben catalogue. A neutral `minimal` run with those
   catalogues disabled leaves an adopter's mise config alone.
-- Arch gets the same directory symlink through its bootstrap path.
+- Linux gets the same directory symlink whenever Ben's dotfiles are selected.
 
 Because `~/.config/mise` is a **directory** symlink, both `config.toml` and the task scripts in `scripts/` resolve through the same link. Machine-local secrets live in `~/.config/mise/.env`, which is gitignored.
 

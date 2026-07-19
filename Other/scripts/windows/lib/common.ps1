@@ -61,7 +61,7 @@ $global:ZSCALER_ENV_END   = '# <<< zscaler-bootstrap <<<'
 #   - Flag resolution and display
 #   - Validation checks (Test-CommandExists, file existence, version queries)
 #   - Status output (shows what would pass/fix/skip/fail)
-#   - State file writes (so subsequent dry-runs remember the resolved flags)
+# Dry-run never changes the saved bootstrap plan.
 $global:DRY_RUN = $false
 
 function global:Test-DryRun {
@@ -455,6 +455,11 @@ function global:Write-AllState {
       Side effects: Overwrites STATE_FILE_PATH with a complete snapshot.
       Idempotency: Produces the same file given the same RESOLVED_* values.
   #>
+  if (Test-DryRun) {
+    Write-StatusSkip 'Bootstrap state' -Reason 'dry-run leaves saved plan unchanged'
+    return
+  }
+
   $dir = Split-Path -Parent $STATE_FILE_PATH
   if (-not (Test-Path $dir)) {
     New-Item -ItemType Directory -Force $dir | Out-Null
@@ -467,8 +472,20 @@ function global:Write-AllState {
     "# Do not edit manually; values are overwritten on each bootstrap run."
     "PREFERRED_SHELL=$global:RESOLVED_SHELL"
     "DEVICE_PROFILE=$global:RESOLVED_PROFILE"
+    "DEVICE_NAME=$global:RESOLVED_DEVICE_NAME"
+    "GIT_USER_NAME=$global:RESOLVED_GIT_USER_NAME"
+    "GIT_USER_EMAIL=$global:RESOLVED_GIT_USER_EMAIL"
+    "DOWNLOADS_TARGET=$global:RESOLVED_DOWNLOADS_TARGET"
     "ENABLE_ZSCALER=$global:RESOLVED_ZSCALER"
+    "ENABLE_PACKAGES=$global:RESOLVED_PACKAGES"
+    "ENABLE_APPLICATIONS=$global:RESOLVED_APPLICATIONS"
     "ENABLE_MISE_TOOLS=$global:RESOLVED_MISE_TOOLS"
+    "ENABLE_DOTFILES=$global:RESOLVED_DOTFILES"
+    "ENABLE_CODE_DIRECTORY=$global:RESOLVED_CODE_DIRECTORY"
+    "ENABLE_DOWNLOADS_LINK=$global:RESOLVED_DOWNLOADS_LINK"
+    "ENABLE_GIT_IDENTITY=$global:RESOLVED_GIT_IDENTITY"
+    "ENABLE_WINDOWS_DEFAULTS=$global:RESOLVED_WINDOWS_DEFAULTS"
+    "ENABLE_REMOTE_ACCESS=$global:RESOLVED_REMOTE_ACCESS"
   )
 
   $tmpFile = "${STATE_FILE_PATH}.$([System.IO.Path]::GetRandomFileName())"
@@ -594,12 +611,36 @@ function global:Get-ProfileDefault {
   )
 
   $defaults = @{
-    'work:ENABLE_ZSCALER'     = 'auto'
-    'work:ENABLE_MISE_TOOLS'  = 'true'
-    'home:ENABLE_ZSCALER'     = 'false'
-    'home:ENABLE_MISE_TOOLS'  = 'true'
-    'minimal:ENABLE_ZSCALER'     = 'false'
-    'minimal:ENABLE_MISE_TOOLS'  = 'true'
+    'work:ENABLE_ZSCALER'        = 'auto'
+    'work:ENABLE_PACKAGES'       = 'true'
+    'work:ENABLE_APPLICATIONS'   = 'true'
+    'work:ENABLE_MISE_TOOLS'     = 'true'
+    'work:ENABLE_DOTFILES'       = 'true'
+    'work:ENABLE_CODE_DIRECTORY' = 'true'
+    'work:ENABLE_DOWNLOADS_LINK' = 'false'
+    'work:ENABLE_GIT_IDENTITY'   = 'true'
+    'work:ENABLE_WINDOWS_DEFAULTS' = 'true'
+    'work:ENABLE_REMOTE_ACCESS'  = 'true'
+    'home:ENABLE_ZSCALER'        = 'false'
+    'home:ENABLE_PACKAGES'       = 'true'
+    'home:ENABLE_APPLICATIONS'   = 'true'
+    'home:ENABLE_MISE_TOOLS'     = 'true'
+    'home:ENABLE_DOTFILES'       = 'true'
+    'home:ENABLE_CODE_DIRECTORY' = 'true'
+    'home:ENABLE_DOWNLOADS_LINK' = 'false'
+    'home:ENABLE_GIT_IDENTITY'   = 'true'
+    'home:ENABLE_WINDOWS_DEFAULTS' = 'true'
+    'home:ENABLE_REMOTE_ACCESS'  = 'true'
+    'minimal:ENABLE_ZSCALER'        = 'false'
+    'minimal:ENABLE_PACKAGES'       = 'false'
+    'minimal:ENABLE_APPLICATIONS'   = 'false'
+    'minimal:ENABLE_MISE_TOOLS'     = 'false'
+    'minimal:ENABLE_DOTFILES'       = 'false'
+    'minimal:ENABLE_CODE_DIRECTORY' = 'true'
+    'minimal:ENABLE_DOWNLOADS_LINK' = 'false'
+    'minimal:ENABLE_GIT_IDENTITY'   = 'true'
+    'minimal:ENABLE_WINDOWS_DEFAULTS' = 'true'
+    'minimal:ENABLE_REMOTE_ACCESS'  = 'false'
   }
 
   $key = "${Profile_}:${FlagKey}"
@@ -626,6 +667,10 @@ function global:Resolve-AllFlags {
   param(
     [string]$CliShell   = '',
     [string]$CliProfile = '',
+    [string]$CliDeviceName = '',
+    [string]$CliGitName = '',
+    [string]$CliGitEmail = '',
+    [string]$CliDownloadsTarget = '',
     [hashtable]$EnableFlags  = @{},
     [hashtable]$DisableFlags = @{},
     $ZscalerDetection = $null
@@ -633,6 +678,7 @@ function global:Resolve-AllFlags {
 
   # Read current state file
   $state = Read-State
+  $flagState = if ($CliProfile) { @{} } else { $state }
 
   # Resolve profile first (other flags depend on it)
   $global:RESOLVED_PROFILE = Resolve-DeviceProfile -CliVal $CliProfile
@@ -645,16 +691,12 @@ function global:Resolve-AllFlags {
   if ($EnableFlags.ContainsKey('ZSCALER'))  { $cliZscaler = 'true' }
   if ($DisableFlags.ContainsKey('ZSCALER')) { $cliZscaler = 'false' }
 
-  $cliMiseTools = ''
-  if ($EnableFlags.ContainsKey('MISE_TOOLS'))  { $cliMiseTools = 'true' }
-  if ($DisableFlags.ContainsKey('MISE_TOOLS')) { $cliMiseTools = 'false' }
-
   # Resolve feature flags
   if ($null -ne $ZscalerDetection) {
     $global:RESOLVED_ZSCALER = Resolve-ZscalerSetting `
       -CliVal $cliZscaler `
       -EnvVal ($env:ENABLE_ZSCALER) `
-      -StateVal ($state['ENABLE_ZSCALER']) `
+      -StateVal ($flagState['ENABLE_ZSCALER']) `
       -ProfileDefault (Get-ProfileDefault -Profile_ $global:RESOLVED_PROFILE -FlagKey 'ENABLE_ZSCALER') `
       -HardDefault 'false' `
       -Detection $ZscalerDetection
@@ -662,20 +704,31 @@ function global:Resolve-AllFlags {
     $global:RESOLVED_ZSCALER = Resolve-Setting `
       -CliVal $cliZscaler `
       -EnvVal ($env:ENABLE_ZSCALER) `
-      -StateVal ($state['ENABLE_ZSCALER']) `
+      -StateVal ($flagState['ENABLE_ZSCALER']) `
       -ProfileDefault (Get-ProfileDefault -Profile_ $global:RESOLVED_PROFILE -FlagKey 'ENABLE_ZSCALER') `
       -HardDefault 'false'
   }
 
-  $global:RESOLVED_MISE_TOOLS = Resolve-Setting `
-    -CliVal $cliMiseTools `
-    -EnvVal ($env:ENABLE_MISE_TOOLS) `
-    -StateVal ($state['ENABLE_MISE_TOOLS']) `
-    -ProfileDefault (Get-ProfileDefault -Profile_ $global:RESOLVED_PROFILE -FlagKey 'ENABLE_MISE_TOOLS') `
-    -HardDefault 'true'
+  foreach ($flag in @('PACKAGES', 'APPLICATIONS', 'MISE_TOOLS', 'DOTFILES', 'CODE_DIRECTORY', 'DOWNLOADS_LINK', 'GIT_IDENTITY', 'WINDOWS_DEFAULTS', 'REMOTE_ACCESS')) {
+    $cliValue = ''
+    if ($EnableFlags.ContainsKey($flag)) { $cliValue = 'true' }
+    if ($DisableFlags.ContainsKey($flag)) { $cliValue = 'false' }
+    $key = "ENABLE_$flag"
+    $resolved = Resolve-Setting `
+      -CliVal $cliValue `
+      -EnvVal ([Environment]::GetEnvironmentVariable($key)) `
+      -StateVal ($flagState[$key]) `
+      -ProfileDefault (Get-ProfileDefault -Profile_ $global:RESOLVED_PROFILE -FlagKey $key) `
+      -HardDefault 'false'
+    Set-Variable -Scope Global -Name "RESOLVED_$flag" -Value $resolved
+  }
 
-  # Persist all resolved values
-  Write-AllState
+  $defaultDevice = if ($env:COMPUTERNAME) { $env:COMPUTERNAME.ToLowerInvariant() } else { 'windows-pc' }
+  $global:RESOLVED_DEVICE_NAME = Resolve-Setting -CliVal $CliDeviceName -EnvVal $env:DEVICE_NAME -StateVal $state['DEVICE_NAME'] -HardDefault $defaultDevice
+  $global:RESOLVED_GIT_USER_NAME = Resolve-Setting -CliVal $CliGitName -EnvVal $env:GIT_USER_NAME -StateVal $state['GIT_USER_NAME']
+  $global:RESOLVED_GIT_USER_EMAIL = Resolve-Setting -CliVal $CliGitEmail -EnvVal $env:GIT_USER_EMAIL -StateVal $state['GIT_USER_EMAIL']
+  $global:RESOLVED_DOWNLOADS_TARGET = Resolve-Setting -CliVal $CliDownloadsTarget -EnvVal $env:DOWNLOADS_TARGET -StateVal $state['DOWNLOADS_TARGET']
+
 }
 
 function global:Export-BrewEnvVars {

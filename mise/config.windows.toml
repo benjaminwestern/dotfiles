@@ -1,0 +1,20 @@
+# Windows tools that are portable and versioned by mise. Scoop remains the
+# precursor/native application manager because mise bootstrap packages does
+# not currently provide a Scoop or WinGet manager.
+[tools]
+github-cli = "latest"
+jq = "latest"
+fzf = "latest"
+fd = "latest"
+ripgrep = "latest"
+zoxide = "latest"
+lazygit = "latest"
+neovim = "latest"
+fastfetch = "latest"
+gitleaks = "latest"
+tokei = "latest"
+tlrc = "latest"
+worktrunk = "latest"
+duckdb = "latest"
+caddy = "latest"
+kubectl = "latest"

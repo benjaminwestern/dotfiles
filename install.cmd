@@ -82,6 +82,39 @@ if /I "%~1"=="--profile" (
   goto parse_args
 )
 
+if /I "%~1"=="--device-name" (
+  if "%~2"=="" set "FAIL_MESSAGE=--device-name requires a value" & goto fatal
+  set "FORWARD_ARGS=%FORWARD_ARGS% -DeviceName ""%~2"""
+  shift
+  shift
+  goto parse_args
+)
+
+if /I "%~1"=="--git-name" (
+  if "%~2"=="" set "FAIL_MESSAGE=--git-name requires a value" & goto fatal
+  set "FORWARD_ARGS=%FORWARD_ARGS% -GitName ""%~2"""
+  shift
+  shift
+  goto parse_args
+)
+
+if /I "%~1"=="--git-email" (
+  if "%~2"=="" set "FAIL_MESSAGE=--git-email requires a value" & goto fatal
+  set "FORWARD_ARGS=%FORWARD_ARGS% -GitEmail ""%~2"""
+  shift
+  shift
+  goto parse_args
+)
+
+if /I "%~1"=="--downloads-target" (
+  if "%~2"=="" set "FAIL_MESSAGE=--downloads-target requires a value" & goto fatal
+  set "FORWARD_ARGS=%FORWARD_ARGS% -DownloadsTarget ""%~2"""
+  set "ENABLE_DOWNLOADS_LINK=true"
+  shift
+  shift
+  goto parse_args
+)
+
 if /I "%~1"=="--personal" (
   if /I not "%ENTRY_TARGET%"=="personal" set "FORWARD_ARGS=%FORWARD_ARGS% -Personal"
   shift
@@ -207,6 +240,10 @@ echo.
 echo Options:
 echo   --shell ^<pwsh^>            Set preferred shell ^(persisted to state file^)
 echo   --profile ^<work^|home^|minimal^>  Set device profile preset
+echo   --device-name ^<name^>      Set the Windows computer name
+echo   --git-name ^<name^>         Seed the Git author name
+echo   --git-email ^<address^>     Seed the Git author email
+echo   --downloads-target ^<path^> Target for an optional Downloads junction
 echo   --enable-^<flag^>           Enable a feature flag
 echo   --disable-^<flag^>          Disable a feature flag
 echo   --personal                  Run the personal layer after foundation
@@ -220,7 +257,9 @@ echo   --json                      JSON audit output ^(audit mode only^)
 echo   --populate-state            Populate audit state ^(audit mode only^)
 echo.
 echo Feature flags:
-echo   Foundation: zscaler, mise-tools
+echo   Foundation: packages, applications, mise-tools, dotfiles, code-directory,
+echo               downloads-link, git-identity, windows-defaults, remote-access,
+echo               zscaler
 echo   Personal:   git-config, ssh-config, mise-config, opencode-config,
 echo               profile-extras
 echo.
