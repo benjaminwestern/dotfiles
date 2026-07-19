@@ -3,15 +3,19 @@
 tap "microsoft/mssql-release" # SQL Server drivers
 tap "nikitabobko/tap"         # Aerospace window manager
 
+# Tapped formulae that mise cannot manage because the Microsoft tap does not
+# publish the API metadata required by mise's Homebrew backend.
+brew "microsoft/mssql-release/msodbcsql18" # SQL Server ODBC driver
+brew "microsoft/mssql-release/mssql-tools18" # SQL Server command-line tools
+
 # Fonts
 cask "font-symbols-only-nerd-font"   # Symbols Nerd Font
 cask "font-jetbrains-mono-nerd-font" # JetBrains Mono Nerd Font
-# psudoFont Liga Mono — manually installed from https://github.com/psudo-dev/psudofont-liga-mono (v2.2.0)
-# Not available as a brew cask; install: download .zip from releases, copy .ttf files to ~/Library/Fonts/
+cask "font-psudofont-liga-mono"      # psudoFont Liga Mono
 
 # Standard Apps
 cask "ghostty"             # Terminal Emulator
-cask "google-chrome"       # Web Browser
+cask "google-chrome"       # Web Browser; Chrome owns updates, Homebrew owns presence/removal
 cask "yubico-authenticator" # YubiKey GUI
 cask "podman-desktop"      # Containerisation GUI
 cask "maccy"               # Clipboard Manager
@@ -22,25 +26,23 @@ cask "rectangle"           # Window manager
 cask "ngrok"               # Tunneling
 cask "codex"               # OpenAI coding agent
 
-# Work Apps
-cask "microsoft-edge"
-cask "microsoft-teams"
-
 # Window Management
 cask "aerospace" # Window Manager
 
 # Mac App Store
 brew "mas" # Mac store manager
-mas "DaisyDisk", id: 411643860
-mas "Final Cut Pro", id: 424389933
-mas "Xcode", id: 497799835
-mas "Apple Configurator", id: 1037126344
-mas "Developer", id: 640199958
-mas "Keynote", id: 409183694
-mas "Numbers", id: 409203825
-mas "Pages", id: 409201541
-mas "TestFlight", id: 899247664
-mas "WireGuard", id: 1451685025
+# App Store installation is intentionally manual. Keep this inventory for the
+# operator, but do not let `brew bundle` inspect the account or install apps.
+# DaisyDisk:           411643860
+# Final Cut Pro:       424389933
+# Xcode:               497799835
+# Apple Configurator:  1037126344
+# Developer:           640199958
+# Keynote:             409183694
+# Numbers:             409203825
+# Pages:               409201541
+# TestFlight:          899247664
+# WireGuard:           1451685025
 
 # LaTeX
 cask "mactex" # Full TeX distribution

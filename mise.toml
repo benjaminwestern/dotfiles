@@ -17,6 +17,7 @@ run = """
 d2 --layout=elk ./assets/bootstrap-flow.d2 ./assets/bootstrap-flow.svg
 d2 --layout=elk ./assets/foundation-flow.d2 ./assets/foundation-flow.svg
 d2 --layout=elk ./assets/audit-flow.d2 ./assets/audit-flow.svg
+d2 --layout=elk ./assets/bootstrap-architecture.d2 ./assets/bootstrap-architecture.svg
 """
 
 [tasks.readme-refresh]

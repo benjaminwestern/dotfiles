@@ -1,13 +1,11 @@
-[init]
-	defaultBranch = main
-[color]
-	ui = auto
-[push]
-	autoSetupRemote = true
-[pull]
-	rebase = false
+# Compatibility wrapper for Ben's existing ~/.gitconfig symlink. New bootstrap
+# adopters receive a generated, user-owned ~/.gitconfig instead.
 [user]
 	name = Benjamin Western
 	email = code@benjaminwestern.io
-[url "git@github.com:"]
-	insteadOf = https://github.com
+[include]
+	path = ~/.dotfiles/git/config.shared
+[include]
+	path = ~/.dotfiles/git/github-ssh.inc
+[include]
+	path = ~/.config/git/bootstrap-user.inc

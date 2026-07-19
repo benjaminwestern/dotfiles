@@ -18,6 +18,9 @@ DEFAULT_ARCHIVE_URL="https://github.com/benjaminwestern/dotfiles/archive/refs/he
 MODE=""
 PREFERRED_SHELL=""
 DEVICE_PROFILE=""
+DEVICE_NAME=""
+GIT_USER_NAME=""
+GIT_USER_EMAIL=""
 NON_INTERACTIVE=0
 DRY_RUN=0
 ENABLE_PERSONAL=0
@@ -28,6 +31,7 @@ AUDIT_ARGS=()
 _DYNAMIC_FLAGS=""
 RUN_ROOT=""
 ARCHIVE_RUN_ROOT=""
+INTERACTIVE_TTY=""
 
 SELF_PATH="${BASH_SOURCE[0]:-}"
 SELF_DIR=""
@@ -47,22 +51,53 @@ fail() {
 usage() {
   cat <<'EOF'
 Usage:
-  install.sh <setup|ensure|update|personal|audit> [options]
+  install.sh [setup|ensure|update|personal|audit] [options]
+
+With no arguments on macOS, the normal interface is an interactive gum menu.
 
 Options:
   --shell <fish|zsh>       Set preferred shell (persisted to state file)
   --profile <work|home|minimal>  Set device profile preset
+  --device-name <name>     Set the Mac's ComputerName and hostnames
+  --git-name <name>        Seed the Git author name
+  --git-email <address>    Seed the Git author email
   --enable-<flag>          Enable a feature flag (for example, --enable-zscaler)
   --disable-<flag>         Disable a feature flag (for example, --disable-zscaler)
   --personal               Run the personal layer after foundation
   --non-interactive        Disable all interactive prompts
-  --dry-run                Show what would happen without making any changes
+  --dry-run                Inspect drift and print only required repairs; do not apply them
   --dotfiles-repo <url>    Override dotfiles repository URL
   --dotfiles-dir <path>    Override the local dotfiles checkout path
   --personal-script <path> Override personal bootstrap script path
 
-Feature flags: zscaler, dotfiles, macos-defaults, rosetta, mise-tools,
-               shell-default
+Profiles are editable presets:
+  work     Ben's complete setup plus Zscaler auto-detection
+  home     Ben's complete personal setup without Zscaler
+  minimal  Neutral baseline for other adopters. Homebrew, standalone mise,
+           and mise-managed Gum are installed, while Ben's catalogues
+           start disabled. Device name, Git identity, and ~/code are prompted.
+
+Feature flags:
+  packages, applications, mise-tools, dotfiles, code-directory,
+  downloads-link, git-identity, macos-defaults, remote-access, rosetta,
+  shell-default, zscaler
+
+Granular macOS flags:
+  macos-hostname, macos-dock, macos-desktop, macos-default-apps,
+  macos-menu-bar, macos-mouse, macos-power, macos-finder,
+  macos-screenshots, macos-touch-id
+
+Audit perspectives:
+  audit --general          Current-machine inventory only (default)
+  audit --profile home     Compare with home, work, or minimal defaults
+  audit --expect-state     Compare with the exact last saved bootstrap plan
+
+The current signed-in macOS account is detected and never renamed. Interactive
+runs explain every stage and allow all preset choices to be changed before
+anything planned is applied. Full Xcode and App Store inventory remain manual.
+Git identity is written into a new user-owned ~/.gitconfig; when one already
+exists, interactive runs offer replacement and the safe fallback preserves it
+with a machine-local identity include.
 
 Repo-local scripts:
   Other/scripts/macos/bootstrap-macos.zsh
@@ -71,12 +106,19 @@ Repo-local scripts:
   Other/scripts/macos/audit-macos.zsh
 
 Examples:
+  curl -fsSL https://raw.githubusercontent.com/benjaminwestern/dotfiles/main/install.sh | bash
+  install.sh
   install.sh setup --shell fish --profile work
+  install.sh setup --profile minimal --shell zsh --device-name ada-mac \
+    --git-name "Ada Lovelace" --git-email ada@example.com
   install.sh ensure --personal
   install.sh update --dry-run
   install.sh personal --non-interactive --shell zsh
   install.sh setup --dry-run --shell fish --profile work
   install.sh audit
+  install.sh audit --profile home
+  install.sh audit --profile minimal
+  install.sh audit --expect-state
   install.sh audit --section tools
   install.sh audit --json
 
@@ -104,6 +146,12 @@ EOF
 _flag_name_to_var() {
   local raw="$1"
   local upper
+  if [[ "$raw" == macos-* && "$raw" != "macos-defaults" ]]; then
+    raw="${raw#macos-}"
+    upper="$(echo "$raw" | tr '[:lower:]-' '[:upper:]_')"
+    echo "MACOS_${upper}"
+    return 0
+  fi
   upper="$(echo "$raw" | tr '[:lower:]-' '[:upper:]_')"
   echo "ENABLE_${upper}"
 }
@@ -130,6 +178,23 @@ parse_args() {
       --profile)
         [[ $# -ge 2 ]] || fail "--profile requires a value"
         DEVICE_PROFILE="$2"
+        shift 2
+        ;;
+      --device-name)
+        [[ $# -ge 2 ]] || fail "--device-name requires a value"
+        DEVICE_NAME="$2"
+        shift 2
+        ;;
+      --git-name)
+        [[ $# -ge 2 ]] || fail "--git-name requires a value"
+        GIT_USER_NAME="$2"
+        _DYNAMIC_FLAGS="${_DYNAMIC_FLAGS:+${_DYNAMIC_FLAGS}$'\n'}ENABLE_GIT_IDENTITY=true"
+        shift 2
+        ;;
+      --git-email)
+        [[ $# -ge 2 ]] || fail "--git-email requires a value"
+        GIT_USER_EMAIL="$2"
+        _DYNAMIC_FLAGS="${_DYNAMIC_FLAGS:+${_DYNAMIC_FLAGS}$'\n'}ENABLE_GIT_IDENTITY=true"
         shift 2
         ;;
       --enable-*)
@@ -183,9 +248,6 @@ parse_args() {
     esac
   done
 
-  if [[ -z "$MODE" ]]; then
-    MODE="setup"
-  fi
 }
 
 detect_os() {
@@ -200,6 +262,9 @@ detect_os() {
 export_flags() {
   export PREFERRED_SHELL
   export DEVICE_PROFILE
+  export DEVICE_NAME
+  export GIT_USER_NAME
+  export GIT_USER_EMAIL
   export NON_INTERACTIVE
   export DRY_RUN
   export ENABLE_PERSONAL
@@ -225,12 +290,91 @@ local_repo_root() {
 }
 
 have_git() {
-  command -v git >/dev/null 2>&1
+  local git_path=""
+  git_path="$(command -v git 2>/dev/null || true)"
+  [[ -n "$git_path" ]] || return 1
+
+  # A factory macOS image exposes /usr/bin/git as an Xcode shim before the
+  # Command Line Tools payload exists. `command -v` alone therefore produces a
+  # false positive and makes the loader attempt its clone too early.
+  if [[ "$(uname -s)" == "Darwin" && "$git_path" == "/usr/bin/git" ]] \
+    && ! xcode-select -p >/dev/null 2>&1; then
+    return 1
+  fi
+
+  bootstrap_git --version >/dev/null 2>&1
+}
+
+bootstrap_git() {
+  GIT_CONFIG_GLOBAL=/dev/null command git "$@"
+}
+
+configure_interactive_input() {
+  [[ "$OS" == "macos" ]] || return 0
+  [[ "$NON_INTERACTIVE" -eq 0 ]] || return 0
+  [[ "$MODE" != "audit" ]] || return 0
+  [[ -t 0 ]] && return 0
+
+  if { true </dev/tty; } 2>/dev/null; then
+    INTERACTIVE_TTY="/dev/tty"
+  else
+    fail "Interactive bootstrap requires a terminal; use --non-interactive only after prerequisites are already available"
+  fi
+}
+
+read_from_operator() {
+  local prompt="$1"
+  if [[ -n "$INTERACTIVE_TTY" ]]; then
+    read -r -p "$prompt" </dev/tty
+  else
+    read -r -p "$prompt"
+  fi
+}
+
+ensure_macos_repo_prerequisites() {
+  [[ "$OS" == "macos" ]] || return 0
+  [[ "$MODE" != "audit" ]] || return 0
+
+  # Local and already-cloned entrypoints do not need Git just to start.
+  local local_root=""
+  if local_root="$(local_repo_root 2>/dev/null)"; then
+    return 0
+  fi
+  if [[ -f "$DOTFILES_DIR/Other/scripts/macos/bootstrap-macos.zsh" ]]; then
+    return 0
+  fi
+  if have_git; then
+    return 0
+  fi
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    display_message "DRY RUN: Command Line Tools would be installed before cloning $DOTFILES_REPO"
+    return 0
+  fi
+  if [[ "$NON_INTERACTIVE" -eq 1 ]]; then
+    fail "A fresh Mac requires the interactive Command Line Tools installer before the repository can be cloned"
+  fi
+
+  display_message "Installing Apple's Command Line Tools"
+  xcode-select --install >/dev/null 2>&1 || true
+  echo "The Apple installer is open. Choose Continue, accept the licence, and wait for it to finish."
+
+  while ! xcode-select -p >/dev/null 2>&1; do
+    read_from_operator "Press Return after the Command Line Tools installer has completed: "
+    if ! xcode-select -p >/dev/null 2>&1; then
+      echo "Command Line Tools are not ready yet; finish the Apple installer before continuing."
+    fi
+  done
+
+  if ! have_git; then
+    fail "Command Line Tools completed, but Git is still unavailable"
+  fi
+  display_message "Command Line Tools and Apple Git are ready"
 }
 
 clone_repo_with_git() {
   display_message "Cloning dotfiles repo to $DOTFILES_DIR"
-  git clone "$DOTFILES_REPO" "$DOTFILES_DIR"
+  bootstrap_git clone "$DOTFILES_REPO" "$DOTFILES_DIR"
 }
 
 download_repo_archive() {
@@ -285,7 +429,7 @@ maybe_persist_repo_after_archive_run() {
 
   if have_git; then
     display_message "Cloning persistent dotfiles repo to $DOTFILES_DIR"
-    git clone "$DOTFILES_REPO" "$DOTFILES_DIR"
+    bootstrap_git clone "$DOTFILES_REPO" "$DOTFILES_DIR"
     return
   fi
 
@@ -295,14 +439,33 @@ maybe_persist_repo_after_archive_run() {
 run_macos_entrypoint() {
   local exit_code
 
-  if [[ "$MODE" == "audit" ]]; then
-    /bin/zsh "$RUN_ROOT/Other/scripts/macos/bootstrap-macos.zsh" audit "${AUDIT_ARGS[@]}"
+  if [[ -z "$MODE" ]]; then
+    if [[ -n "$INTERACTIVE_TTY" ]]; then
+      /bin/zsh "$RUN_ROOT/Other/scripts/macos/bootstrap-macos.zsh" </dev/tty
+    else
+      /bin/zsh "$RUN_ROOT/Other/scripts/macos/bootstrap-macos.zsh"
+    fi
+    exit_code=$?
+  elif [[ "$MODE" == "audit" ]]; then
+    if [[ ${#AUDIT_ARGS[@]} -gt 0 ]]; then
+      /bin/zsh "$RUN_ROOT/Other/scripts/macos/bootstrap-macos.zsh" audit "${AUDIT_ARGS[@]}"
+    else
+      /bin/zsh "$RUN_ROOT/Other/scripts/macos/bootstrap-macos.zsh" audit
+    fi
     exit_code=$?
   elif [[ "$MODE" == "personal" ]]; then
-    /bin/zsh "$RUN_ROOT/Other/scripts/macos/bootstrap-macos.zsh" personal
+    if [[ -n "$INTERACTIVE_TTY" ]]; then
+      /bin/zsh "$RUN_ROOT/Other/scripts/macos/bootstrap-macos.zsh" personal </dev/tty
+    else
+      /bin/zsh "$RUN_ROOT/Other/scripts/macos/bootstrap-macos.zsh" personal
+    fi
     exit_code=$?
   else
-    /bin/zsh "$RUN_ROOT/Other/scripts/macos/bootstrap-macos.zsh" "$MODE"
+    if [[ -n "$INTERACTIVE_TTY" ]]; then
+      /bin/zsh "$RUN_ROOT/Other/scripts/macos/bootstrap-macos.zsh" "$MODE" </dev/tty
+    else
+      /bin/zsh "$RUN_ROOT/Other/scripts/macos/bootstrap-macos.zsh" "$MODE"
+    fi
     exit_code=$?
   fi
 
@@ -312,13 +475,32 @@ run_macos_entrypoint() {
 
 parse_args "$@"
 OS="$(detect_os)"
+if [[ -z "$MODE" && "$OS" != "macos" ]]; then
+  MODE="setup"
+fi
+configure_interactive_input
+ensure_macos_repo_prerequisites
 ensure_run_root
 export_flags
 
-display_message "Install Entry"
-display_message "OS: $OS | Mode: $MODE"
-if [[ "$DRY_RUN" -eq 1 ]]; then
-  display_message "DRY RUN — no changes will be made"
+QUIET_ENTRY=0
+if [[ "$MODE" == "audit" ]]; then
+  if [[ ${#AUDIT_ARGS[@]} -gt 0 ]]; then
+    for audit_arg in "${AUDIT_ARGS[@]}"; do
+      if [[ "$audit_arg" == "--json" ]]; then
+        QUIET_ENTRY=1
+        break
+      fi
+    done
+  fi
+fi
+
+if [[ "$QUIET_ENTRY" -eq 0 ]]; then
+  display_message "Install Entry"
+  display_message "OS: $OS | Mode: ${MODE:-interactive}"
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    display_message "DRY RUN — no changes will be made"
+  fi
 fi
 
 run_linux_entrypoint() {

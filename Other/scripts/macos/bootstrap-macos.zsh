@@ -8,6 +8,8 @@ usage() {
 Usage:
   bootstrap-macos.zsh [foundation|audit|personal] [args]
 
+With no arguments, launches the unified interactive macOS workflow.
+
 Targets:
   foundation  Runs foundation-macos.zsh
   audit       Runs audit-macos.zsh
@@ -18,8 +20,11 @@ Convenience:
   treats it as a foundation mode and dispatches to foundation-macos.zsh.
 
 Examples:
+  ./Other/scripts/macos/bootstrap-macos.zsh
   ./Other/scripts/macos/bootstrap-macos.zsh foundation setup --shell fish --profile work
   ./Other/scripts/macos/bootstrap-macos.zsh ensure --shell fish --profile work
+  ./Other/scripts/macos/bootstrap-macos.zsh audit --general
+  ./Other/scripts/macos/bootstrap-macos.zsh audit --profile home
   ./Other/scripts/macos/bootstrap-macos.zsh audit --json
   ./Other/scripts/macos/bootstrap-macos.zsh personal --dry-run
 EOF

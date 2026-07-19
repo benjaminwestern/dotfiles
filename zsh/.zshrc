@@ -1,10 +1,16 @@
-# Homebrew PATH (for Apple Silicon)
-export PATH=$PATH:/opt/homebrew/bin
-export PATH=$PATH:/opt/homebrew/sbin
+# Keep zsh's path array unique when this file is sourced more than once.
+typeset -U path PATH
+
+# Initialise Homebrew for Apple Silicon and Intel prefixes.
+if [[ -x /opt/homebrew/bin/brew ]]; then
+  eval "$(/opt/homebrew/bin/brew shellenv)"
+elif [[ -x /usr/local/bin/brew ]]; then
+  eval "$(/usr/local/bin/brew shellenv)"
+fi
 
 # Add ~/.local/bin to PATH
 if [ -d "$HOME/.local/bin" ]; then
-  export PATH="$HOME/.local/bin:$PATH"
+  path=("$HOME/.local/bin" $path)
 fi
 
 # Initialize mise
@@ -18,4 +24,3 @@ if command -v wt >/dev/null 2>&1; then eval "$(command wt config shell init zsh)
 if command -v zoxide &> /dev/null; then
   eval "$(zoxide init --cmd cd zsh)"
 fi
-
