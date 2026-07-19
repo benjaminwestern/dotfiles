@@ -37,8 +37,9 @@ Both platforms share the same operator model even though the plumbing differs.
 
 - The root [`install.sh`](../../install.sh) and
   [`install.cmd`](../../install.cmd) files are the public loaders.
-- The foundation layer installs or repairs shared tooling and can optionally
-  hand off to the personal layer.
+- The foundation layer installs or repairs shared tooling. macOS automatically
+  hands selected application, dotfile, identity, layout, and system stages to
+  the personal layer; Windows keeps its explicit personal handoff.
 - The personal layer applies repo-specific preferences such as dotfiles,
   defaults, shell choices, and copied config.
 - The audit path is read-only by default. Windows also exposes a repair path
@@ -67,8 +68,9 @@ implementation can be signed before it runs.
 
 The foundation flow answers the next question: what actually happens during
 `setup`, `ensure`, or `update`? This is the shared layer that installs the base
-tooling, repairs shell activation, seeds `mise`, applies trust settings, and
-then optionally enters the personal layer.
+tooling, repairs shell activation, links or seeds `mise` configuration when
+selected, applies trust settings, and then enters the personal layer when the
+resolved plan contains selected personal stages.
 
 The diagram below is rendered from
 [`../../assets/foundation-flow.d2`](../../assets/foundation-flow.d2).
@@ -77,7 +79,7 @@ The diagram below is rendered from
 
 `setup` and `ensure` follow the sequence above. `update` adds package-manager
 upgrade steps before it falls back into the same ensure-style validation and
-optional personal handoff.
+resolved personal handoff.
 
 ![Audit flow banner](../../assets/readme/scripts-audit-flow.svg)
 
@@ -85,6 +87,14 @@ The audit flow is the safest way to understand the current machine state before
 you change anything. It is read-only on macOS. On Windows, `-PopulateState`
 adds one optional write after the terminal report so you can capture
 discovered values in the shared state file.
+
+The root macOS audit menu has two deliberately separate perspectives. General
+inventory prints actual state without calling optional or intentionally absent
+features drift. Profile comparison asks for `minimal`, `home`, or `work`, then
+prints the same inventory plus drift from that profile's defaults. The automatic
+post-bootstrap audit uses the exact saved customisations instead. JSON records
+the selected `audit_context`, keeps foundational state under `system`, `shell`,
+`tools`, and `configs`, and uses `current` plus `drift` for comparisons.
 
 The diagram below is rendered from
 [`../../assets/audit-flow.d2`](../../assets/audit-flow.d2).
@@ -139,8 +149,8 @@ reason about the bootstrap without memorising every implementation detail.
 | State file | `~/.config/dotfiles/state.env` |
 | Resolution precedence | CLI flag, environment variable, state file, device profile, interactive prompt, hard-coded default |
 | Modes | `setup`, `ensure`, `update`, `personal`, `audit` |
-| Dry-run | `--dry-run` on macOS, `-DryRun` on Windows |
-| Profiles | `work`, `home`, `minimal` |
+| Dry-run | `--dry-run` on macOS, `-DryRun` on Windows; inspect current state and print only required repairs without applying them |
+| Profiles | `work` (Ben's work setup), `home` (Ben's personal setup), `minimal` (neutral adopter baseline) |
 | First-run recommendation | Use the public loaders, not the direct implementation files |
 
 ![Profiles and flags banner](../../assets/readme/scripts-profiles-flags.svg)
@@ -150,8 +160,10 @@ path when a machine needs something different.
 
 | Platform | Scope | Flags |
 | --- | --- | --- |
-| macOS | Foundation and package selection | `zscaler`, `mise-tools` |
-| macOS | Personal layer | `dotfiles`, `macos-defaults`, `rosetta`, `shell-default` |
+| macOS | Ben's catalogues | `packages`, `applications`, `mise-tools`, `dotfiles` |
+| macOS | Adopter layout and identity | `code-directory`, `downloads-link`, `git-identity` plus `--device-name`, `--git-name`, `--git-email` |
+| macOS | System stages | `macos-defaults`, `remote-access`, `rosetta`, `shell-default`, `zscaler` |
+| macOS | Preference groups | `macos-hostname`, `macos-dock`, `macos-desktop`, `macos-default-apps`, `macos-menu-bar`, `macos-mouse`, `macos-power`, `macos-finder`, `macos-screenshots`, `macos-touch-id` |
 | Windows | Foundation | `zscaler`, `mise-tools` |
 | Windows | Personal layer | `git-config`, `ssh-config`, `mise-config`, `opencode-config`, `profile-extras` |
 
@@ -166,12 +178,163 @@ Use the root loader for normal setup and audit work. Drop to the repo-local
 router only when you need to inspect or debug a local stage directly.
 
 ```bash
-./install.sh setup --shell fish --profile work --personal
-./install.sh ensure --personal
+# Factory Mac: no separate prerequisite commands
+curl -fsSL https://raw.githubusercontent.com/benjaminwestern/dotfiles/main/install.sh | bash
+
+# Existing checkout
+./install.sh
+./install.sh ensure
 ./install.sh update
+./install.sh audit --general
+./install.sh audit --profile home
 ./install.sh audit --json
 ./Other/scripts/macos/bootstrap-macos.zsh ensure --shell fish --profile work
 ```
+
+The streamed no-argument path is the canonical fresh-machine flow. It keeps the
+script stream separate from `/dev/tty`, uses the terminal only for operator
+input, and owns Command Line Tools, repository cloning, Homebrew, standalone
+mise, mise-managed Gum, and the remaining selected stages in one run.
+
+Homebrew, standalone mise, and mise-managed Gum are the mandatory foundation.
+The interactive menu has an explanation page, then treats each profile as an
+editable preset. `minimal` leaves all Ben's catalogues off by
+default and prompts for adopter-owned values such as device name and Git author
+identity. It defaults to creating `~/code`; the Downloads-to-iCloud link is an
+explicit choice. The current macOS account supplies home paths and service ACLs
+but is never renamed.
+
+Git configuration is user-owned rather than a required mise symlink. With no
+`~/.gitconfig`, bootstrap generates one from the selected identity and, when
+Ben's dotfiles are selected, the tracked `git/config.shared`. When a config exists, the interactive flow offers
+replacement; preserving it writes `~/.config/git/bootstrap-user.inc` and adds
+only that include. Generated configs activate the separate GitHub SSH rewrite
+only after SSH authentication succeeds. Ben's legacy symlink remains valid.
+
+The Downloads option safely replaces an absent folder or a fresh folder that
+contains only `.localized` and `.DS_Store`. It clears macOS's stock deny-delete
+ACL only after that check and refuses to overwrite real files or an unexpected
+symlink.
+
+`./install.sh ensure --dry-run` is the repair preview. It uses the same
+authoritative checks as the audit and reports only real drift: missing
+declarative packages, missing or outdated Brewfile entries, unapplied dotfiles,
+effective Git identity or configuration-mode differences, individual macOS
+preference changes, and remote-service or ACL differences. It does not write the state file, apply
+defaults, install software, change services, or refresh the dotfiles remote.
+
+Chrome remains declared in the Brewfile, but it is a vendor-self-updating cask.
+Bootstrap audit, ensure, and update commands set Homebrew's supported
+`HOMEBREW_NO_UPGRADE_AUTO_UPDATES_CASKS=1` policy: Homebrew owns whether Chrome
+is installed, while Chrome owns its privileged in-place updates. Ordinary
+formulae and non-self-updating casks continue to be upgraded by Homebrew.
+Bootstrap and audit also verify Chrome's deep signature, Google signing identity,
+and Gatekeeper assessment when quarantined; a broken installation cannot be
+reported as successful.
+
+The macOS preference groups have these exact effects:
+
+| Group | Applied behavior |
+| --- | --- |
+| Hostname | Sets `ComputerName`, `LocalHostName`, and `HostName` to the separately chosen device name; it never renames the account |
+| Dock | Moves the Dock left, enables immediate auto-hide, clears the factory entries, pins installed Ghostty and Chrome, removes folders/Recents |
+| Desktop | Hides desktop and Stage Manager widgets and disables click-wallpaper-to-show-desktop |
+| Default apps | Makes Chrome the HTTP, HTTPS, HTML, XHTML, and PDF handler while preserving unrelated LaunchServices records |
+| Menu bar | Shows Wi-Fi, Bluetooth, and Sound; shows battery percentage when present; hides Spotlight; uses `DDD DD MMM` and 24-hour `HH:MM:SS` |
+| Mouse | Disables pointer acceleration with `com.apple.mouse.scaling = -1` |
+| Power | Mac mini: display/disk sleep 10 minutes, system sleep off, restart after power loss, network wake/keepalive on. MacBook Air/Pro: display/disk sleep 10 minutes and system sleep 20 minutes |
+| Finder | Shows path/status bars, all extensions, and `~/Library`; suppresses the extension-change warning but preserves the empty-Trash warning |
+| Screenshots | Uses PNG |
+| Touch ID | Enables Touch ID for `sudo`, including inside tmux, through `/etc/pam.d/sudo_local` and Homebrew `pam-reattach` |
+
+#### FileVault, authenticated restart, and headless access
+
+The macOS bootstrap enables Remote Login and Screen Sharing when that personal
+stage is selected, and its Mac-mini power profile keeps the machine awake,
+network-reachable, and configured to restart after power restoration. It does
+not enable or disable FileVault, stage a FileVault key, restart the Mac, or
+automatically invoke `fdesetup authrestart`. Those are security-sensitive,
+operator-owned actions.
+
+There are two distinct restart paths:
+
+| Restart path | FileVault behavior | Remote recovery |
+| --- | --- | --- |
+| Planned authenticated restart | `fdesetup` temporarily stages an additional unlock-key copy for the next boot | The next boot can pass FileVault without interactive unlock if the command succeeds |
+| Normal or unexpected restart | No unlock key is staged; FileVault remains locked | On Apple silicon with macOS 26 or later, authenticate over pre-boot SSH, or unlock locally |
+
+Before relying on either path, confirm the machine state:
+
+```bash
+./install.sh audit
+fdesetup status
+fdesetup supportsauthrestart
+sudo fdesetup list
+```
+
+`supportsauthrestart` returning `true` reports hardware/OS capability only.
+FileVault must also be on, and the authenticating account must be an enabled
+FileVault user. Keep the personal recovery key somewhere secure and separate
+from the Mac before testing any remote-only restart workflow.
+
+For a planned restart, save all work and make sure a physical or recovery path
+exists, then run:
+
+```bash
+sudo fdesetup authrestart -delayminutes 1
+```
+
+Expect administrator authentication and a FileVault password prompt; these may
+appear as separate prompts even when the same account is used. With no
+`-delayminutes` option, or with `0`, restart is immediate. A value of `-1`
+stages the authenticated restart until the next manually initiated restart and
+therefore leaves the reduced-protection window open longer; do not use it as a
+routine bootstrap setting. Never put a FileVault password or recovery key in a
+script, command line, state file, log, or persistent input plist.
+
+An authenticated restart is deliberately temporary. According to the installed
+`fdesetup(8)` manual, it reduces FileVault protection by retaining an additional
+unlock-key copy in memory and, on supported hardware, the system controller.
+After the subsequent boot unlocks successfully, that staged key is removed. It
+does not permanently configure future reboots and does not help after a later
+unexpected power loss.
+
+For a normal or unexpected restart on Apple silicon with macOS 26 or later,
+Remote Login and a supported pre-boot network are required. Connect from a
+second machine using a FileVault-enabled account:
+
+```bash
+ssh <filevault-user>@<mac-host-or-address>
+```
+
+Use password authentication at the pre-boot prompt. The encrypted data volume
+is still locked at that point, so the user's normal `~/.ssh/config`, public-key
+authorizations, shell, and other files are unavailable. The pre-boot SSH
+connection unlocks the volume rather than opening a shell; macOS disconnects
+it while mounting the data volume and starting normal services. Wait, then
+reconnect with the normal SSH configuration. Screen Sharing becomes useful
+only after the volume has been unlocked and its dependent services have
+started.
+
+Apple documents these pre-boot network requirements:
+
+- Ethernet must be open or otherwise unauthenticated.
+- Wi-Fi must be a previously joined open network or WPA2 Personal/pre-shared-key
+  network.
+- If no supported network is available, local FileVault authentication is
+  required.
+
+`pmset autorestart 1` only powers the Mac back on after power is restored;
+`womp`, `tcpkeepalive`, and `sleep 0` improve headless reachability but do not
+bypass FileVault. Likewise, the `DisableFDEAutoLogin` audit value describes
+whether macOS can hand the FileVault unlock credential to the login window; it
+is not the ordinary unencrypted automatic-login preference.
+
+References: [Apple Platform Security — Managing FileVault in
+macOS](https://support.apple.com/guide/security/sec8447f5049/web), [Apple
+Platform Deployment — Intro to
+FileVault](https://support.apple.com/guide/deployment/dep82064ec40/web), and the
+installed `man fdesetup` documentation.
 
 ### Windows
 
@@ -218,67 +381,58 @@ Get-Help .\Other\scripts\windows\resign-windows.ps1 -Detailed
 
 ![Manual recovery banner](../../assets/readme/scripts-manual-recovery.svg)
 
-This section is a temporary macOS fallback. It exists while the macOS overhaul
-is still closing the remaining automation gaps, and it should disappear once
-the normal bootstrap path no longer needs a manual escape hatch.
+This section is an operator recovery reference for interrupted third-party or
+Apple installers. None of these commands are prerequisites for the canonical
+streamed loader.
 
 <details>
 <summary>Show manual macOS recovery steps</summary>
 
-Use this only as a last resort. The normal Windows recovery path still depends
-on the signed `.cmd` wrappers documented elsewhere in this README.
+Use this only to recover a macOS run interrupted inside an Apple or third-party
+installer. The normal recovery action is to finish or cancel that installer,
+then re-enter the same idempotent loader and choose the same plan.
 
-1. Install the basic prerequisites.
+1. If Command Line Tools was interrupted, reopen its installer and wait for it
+   to finish. The GUI's Continue and licence steps cannot be silently accepted.
 
    ```bash
    xcode-select --install
-   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-   eval "$(/opt/homebrew/bin/brew shellenv)"
-   brew install git fish
+   xcode-select -p
+   pkgutil --pkg-info=com.apple.pkg.CLTools_Executables
    ```
 
-2. Clone the repo and move the remote to SSH if you plan to push changes.
+2. If the checkout was never created, clone it only after operational Git is
+   available. Bypass any global HTTPS-to-SSH rewrite during this recovery clone.
 
    ```bash
-   git clone https://github.com/benjaminwestern/dotfiles ~/.dotfiles
-   cd ~/.dotfiles
-   git remote set-url origin git@github.com:benjaminwestern/dotfiles.git
+   GIT_CONFIG_GLOBAL=/dev/null git clone \
+     https://github.com/benjaminwestern/dotfiles "$HOME/.dotfiles"
    ```
 
-3. Install the base package layer and `mise`.
+3. Re-run the local loader. It will converge Homebrew, standalone mise,
+   mise-managed Gum, configuration selection, packages, tools, and personal
+   stages in the correct order. Select the same editable profile and stages as
+   the interrupted run.
 
    ```bash
-   brew bundle --file=~/.dotfiles/brew/Brewfile
-   curl https://mise.run | sh
-   export PATH="$HOME/.local/bin:$PATH"
-   eval "$(mise activate bash)"
+   "$HOME/.dotfiles/install.sh"
    ```
 
-4. Prepare the shell and config directories before you symlink anything.
+   If there is still no checkout, re-run the public loader instead:
 
    ```bash
-   sudo sh -c 'echo /opt/homebrew/bin/fish >> /etc/shells'
-   chsh -s /opt/homebrew/bin/fish
-   mkdir -p ~/.ssh && chmod 700 ~/.ssh
-   mkdir -p ~/.config
-   mkdir -p ~/.codex
+   curl -fsSL \
+     https://raw.githubusercontent.com/benjaminwestern/dotfiles/main/install.sh \
+     | bash
    ```
 
-5. Apply the managed dotfiles and language toolchain.
+4. Run the read-only audit after convergence. Use a direct implementation
+   entrypoint only for focused diagnosis; do not manually replay Brewfile,
+   dotfile, shell-default, or macOS-default commands out of order.
 
    ```bash
-   mise dotfiles apply
-   mise install
-   mise doctor
-   mise dotfiles status
-   ```
-
-6. Apply the machine-specific finishing steps.
-
-   ```bash
-   ~/.dotfiles/Other/scripts/macos/defaults-macos.sh "$(hostname -s)"
-   /usr/sbin/softwareupdate --install-rosetta --agree-to-license
-   exec /opt/homebrew/bin/fish
+   "$HOME/.dotfiles/install.sh" audit
+   /bin/zsh "$HOME/.dotfiles/Other/scripts/macos/audit-macos.zsh"
    ```
 
 </details>
@@ -307,8 +461,8 @@ The bootstrap contract is in place on macOS and Windows. The remaining work is
 mostly about proving the current flow on real machines and in CI, not
 redesigning the current two-layer model.
 
-- Validate the macOS foundation flow on a true bare Mac and tighten pre-flight
-  checks, validation, and repair paths from the results.
+- Repeat the proven macOS flow on a second erased Mac to validate the neutral
+  adopter prompts and confirm convergence independently of the first machine.
 - Validate the Windows personal layer on a real Windows machine so the repo
   copy, profile, SSH, Git, and config flows are proven outside dry-run paths.
 - Add CI coverage on ephemeral macOS and Windows runners so `setup`, `ensure`,

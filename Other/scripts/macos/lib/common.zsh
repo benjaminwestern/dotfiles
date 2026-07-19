@@ -35,9 +35,10 @@ typeset -g STATE_FILE_PATH="$HOME/.config/dotfiles/state.env"
 # -- Status symbols -----------------------------------------------------------
 # Unicode glyphs used by the status_* family of functions. Defined once here so
 # every call site stays consistent and the symbols are easy to change.
-typeset -g STATUS_SYM_PASS="\u2713"   # check mark
-typeset -g STATUS_SYM_FAIL="\u2717"   # ballot x
-typeset -g STATUS_SYM_SKIP="\u25CB"   # white circle
+typeset -g STATUS_SYM_PASS=$'\u2713'   # check mark
+typeset -g STATUS_SYM_FAIL=$'\u2717'   # ballot x
+typeset -g STATUS_SYM_SKIP=$'\u25CB'   # white circle
+typeset -g STATUS_SYM_FIX=$'\u21BB'    # clockwise open-circle arrow
 
 # -- Dracula palette ----------------------------------------------------------
 # Canonical hex values from https://draculatheme.com/contribute. Used by
@@ -78,7 +79,7 @@ typeset -g NON_INTERACTIVE="${NON_INTERACTIVE:-0}"
 # What counts as "destructive":
 #   - Installing software (brew install, scoop install, mise install, softwareupdate)
 #   - Writing or modifying files (write_managed_block, Set-Content, tee, etc.)
-#   - Changing system state (chsh, sudo, defaults write, killall, git config --global)
+#   - Changing system state (chsh, sudo, defaults write, killall)
 #   - Network fetches that trigger installs (curl | bash, Homebrew installer)
 #
 # What still runs in dry-run mode:
@@ -86,7 +87,7 @@ typeset -g NON_INTERACTIVE="${NON_INTERACTIVE:-0}"
 #   - Flag resolution (reads state file, prompts user)
 #   - Validation checks (command_exists, file existence, version queries)
 #   - Status output (shows what would pass/fix/skip/fail)
-#   - State file writes (so subsequent dry-runs remember the resolved flags)
+#   - Resolution previews (the state file is deliberately left unchanged)
 typeset -g DRY_RUN="${DRY_RUN:-0}"
 
 # dry_run_active -- Check whether dry-run mode is enabled
@@ -144,6 +145,56 @@ run_or_dry() {
     return 0
   fi
   "$@"
+}
+
+# bootstrap_git -- Run bootstrap-owned Git operations without user global config
+#
+# Local repository config remains available, while URL rewrites, signing rules,
+# credential helpers, and CA settings from ~/.gitconfig cannot alter bootstrap
+# transport or behavior.
+bootstrap_git() {
+  GIT_CONFIG_GLOBAL=/dev/null command git "$@"
+}
+
+# bootstrap_mise -- Run bootstrap-owned mise operations from the home context
+#
+# This loads the global ~/.config/mise configuration without discovering a
+# project-local mise.toml from the caller's working directory. Project trust
+# remains a separate, explicit user decision.
+bootstrap_mise() {
+  command mise -C "$HOME" "$@"
+}
+
+# bootstrap_tool_path -- Resolve a command from PATH or the active mise config
+bootstrap_tool_path() {
+  local tool="${1:?bootstrap_tool_path requires a tool name}"
+  command -v "$tool" 2>/dev/null \
+    || { command_exists mise && bootstrap_mise which "$tool" 2>/dev/null; } \
+    || return 1
+}
+
+# bootstrap_package_status_json -- Return the complete declarative package state
+bootstrap_package_status_json() {
+  command_exists mise || return 1
+  bootstrap_mise bootstrap packages status --json 2>/dev/null
+}
+
+bootstrap_package_missing_lines() {
+  command_exists jq || return 1
+  bootstrap_package_status_json | jq -r '
+    to_entries[] as $manager
+    | $manager.value.packages[]?
+    | select(.state != "installed")
+    | "\($manager.key):\(.package)\t\(.state)"
+  '
+}
+
+bootstrap_package_counts() {
+  command_exists jq || return 1
+  bootstrap_package_status_json | jq -r '
+    [to_entries[].value.packages[]?] as $packages
+    | "\($packages | map(select(.state == "installed")) | length)\t\($packages | length)\t\($packages | map(select(.state != "installed")) | length)"
+  '
 }
 
 
@@ -207,6 +258,44 @@ _inventory_line() {
   printf "  %-30s %s\n" "$1" "$2"
 }
 
+# detect_zsh_config_mode -- Report who owns the effective zsh configuration
+#
+# Returns one of:
+#   dotfiles -- both tracked zsh profiles are applied
+#   fallback -- the foundation-only managed block is present
+#   none     -- neither configuration path is complete
+detect_zsh_config_mode() {
+  local dotfiles_dir="${DOTFILES_DIR:-$HOME/.dotfiles}"
+
+  if [[ -e "$HOME/.zprofile" && -e "$HOME/.zshrc" \
+    && "$HOME/.zprofile" -ef "$dotfiles_dir/zsh/.zprofile" \
+    && "$HOME/.zshrc" -ef "$dotfiles_dir/zsh/.zshrc" ]]; then
+    printf 'dotfiles\n'
+  elif [[ -f "$HOME/.zshrc" ]] \
+    && grep -qF "$PROFILE_BEGIN" "$HOME/.zshrc" 2>/dev/null; then
+    printf 'fallback\n'
+  else
+    printf 'none\n'
+  fi
+}
+
+# detect_fish_config_mode -- Report who owns the effective fish configuration
+#
+# Returns the same values as detect_zsh_config_mode.
+detect_fish_config_mode() {
+  local dotfiles_dir="${DOTFILES_DIR:-$HOME/.dotfiles}"
+
+  if [[ -e "$HOME/.config/fish" \
+    && "$HOME/.config/fish" -ef "$dotfiles_dir/fish" ]]; then
+    printf 'dotfiles\n'
+  elif [[ -f "$HOME/.config/fish/conf.d/00-foundation.fish" ]] \
+    && grep -qF "$PROFILE_BEGIN" "$HOME/.config/fish/conf.d/00-foundation.fish" 2>/dev/null; then
+    printf 'fallback\n'
+  else
+    printf 'none\n'
+  fi
+}
+
 # preflight_inventory -- Snapshot the current machine state
 #
 # What: Detects and prints the status of every tool, config, and system setting
@@ -239,8 +328,8 @@ preflight_inventory() {
   typeset -g PREFLIGHT_ZSCALER=""
   typeset -g PREFLIGHT_ROSETTA=""
   typeset -g PREFLIGHT_ARCH=""
-  typeset -g PREFLIGHT_PROFILE_BLOCK_ZSH=""
-  typeset -g PREFLIGHT_PROFILE_BLOCK_FISH=""
+  typeset -g PREFLIGHT_ZSH_CONFIGURATION=""
+  typeset -g PREFLIGHT_FISH_CONFIGURATION=""
 
   note "Pre-flight inventory — scanning what is already in place..."
   echo ""
@@ -254,28 +343,6 @@ preflight_inventory() {
     PREFLIGHT_HOMEBREW_VERSION=""
   fi
   _inventory_line "Homebrew:" "${PREFLIGHT_HOMEBREW_VERSION:-not installed}"
-
-  # -- Foundation packages (only check if brew exists) -------------------------
-  if [[ "$PREFLIGHT_HOMEBREW" == "installed" ]] && (( ${+FOUNDATION_BREW_PACKAGES} )); then
-    local pkg
-    for pkg in "${FOUNDATION_BREW_PACKAGES[@]}"; do
-      if brew list "$pkg" >/dev/null 2>&1; then
-        PREFLIGHT_BREW_PACKAGES_PRESENT+=("$pkg")
-      else
-        PREFLIGHT_BREW_PACKAGES_MISSING+=("$pkg")
-      fi
-    done
-    local total=${#FOUNDATION_BREW_PACKAGES[@]}
-    local present=${#PREFLIGHT_BREW_PACKAGES_PRESENT[@]}
-    _inventory_line "Foundation packages:" "${present}/${total} present"
-    if [[ ${#PREFLIGHT_BREW_PACKAGES_MISSING[@]} -gt 0 ]]; then
-      _inventory_line "  Missing:" "${PREFLIGHT_BREW_PACKAGES_MISSING[*]}"
-    fi
-  elif [[ "$PREFLIGHT_HOMEBREW" != "installed" ]]; then
-    _inventory_line "Foundation packages:" "cannot check (brew not installed)"
-  else
-    _inventory_line "Foundation packages:" "skipped (package list not defined)"
-  fi
 
   # -- Key tools ---------------------------------------------------------------
   # Mise can be installed via Homebrew or the shell installer. We track both
@@ -302,7 +369,30 @@ preflight_inventory() {
     _inventory_line "Mise:" "not installed"
   fi
 
-  if command_exists gum; then
+  # The complete package catalogue is available only after mise and its config
+  # are discoverable. Never substitute a small package sample for this status.
+  if [[ "$PREFLIGHT_MISE" == "installed" ]] && command_exists jq; then
+    local package_counts="" package_missing=""
+    package_counts="$(bootstrap_package_counts 2>/dev/null || true)"
+    if [[ -n "$package_counts" ]]; then
+      local present total missing
+      IFS=$'\t' read -r present total missing <<< "$package_counts"
+      _inventory_line "Ben's CLI catalogue:" "$present/$total installed"
+      package_missing="$(bootstrap_package_missing_lines 2>/dev/null | cut -f1 | paste -sd' ' -)"
+      if [[ -n "$package_missing" ]]; then
+        PREFLIGHT_BREW_PACKAGES_MISSING=("${(@s: :)package_missing}")
+        _inventory_line "  Missing:" "$package_missing"
+      fi
+    else
+      _inventory_line "Ben's CLI catalogue:" "not discoverable yet"
+    fi
+  elif [[ "$PREFLIGHT_HOMEBREW" != "installed" ]]; then
+    _inventory_line "Ben's CLI catalogue:" "cannot check (brew not installed)"
+  else
+    _inventory_line "Ben's CLI catalogue:" "not discoverable until mise config is active"
+  fi
+
+  if [[ -n "$(bootstrap_tool_path gum 2>/dev/null || true)" ]]; then
     PREFLIGHT_GUM="installed"
   else
     PREFLIGHT_GUM="missing"
@@ -366,20 +456,24 @@ preflight_inventory() {
   fi
   _inventory_line "Mise config:" "$PREFLIGHT_MISE_CONFIG"
 
-  # -- Profile blocks ----------------------------------------------------------
-  if [[ -f "$HOME/.zshrc" ]] && grep -qF "foundation-bootstrap" "$HOME/.zshrc" 2>/dev/null; then
-    PREFLIGHT_PROFILE_BLOCK_ZSH="present"
-  else
-    PREFLIGHT_PROFILE_BLOCK_ZSH="absent"
-  fi
-  _inventory_line "Zsh profile block:" "$PREFLIGHT_PROFILE_BLOCK_ZSH"
+  # -- Shell configuration ownership ------------------------------------------
+  # The foundation-bootstrap blocks are a fallback for machines that opt out of
+  # the personal dotfiles layer. A normal personal bootstrap instead symlinks
+  # the complete tracked shell configurations, so the absence of those marker
+  # blocks is expected and must not be reported as missing configuration.
+  case "$(detect_zsh_config_mode)" in
+    dotfiles) PREFLIGHT_ZSH_CONFIGURATION="managed by dotfiles" ;;
+    fallback) PREFLIGHT_ZSH_CONFIGURATION="foundation fallback block" ;;
+    *)        PREFLIGHT_ZSH_CONFIGURATION="not configured" ;;
+  esac
+  _inventory_line "Zsh configuration:" "$PREFLIGHT_ZSH_CONFIGURATION"
 
-  if [[ -f "$HOME/.config/fish/conf.d/00-foundation.fish" ]]; then
-    PREFLIGHT_PROFILE_BLOCK_FISH="present"
-  else
-    PREFLIGHT_PROFILE_BLOCK_FISH="absent"
-  fi
-  _inventory_line "Fish profile block:" "$PREFLIGHT_PROFILE_BLOCK_FISH"
+  case "$(detect_fish_config_mode)" in
+    dotfiles) PREFLIGHT_FISH_CONFIGURATION="managed by dotfiles" ;;
+    fallback) PREFLIGHT_FISH_CONFIGURATION="foundation fallback block" ;;
+    *)        PREFLIGHT_FISH_CONFIGURATION="not configured" ;;
+  esac
+  _inventory_line "Fish configuration:" "$PREFLIGHT_FISH_CONFIGURATION"
 
   # -- System state ------------------------------------------------------------
   PREFLIGHT_ARCH="$(uname -m)"
@@ -482,9 +576,9 @@ status_fix() {
 
   if use_gum; then
     gum style --foreground="$DRACULA_YELLOW" \
-      "$(printf '  %s %-45s %s' "$STATUS_SYM_FAIL" "$desc" "$action_part")"
+      "$(printf '  %s %-45s %s' "$STATUS_SYM_FIX" "$desc" "$action_part")"
   else
-    printf '  \033[33m%s\033[0m %-45s %s\n' "$STATUS_SYM_FAIL" "$desc" "$action_part"
+    printf '  \033[33m%s\033[0m %-45s %s\n' "$STATUS_SYM_FIX" "$desc" "$action_part"
   fi
 }
 
@@ -672,11 +766,13 @@ setup_gum_theme() {
 #   $1 -- The text to display. May contain newlines.
 panel() {
   local text="${1:?panel requires text}"
+  local rendered=""
+  rendered="$(printf '%b' "$text")"
   if use_gum; then
-    gum style --border="normal" --foreground="$DRACULA_COMMENT" --padding="1 2" "$text"
+    gum style --border="normal" --foreground="$DRACULA_COMMENT" --padding="1 2" "$rendered"
   else
     printf '%s\n' "---"
-    printf '%b\n' "$text"
+    printf '%s\n' "$rendered"
     printf '%s\n' "---"
   fi
 }
@@ -758,9 +854,8 @@ state_ensure_dir() {
 # Idempotency: Safe to call repeatedly; values are overwritten with the same
 #              content each time.
 #
-# The state file is expected to contain lines of the form KEY=VALUE (no export,
-# no quoting). Blank lines and comment lines (starting with #) are ignored by
-# the shell's `source` built-in.
+# The state file contains shell-escaped KEY=VALUE assignments (no export).
+# Blank lines and comment lines are ignored by the shell's `source` built-in.
 state_read() {
   if [[ -f "$STATE_FILE_PATH" ]]; then
     # shellcheck disable=SC1090
@@ -786,7 +881,10 @@ state_read() {
 state_get() {
   local key="${1:?state_get requires a key}"
   if [[ -f "$STATE_FILE_PATH" ]]; then
-    grep "^${key}=" "$STATE_FILE_PATH" 2>/dev/null | cut -d'=' -f2- || true
+    (
+      source "$STATE_FILE_PATH"
+      printf '%s' "${(P)key:-}"
+    ) 2>/dev/null || true
   fi
 }
 
@@ -820,7 +918,7 @@ state_set() {
   if [[ -f "$STATE_FILE_PATH" ]]; then
     while IFS= read -r line || [[ -n "$line" ]]; do
       if [[ "$line" == "${key}="* ]]; then
-        printf '%s=%s\n' "$key" "$value" >> "$tmp_file"
+        printf '%s=%q\n' "$key" "$value" >> "$tmp_file"
         found=1
       else
         printf '%s\n' "$line" >> "$tmp_file"
@@ -829,10 +927,82 @@ state_set() {
   fi
 
   if [[ "$found" -eq 0 ]]; then
-    printf '%s=%s\n' "$key" "$value" >> "$tmp_file"
+    printf '%s=%q\n' "$key" "$value" >> "$tmp_file"
   fi
 
   mv -f "$tmp_file" "$STATE_FILE_PATH"
+}
+
+bootstrap_state_keys() {
+  printf '%s\n' \
+    PREFERRED_SHELL DEVICE_PROFILE ENABLE_ZSCALER ENABLE_DOTFILES \
+    ENABLE_PACKAGES ENABLE_APPLICATIONS ENABLE_MACOS_DEFAULTS \
+    ENABLE_REMOTE_ACCESS ENABLE_ROSETTA ENABLE_MISE_TOOLS \
+    ENABLE_SHELL_DEFAULT ENABLE_CODE_DIRECTORY ENABLE_DOWNLOADS_LINK \
+    ENABLE_GIT_IDENTITY DEVICE_NAME GIT_USER_NAME GIT_USER_EMAIL \
+    MACOS_HOSTNAME MACOS_DOCK MACOS_DESKTOP MACOS_DEFAULT_APPS \
+    MACOS_MENU_BAR MACOS_MOUSE MACOS_POWER MACOS_FINDER MACOS_SCREENSHOTS \
+    MACOS_TOUCH_ID
+}
+
+state_missing_keys() {
+  local state_key
+  for state_key in "${(@f)$(bootstrap_state_keys)}"; do
+    if [[ ! -f "$STATE_FILE_PATH" ]] \
+      || ! grep -q "^${state_key}=" "$STATE_FILE_PATH" 2>/dev/null; then
+      printf '%s\n' "$state_key"
+    fi
+  done
+}
+
+resolved_value_for_state_key() {
+  local state_key="${1:?resolved_value_for_state_key requires a key}"
+  case "$state_key" in
+    PREFERRED_SHELL)        printf '%s' "${RESOLVED_SHELL:-}" ;;
+    DEVICE_PROFILE)        printf '%s' "${RESOLVED_PROFILE:-}" ;;
+    ENABLE_ZSCALER)        printf '%s' "${RESOLVED_ZSCALER:-}" ;;
+    ENABLE_DOTFILES)       printf '%s' "${RESOLVED_DOTFILES:-}" ;;
+    ENABLE_PACKAGES)       printf '%s' "${RESOLVED_PACKAGES:-}" ;;
+    ENABLE_APPLICATIONS)   printf '%s' "${RESOLVED_APPLICATIONS:-}" ;;
+    ENABLE_MACOS_DEFAULTS) printf '%s' "${RESOLVED_MACOS_DEFAULTS:-}" ;;
+    ENABLE_REMOTE_ACCESS)  printf '%s' "${RESOLVED_REMOTE_ACCESS:-}" ;;
+    ENABLE_ROSETTA)        printf '%s' "${RESOLVED_ROSETTA:-}" ;;
+    ENABLE_MISE_TOOLS)     printf '%s' "${RESOLVED_MISE_TOOLS:-}" ;;
+    ENABLE_SHELL_DEFAULT)  printf '%s' "${RESOLVED_SHELL_DEFAULT:-}" ;;
+    ENABLE_CODE_DIRECTORY) printf '%s' "${RESOLVED_CODE_DIRECTORY:-}" ;;
+    ENABLE_DOWNLOADS_LINK) printf '%s' "${RESOLVED_DOWNLOADS_LINK:-}" ;;
+    ENABLE_GIT_IDENTITY)   printf '%s' "${RESOLVED_GIT_IDENTITY:-}" ;;
+    DEVICE_NAME)           printf '%s' "${RESOLVED_DEVICE_NAME:-}" ;;
+    GIT_USER_NAME)         printf '%s' "${RESOLVED_GIT_USER_NAME:-}" ;;
+    GIT_USER_EMAIL)        printf '%s' "${RESOLVED_GIT_USER_EMAIL:-}" ;;
+    MACOS_HOSTNAME)        printf '%s' "${RESOLVED_MACOS_HOSTNAME:-}" ;;
+    MACOS_DOCK)            printf '%s' "${RESOLVED_MACOS_DOCK:-}" ;;
+    MACOS_DESKTOP)         printf '%s' "${RESOLVED_MACOS_DESKTOP:-}" ;;
+    MACOS_DEFAULT_APPS)    printf '%s' "${RESOLVED_MACOS_DEFAULT_APPS:-}" ;;
+    MACOS_MENU_BAR)        printf '%s' "${RESOLVED_MACOS_MENU_BAR:-}" ;;
+    MACOS_MOUSE)           printf '%s' "${RESOLVED_MACOS_MOUSE:-}" ;;
+    MACOS_POWER)           printf '%s' "${RESOLVED_MACOS_POWER:-}" ;;
+    MACOS_FINDER)          printf '%s' "${RESOLVED_MACOS_FINDER:-}" ;;
+    MACOS_SCREENSHOTS)     printf '%s' "${RESOLVED_MACOS_SCREENSHOTS:-}" ;;
+    MACOS_TOUCH_ID)        printf '%s' "${RESOLVED_MACOS_TOUCH_ID:-}" ;;
+    *) return 1 ;;
+  esac
+}
+
+state_resolved_drift_lines() {
+  local state_key expected current
+  for state_key in "${(@f)$(bootstrap_state_keys)}"; do
+    expected="$(resolved_value_for_state_key "$state_key")"
+    if [[ ! -f "$STATE_FILE_PATH" ]] \
+      || ! grep -q "^${state_key}=" "$STATE_FILE_PATH" 2>/dev/null; then
+      current="<missing>"
+    else
+      current="$(state_get "$state_key")"
+    fi
+    if [[ "$current" != "$expected" ]]; then
+      printf '%s\t%s\t%s\n' "$state_key" "$current" "$expected"
+    fi
+  done
 }
 
 # state_write_all -- Persist all RESOLVED_* globals to the state file
@@ -845,31 +1015,49 @@ state_set() {
 # Takes no arguments. Reads from the following global variables that
 # resolve_all_flags populates:
 #   RESOLVED_SHELL, RESOLVED_PROFILE, RESOLVED_ZSCALER, RESOLVED_DOTFILES,
-#   RESOLVED_MACOS_DEFAULTS, RESOLVED_ROSETTA, RESOLVED_MISE_TOOLS,
-#   RESOLVED_SHELL_DEFAULT
+#   RESOLVED_PACKAGES, RESOLVED_APPLICATIONS, RESOLVED_MACOS_DEFAULTS,
+#   RESOLVED_REMOTE_ACCESS, RESOLVED_ROSETTA, RESOLVED_MISE_TOOLS,
+#   RESOLVED_SHELL_DEFAULT, RESOLVED_CODE_DIRECTORY, RESOLVED_DOWNLOADS_LINK,
+#   RESOLVED_GIT_IDENTITY, RESOLVED_DEVICE_NAME, RESOLVED_GIT_USER_NAME,
+#   RESOLVED_GIT_USER_EMAIL, and the RESOLVED_MACOS_* component flags.
 #
 # File format:
 #   - Header comment with generation timestamp.
-#   - One KEY=VALUE per line, no quoting, no export.
+#   - One shell-escaped KEY=VALUE per line, no export.
 state_write_all() {
+  if dry_run_active; then
+    local state_drift=""
+    state_drift="$(state_resolved_drift_lines)"
+    if [[ -z "$state_drift" ]]; then
+      status_pass "Bootstrap state" "already matches resolved plan"
+      return 0
+    fi
+    local state_key current expected drift_count=0
+    while IFS=$'\t' read -r state_key current expected; do
+      [[ -n "$state_key" ]] || continue
+      dry_run_log "STATE $state_key: $current -> $expected"
+      drift_count=$((drift_count + 1))
+    done <<< "$state_drift"
+    status_fix "Bootstrap state" "would update $drift_count resolved setting(s)"
+    return 0
+  fi
+
   state_ensure_dir
 
   local tmp_file
   tmp_file="$(mktemp "${STATE_FILE_PATH}.XXXXXX")"
 
-  cat > "$tmp_file" <<EOF
-# dotfiles state file -- auto-generated by common.zsh
-# last written: $(date -u '+%Y-%m-%dT%H:%M:%SZ')
-# Do not edit manually; values are overwritten on each bootstrap run.
-PREFERRED_SHELL=${RESOLVED_SHELL:-}
-DEVICE_PROFILE=${RESOLVED_PROFILE:-}
-ENABLE_ZSCALER=${RESOLVED_ZSCALER:-}
-ENABLE_DOTFILES=${RESOLVED_DOTFILES:-}
-ENABLE_MACOS_DEFAULTS=${RESOLVED_MACOS_DEFAULTS:-}
-ENABLE_ROSETTA=${RESOLVED_ROSETTA:-}
-ENABLE_MISE_TOOLS=${RESOLVED_MISE_TOOLS:-}
-ENABLE_SHELL_DEFAULT=${RESOLVED_SHELL_DEFAULT:-}
-EOF
+  printf '%s\n' \
+    '# dotfiles state file -- auto-generated by common.zsh' \
+    "# last written: $(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+    '# Do not edit manually; values are overwritten on each bootstrap run.' \
+    > "$tmp_file"
+
+  local state_key state_value
+  for state_key in "${(@f)$(bootstrap_state_keys)}"; do
+    state_value="$(resolved_value_for_state_key "$state_key")"
+    printf '%s=%q\n' "$state_key" "$state_value" >> "$tmp_file"
+  done
 
   mv -f "$tmp_file" "$STATE_FILE_PATH"
 }
@@ -1075,12 +1263,10 @@ resolve_device_profile() {
 #
 #   | Flag                  | work  | home  | minimal |
 #   |-----------------------|-------|-------|---------|
-#   | ENABLE_ZSCALER        | auto  | false | false   |
-#   | ENABLE_DOTFILES          | true  | true  | true    |
-#   | ENABLE_MACOS_DEFAULTS | true  | true  | false   |
-#   | ENABLE_ROSETTA        | true  | true  | false   |
-#   | ENABLE_MISE_TOOLS     | true  | true  | true    |
-#   | ENABLE_SHELL_DEFAULT  | true  | true  | true    |
+#   Work and home are Ben's complete catalogues (work adds Zscaler).
+#   Minimal is the neutral adoption baseline: Homebrew, standalone mise, Gum,
+#   machine naming, Git identity, and ~/code, with every one of Ben's package,
+#   config, and application catalogues disabled unless selected explicitly.
 get_profile_default() {
   local profile="${1:?get_profile_default requires a profile}"
   local flag_key="${2:?get_profile_default requires a flag_key}"
@@ -1088,27 +1274,51 @@ get_profile_default() {
   case "${profile}:${flag_key}" in
     # -- work profile --
     work:ENABLE_ZSCALER)        printf 'auto'  ;;
-    work:ENABLE_DOTFILES)          printf 'true'  ;;
+    work:ENABLE_DOTFILES)       printf 'true'  ;;
+    work:ENABLE_PACKAGES)       printf 'true'  ;;
+    work:ENABLE_APPLICATIONS)   printf 'true'  ;;
     work:ENABLE_MACOS_DEFAULTS) printf 'true'  ;;
+    work:ENABLE_REMOTE_ACCESS)  printf 'true'  ;;
     work:ENABLE_ROSETTA)        printf 'true'  ;;
     work:ENABLE_MISE_TOOLS)     printf 'true'  ;;
     work:ENABLE_SHELL_DEFAULT)  printf 'true'  ;;
+    work:ENABLE_CODE_DIRECTORY) printf 'true'  ;;
+    work:ENABLE_DOWNLOADS_LINK) printf 'true'  ;;
+    work:ENABLE_GIT_IDENTITY)   printf 'true'  ;;
 
     # -- home profile --
     home:ENABLE_ZSCALER)        printf 'false' ;;
-    home:ENABLE_DOTFILES)          printf 'true'  ;;
+    home:ENABLE_DOTFILES)       printf 'true'  ;;
+    home:ENABLE_PACKAGES)       printf 'true'  ;;
+    home:ENABLE_APPLICATIONS)   printf 'true'  ;;
     home:ENABLE_MACOS_DEFAULTS) printf 'true'  ;;
+    home:ENABLE_REMOTE_ACCESS)  printf 'true'  ;;
     home:ENABLE_ROSETTA)        printf 'true'  ;;
     home:ENABLE_MISE_TOOLS)     printf 'true'  ;;
     home:ENABLE_SHELL_DEFAULT)  printf 'true'  ;;
+    home:ENABLE_CODE_DIRECTORY) printf 'true'  ;;
+    home:ENABLE_DOWNLOADS_LINK) printf 'true'  ;;
+    home:ENABLE_GIT_IDENTITY)   printf 'true'  ;;
 
     # -- minimal profile --
     minimal:ENABLE_ZSCALER)        printf 'false' ;;
-    minimal:ENABLE_DOTFILES)          printf 'true'  ;;
-    minimal:ENABLE_MACOS_DEFAULTS) printf 'false' ;;
+    minimal:ENABLE_DOTFILES)       printf 'false' ;;
+    minimal:ENABLE_PACKAGES)       printf 'false' ;;
+    minimal:ENABLE_APPLICATIONS)   printf 'false' ;;
+    minimal:ENABLE_MACOS_DEFAULTS) printf 'true'  ;;
+    minimal:ENABLE_REMOTE_ACCESS)  printf 'false' ;;
     minimal:ENABLE_ROSETTA)        printf 'false' ;;
-    minimal:ENABLE_MISE_TOOLS)     printf 'true'  ;;
-    minimal:ENABLE_SHELL_DEFAULT)  printf 'true'  ;;
+    minimal:ENABLE_MISE_TOOLS)     printf 'false' ;;
+    minimal:ENABLE_SHELL_DEFAULT)  printf 'false' ;;
+    minimal:ENABLE_CODE_DIRECTORY) printf 'true'  ;;
+    minimal:ENABLE_DOWNLOADS_LINK) printf 'false' ;;
+    minimal:ENABLE_GIT_IDENTITY)   printf 'true'  ;;
+
+    # -- granular macOS defaults --
+    work:MACOS_*)                  printf 'true'  ;;
+    home:MACOS_*)                  printf 'true'  ;;
+    minimal:MACOS_HOSTNAME)        printf 'true'  ;;
+    minimal:MACOS_*)               printf 'false' ;;
 
     # Unknown combination -- return nothing
     *) ;;
@@ -1120,8 +1330,8 @@ get_profile_default() {
 # Checks: Resolves PREFERRED_SHELL, DEVICE_PROFILE, and all ENABLE_* flags.
 # Gates: None directly, but delegates to resolve_setting/resolve_shell_preference
 #        which are gated on use_gum().
-# Side effects: Populates RESOLVED_* global variables. Calls state_write_all()
-#               to persist the resolved values.
+# Side effects: Populates RESOLVED_* global variables. The caller persists only
+#               after macOS component and adopter values are also resolved.
 # Idempotency: Safe to call multiple times; overwrites globals and state file.
 #
 # Arguments (positional):
@@ -1133,11 +1343,19 @@ get_profile_default() {
 #   $6  -- cli_enable_rosetta : --rosetta flag value
 #   $7  -- cli_enable_mise    : --mise-tools flag value
 #   $8  -- cli_enable_shell_default : --shell-default flag value
+#   $9  -- cli_enable_remote_access : --remote-access flag value
+#   $10 -- cli_enable_applications : --applications flag value
+#   $11 -- cli_enable_packages : --packages flag value
+#   $12 -- cli_enable_code_directory : --code-directory flag value
+#   $13 -- cli_enable_downloads_link : --downloads-link flag value
+#   $14 -- cli_enable_git_identity : --git-identity flag value
 #
 # After this function returns, the following globals are set:
 #   RESOLVED_SHELL, RESOLVED_PROFILE, RESOLVED_ZSCALER, RESOLVED_DOTFILES,
-#   RESOLVED_MACOS_DEFAULTS, RESOLVED_ROSETTA, RESOLVED_MISE_TOOLS,
-#   RESOLVED_SHELL_DEFAULT
+#   RESOLVED_PACKAGES, RESOLVED_APPLICATIONS, RESOLVED_MACOS_DEFAULTS,
+#   RESOLVED_REMOTE_ACCESS, RESOLVED_ROSETTA, RESOLVED_MISE_TOOLS,
+#   RESOLVED_SHELL_DEFAULT, RESOLVED_CODE_DIRECTORY, RESOLVED_DOWNLOADS_LINK,
+#   RESOLVED_GIT_IDENTITY
 resolve_all_flags() {
   local cli_shell="${1:-}"
   local cli_profile="${2:-}"
@@ -1147,6 +1365,12 @@ resolve_all_flags() {
   local cli_enable_rosetta="${6:-}"
   local cli_enable_mise="${7:-}"
   local cli_enable_shell_default="${8:-}"
+  local cli_enable_remote_access="${9:-}"
+  local cli_enable_applications="${10:-}"
+  local cli_enable_packages="${11:-}"
+  local cli_enable_code_directory="${12:-}"
+  local cli_enable_downloads_link="${13:-}"
+  local cli_enable_git_identity="${14:-}"
 
   # Read current state file into environment (provides state_val fallbacks)
   state_read
@@ -1182,12 +1406,39 @@ resolve_all_flags() {
     "true" \
     "")"
 
+  typeset -g RESOLVED_PACKAGES
+  RESOLVED_PACKAGES="$(resolve_setting "ENABLE_PACKAGES" \
+    "$cli_enable_packages" \
+    "${ENABLE_PACKAGES:-}" \
+    "$(state_get ENABLE_PACKAGES)" \
+    "$(get_profile_default "$RESOLVED_PROFILE" ENABLE_PACKAGES)" \
+    "false" \
+    "")"
+
+  typeset -g RESOLVED_APPLICATIONS
+  RESOLVED_APPLICATIONS="$(resolve_setting "ENABLE_APPLICATIONS" \
+    "$cli_enable_applications" \
+    "${ENABLE_APPLICATIONS:-}" \
+    "$(state_get ENABLE_APPLICATIONS)" \
+    "$(get_profile_default "$RESOLVED_PROFILE" ENABLE_APPLICATIONS)" \
+    "false" \
+    "")"
+
   typeset -g RESOLVED_MACOS_DEFAULTS
   RESOLVED_MACOS_DEFAULTS="$(resolve_setting "ENABLE_MACOS_DEFAULTS" \
     "$cli_enable_macos" \
     "${ENABLE_MACOS_DEFAULTS:-}" \
     "$(state_get ENABLE_MACOS_DEFAULTS)" \
     "$(get_profile_default "$RESOLVED_PROFILE" ENABLE_MACOS_DEFAULTS)" \
+    "false" \
+    "")"
+
+  typeset -g RESOLVED_REMOTE_ACCESS
+  RESOLVED_REMOTE_ACCESS="$(resolve_setting "ENABLE_REMOTE_ACCESS" \
+    "$cli_enable_remote_access" \
+    "${ENABLE_REMOTE_ACCESS:-}" \
+    "$(state_get ENABLE_REMOTE_ACCESS)" \
+    "$(get_profile_default "$RESOLVED_PROFILE" ENABLE_REMOTE_ACCESS)" \
     "false" \
     "")"
 
@@ -1218,8 +1469,421 @@ resolve_all_flags() {
     "true" \
     "")"
 
-  # Persist all resolved values to the state file
-  state_write_all
+  typeset -g RESOLVED_CODE_DIRECTORY
+  RESOLVED_CODE_DIRECTORY="$(resolve_setting "ENABLE_CODE_DIRECTORY" \
+    "$cli_enable_code_directory" \
+    "${ENABLE_CODE_DIRECTORY:-}" \
+    "$(state_get ENABLE_CODE_DIRECTORY)" \
+    "$(get_profile_default "$RESOLVED_PROFILE" ENABLE_CODE_DIRECTORY)" \
+    "false" \
+    "")"
+
+  typeset -g RESOLVED_DOWNLOADS_LINK
+  RESOLVED_DOWNLOADS_LINK="$(resolve_setting "ENABLE_DOWNLOADS_LINK" \
+    "$cli_enable_downloads_link" \
+    "${ENABLE_DOWNLOADS_LINK:-}" \
+    "$(state_get ENABLE_DOWNLOADS_LINK)" \
+    "$(get_profile_default "$RESOLVED_PROFILE" ENABLE_DOWNLOADS_LINK)" \
+    "false" \
+    "")"
+
+  typeset -g RESOLVED_GIT_IDENTITY
+  RESOLVED_GIT_IDENTITY="$(resolve_setting "ENABLE_GIT_IDENTITY" \
+    "$cli_enable_git_identity" \
+    "${ENABLE_GIT_IDENTITY:-}" \
+    "$(state_get ENABLE_GIT_IDENTITY)" \
+    "$(get_profile_default "$RESOLVED_PROFILE" ENABLE_GIT_IDENTITY)" \
+    "false" \
+    "")"
+
+  # Persistence happens in the caller after granular macOS settings and
+  # adopter-supplied values have also been resolved.
+}
+
+# resolve_macos_components -- Resolve every group owned by defaults-macos.sh
+resolve_macos_components() {
+  local component cli_var env_var resolved_var profile_default cli_value env_value
+  for component in HOSTNAME DOCK DESKTOP DEFAULT_APPS MENU_BAR MOUSE POWER FINDER SCREENSHOTS TOUCH_ID; do
+    cli_var="CLI_MACOS_${component}"
+    env_var="MACOS_${component}"
+    resolved_var="RESOLVED_MACOS_${component}"
+    profile_default="$(get_profile_default "$RESOLVED_PROFILE" "MACOS_${component}")"
+    if [[ "$RESOLVED_MACOS_DEFAULTS" != "true" ]]; then
+      typeset -g "$resolved_var=false"
+      continue
+    fi
+    cli_value="${(P)cli_var:-}"
+    env_value="${(P)env_var:-}"
+    typeset -g "$resolved_var=$(resolve_setting "MACOS_${component}" \
+      "$cli_value" \
+      "$env_value" \
+      "$(state_get "MACOS_${component}")" \
+      "$profile_default" \
+      "false" \
+      "")"
+  done
+}
+
+default_device_name() {
+  local model_name=""
+  model_name="$(system_profiler SPHardwareDataType 2>/dev/null \
+    | awk -F': ' '/Model Name:/ { print $2; exit }')"
+  case "$model_name" in
+    'Mac mini')    printf 'mac-mini' ;;
+    'MacBook Air') printf 'macbook-air' ;;
+    'MacBook Pro') printf 'macbook-pro' ;;
+    *)
+      case "$(sysctl -n hw.model 2>/dev/null || true)" in
+        Macmini*) printf 'mac-mini' ;;
+        *)        printf 'mac' ;;
+      esac
+      ;;
+  esac
+}
+
+macos_read_default() {
+  local domain="${1:?macos_read_default requires a domain}"
+  local key="${2:?macos_read_default requires a key}"
+  local value=""
+  value="$(defaults read "$domain" "$key" 2>/dev/null || true)"
+  printf '%s' "${value:-unset}"
+}
+
+macos_read_host_default() {
+  local domain="${1:?macos_read_host_default requires a domain}"
+  local key="${2:?macos_read_host_default requires a key}"
+  local value=""
+  value="$(defaults -currentHost read "$domain" "$key" 2>/dev/null || true)"
+  printf '%s' "${value:-unset}"
+}
+
+macos_pmset_value() {
+  local power_source="${1:?macos_pmset_value requires AC or Battery}"
+  local key="${2:?macos_pmset_value requires a key}"
+  pmset -g custom 2>/dev/null | awk -v source="$power_source" -v key="$key" '
+    /Battery Power:/ { active = (source == "Battery"); next }
+    /AC Power:/      { active = (source == "AC"); next }
+    active && $1 == key { print $2; exit }
+  '
+}
+
+macos_launchservices_handlers_json() {
+  if [[ ! -x /usr/bin/swift ]]; then
+    printf '{}\n'
+    return 0
+  fi
+  /usr/bin/swift -suppress-warnings -e '
+    import Foundation
+    import CoreServices
+    func cf(_ value: String) -> CFString { value as NSString }
+    func urlHandler(_ scheme: String) -> String {
+      LSCopyDefaultHandlerForURLScheme(cf(scheme))?.takeRetainedValue() as String? ?? ""
+    }
+    func contentHandler(_ type: String) -> String {
+      LSCopyDefaultRoleHandlerForContentType(cf(type), .all)?.takeRetainedValue() as String? ?? ""
+    }
+    let handlers = [
+      "http": urlHandler("http"), "https": urlHandler("https"),
+      "html": contentHandler("public.html"), "xhtml": contentHandler("public.xhtml"),
+      "pdf": contentHandler("com.adobe.pdf"),
+    ]
+    let data = try! JSONSerialization.data(withJSONObject: handlers, options: [.sortedKeys])
+    print(String(data: data, encoding: .utf8)!)
+  ' 2>/dev/null || printf '{}\n'
+}
+
+_macos_emit_drift() {
+  local group="$1" label="$2" current="$3" expected="$4"
+  if [[ "$current" != "$expected" ]]; then
+    printf '%s\t%s\t%s\t%s\n' "$group" "$label" "$current" "$expected"
+  fi
+}
+
+# macos_defaults_current_lines -- Emit every bootstrap-managed macOS value as
+# group<TAB>label<TAB>current. Unlike the drift helper, this is an inventory:
+# it reports current state even when a preference group is disabled.
+macos_defaults_current_lines() {
+  local profile current_apps="" handlers="{}" browser="unknown" pdf="unknown"
+  local item key source pam_module="" touch_id_state="configured"
+  profile="$(default_device_name)"
+
+  printf 'hostname\tComputerName\t%s\n' "$(scutil --get ComputerName 2>/dev/null || printf unset)"
+  printf 'hostname\tLocalHostName\t%s\n' "$(scutil --get LocalHostName 2>/dev/null || printf unset)"
+  printf 'hostname\tHostName\t%s\n' "$(scutil --get HostName 2>/dev/null || printf unset)"
+
+  for key in orientation autohide autohide-delay autohide-time-modifier show-recents; do
+    printf 'dock\t%s\t%s\n' "$key" "$(macos_read_default com.apple.dock "$key")"
+  done
+  current_apps="$(defaults read com.apple.dock persistent-apps 2>/dev/null \
+    | awk -F'"' '/"_CFURLString" =/ { print $4 }' \
+    | sed -e 's#^file://##' -e 's#%20# #g' -e 's#/$##' | paste -sd, -)"
+  printf 'dock\tpersistent-apps\t%s\n' "${current_apps:-empty}"
+  printf 'dock\tpersistent-others-count\t%s\n' "$(defaults read com.apple.dock persistent-others 2>/dev/null \
+    | awk -F'"' '/"_CFURLString" =/ { count++ } END { print count + 0 }')"
+
+  for key in StandardHideWidgets StageManagerHideWidgets EnableStandardClickToShowDesktop; do
+    printf 'desktop\t%s\t%s\n' "$key" "$(macos_read_default com.apple.WindowManager "$key")"
+  done
+
+  handlers="$(macos_launchservices_handlers_json)"
+  if command_exists jq; then
+    browser="$(printf '%s\n' "$handlers" | jq -r '
+      ([.http, .https, .html, .xhtml] | map((. // "") | ascii_downcase) | all(. == "com.google.chrome"))
+    ' 2>/dev/null || printf false)"
+    pdf="$(printf '%s\n' "$handlers" | jq -r '((.pdf // "") | ascii_downcase) == "com.google.chrome"' 2>/dev/null || printf false)"
+  fi
+  printf 'default-apps\tchrome-browser\t%s\n' "$browser"
+  printf 'default-apps\tchrome-pdf\t%s\n' "$pdf"
+
+  for item in WiFi Bluetooth Sound; do
+    printf 'menu-bar\t%s\t%s\n' "$item" "$(macos_read_host_default com.apple.controlcenter "$item")"
+  done
+  printf 'menu-bar\tSpotlight-hidden\t%s\n' "$(macos_read_host_default com.apple.Spotlight MenuItemHidden)"
+  if [[ "$profile" == macbook-* ]]; then
+    printf 'menu-bar\tBattery\t%s\n' "$(macos_read_host_default com.apple.controlcenter Battery)"
+    printf 'menu-bar\tBatteryShowPercentage\t%s\n' "$(macos_read_host_default com.apple.controlcenter BatteryShowPercentage)"
+    printf 'menu-bar\tShowPercent\t%s\n' "$(macos_read_default com.apple.menuextra.battery ShowPercent)"
+  fi
+  printf 'menu-bar\tAppleICUForce24HourTime\t%s\n' "$(macos_read_default NSGlobalDomain AppleICUForce24HourTime)"
+  for key in IsAnalog Show24Hour ShowAMPM ShowSeconds ShowDayOfWeek ShowDate DateFormat; do
+    printf 'menu-bar\t%s\t%s\n' "$key" "$(macos_read_default com.apple.menuextra.clock "$key")"
+  done
+
+  printf 'mouse\tcom.apple.mouse.scaling\t%s\n' "$(macos_read_default NSGlobalDomain com.apple.mouse.scaling)"
+  if [[ "$profile" == mac-mini ]]; then
+    for key in displaysleep disksleep sleep autorestart womp tcpkeepalive; do
+      printf 'power\tAC-%s\t%s\n' "$key" "$(macos_pmset_value AC "$key")"
+    done
+  else
+    for source in Battery AC; do
+      for key in displaysleep disksleep sleep; do
+        printf 'power\t%s-%s\t%s\n' "$source" "$key" "$(macos_pmset_value "$source" "$key")"
+      done
+    done
+  fi
+
+  printf 'finder\tShowPathbar\t%s\n' "$(macos_read_default com.apple.finder ShowPathbar)"
+  printf 'finder\tShowStatusBar\t%s\n' "$(macos_read_default com.apple.finder ShowStatusBar)"
+  printf 'finder\tAppleShowAllExtensions\t%s\n' "$(macos_read_default NSGlobalDomain AppleShowAllExtensions)"
+  printf 'finder\tFXEnableExtensionChangeWarning\t%s\n' "$(macos_read_default com.apple.finder FXEnableExtensionChangeWarning)"
+  printf 'finder\tLibrary\t%s\n' "$(ls -ldO "$HOME/Library" 2>/dev/null | grep -qw hidden && printf hidden || printf visible)"
+  printf 'screenshots\ttype\t%s\n' "$(macos_read_default com.apple.screencapture type)"
+
+  if command_exists brew; then
+    pam_module="$(brew --prefix)/lib/pam/pam_reattach.so"
+  fi
+  if [[ -z "$pam_module" || ! -f "$pam_module" ]]; then
+    touch_id_state="pam-reattach missing"
+  elif [[ ! -f /etc/pam.d/sudo_local ]]; then
+    touch_id_state="sudo_local missing"
+  elif ! grep -Fq "$pam_module ignore_ssh" /etc/pam.d/sudo_local \
+    || ! grep -Eq '^auth[[:space:]]+sufficient[[:space:]]+pam_tid\.so$' /etc/pam.d/sudo_local; then
+    touch_id_state="sudo_local differs"
+  fi
+  printf 'touch-id\tconfiguration\t%s\n' "$touch_id_state"
+}
+
+macos_defaults_drift_lines() {
+  local current expected profile
+  profile="$(default_device_name)"
+
+  if [[ "${RESOLVED_MACOS_HOSTNAME:-true}" == "true" ]]; then
+    expected="${RESOLVED_DEVICE_NAME:-$profile}"
+    _macos_emit_drift hostname ComputerName "$(scutil --get ComputerName 2>/dev/null || printf unset)" "$expected"
+    _macos_emit_drift hostname LocalHostName "$(scutil --get LocalHostName 2>/dev/null || printf unset)" "$expected"
+    _macos_emit_drift hostname HostName "$(scutil --get HostName 2>/dev/null || printf unset)" "$expected"
+  fi
+
+  if [[ "${RESOLVED_MACOS_DOCK:-true}" == "true" ]]; then
+    _macos_emit_drift dock orientation "$(macos_read_default com.apple.dock orientation)" left
+    _macos_emit_drift dock autohide "$(macos_read_default com.apple.dock autohide)" 1
+    _macos_emit_drift dock autohide-delay "$(macos_read_default com.apple.dock autohide-delay)" 0
+    _macos_emit_drift dock autohide-time-modifier "$(macos_read_default com.apple.dock autohide-time-modifier)" 0
+    _macos_emit_drift dock show-recents "$(macos_read_default com.apple.dock show-recents)" 0
+    local current_apps="" expected_apps=""
+    current_apps="$(defaults read com.apple.dock persistent-apps 2>/dev/null \
+      | awk -F'"' '/"_CFURLString" =/ { print $4 }' \
+      | sed -e 's#^file://##' -e 's#%20# #g' -e 's#/$##' \
+      | paste -sd, -)"
+    [[ -d /Applications/Ghostty.app ]] && expected_apps="/Applications/Ghostty.app"
+    if [[ -d '/Applications/Google Chrome.app' ]]; then
+      expected_apps="${expected_apps:+$expected_apps,}/Applications/Google Chrome.app"
+    fi
+    _macos_emit_drift dock persistent-apps "${current_apps:-empty}" "${expected_apps:-empty}"
+    current="$(defaults read com.apple.dock persistent-others 2>/dev/null \
+      | awk -F'"' '/"_CFURLString" =/ { count++ } END { print count + 0 }')"
+    _macos_emit_drift dock persistent-others-count "$current" 0
+  fi
+
+  if [[ "${RESOLVED_MACOS_DESKTOP:-true}" == "true" ]]; then
+    _macos_emit_drift desktop StandardHideWidgets "$(macos_read_default com.apple.WindowManager StandardHideWidgets)" 1
+    _macos_emit_drift desktop StageManagerHideWidgets "$(macos_read_default com.apple.WindowManager StageManagerHideWidgets)" 1
+    _macos_emit_drift desktop EnableStandardClickToShowDesktop "$(macos_read_default com.apple.WindowManager EnableStandardClickToShowDesktop)" 0
+  fi
+
+  if [[ "${RESOLVED_MACOS_DEFAULT_APPS:-true}" == "true" ]]; then
+    local handlers="{}" browser="unknown" pdf="unknown"
+    handlers="$(macos_launchservices_handlers_json)"
+    if command_exists jq; then
+      browser="$(printf '%s\n' "$handlers" | jq -r '
+        ([.http, .https, .html, .xhtml] | map((. // "") | ascii_downcase) | all(. == "com.google.chrome"))
+      ' 2>/dev/null || printf false)"
+      pdf="$(printf '%s\n' "$handlers" | jq -r '((.pdf // "") | ascii_downcase) == "com.google.chrome"' 2>/dev/null || printf false)"
+    fi
+    _macos_emit_drift default-apps chrome-browser "$browser" true
+    _macos_emit_drift default-apps chrome-pdf "$pdf" true
+  fi
+
+  if [[ "${RESOLVED_MACOS_MENU_BAR:-true}" == "true" ]]; then
+    local item
+    for item in WiFi Bluetooth Sound; do
+      _macos_emit_drift menu-bar "$item" "$(macos_read_host_default com.apple.controlcenter "$item")" 18
+    done
+    _macos_emit_drift menu-bar Spotlight-hidden "$(macos_read_host_default com.apple.Spotlight MenuItemHidden)" 1
+    if [[ "$profile" == macbook-* ]]; then
+      _macos_emit_drift menu-bar Battery "$(macos_read_host_default com.apple.controlcenter Battery)" 18
+      _macos_emit_drift menu-bar BatteryShowPercentage "$(macos_read_host_default com.apple.controlcenter BatteryShowPercentage)" 1
+      _macos_emit_drift menu-bar ShowPercent "$(macos_read_default com.apple.menuextra.battery ShowPercent)" 1
+    fi
+    _macos_emit_drift menu-bar AppleICUForce24HourTime "$(macos_read_default NSGlobalDomain AppleICUForce24HourTime)" 1
+    _macos_emit_drift menu-bar IsAnalog "$(macos_read_default com.apple.menuextra.clock IsAnalog)" 0
+    _macos_emit_drift menu-bar Show24Hour "$(macos_read_default com.apple.menuextra.clock Show24Hour)" 1
+    _macos_emit_drift menu-bar ShowAMPM "$(macos_read_default com.apple.menuextra.clock ShowAMPM)" 0
+    _macos_emit_drift menu-bar ShowSeconds "$(macos_read_default com.apple.menuextra.clock ShowSeconds)" 1
+    _macos_emit_drift menu-bar ShowDayOfWeek "$(macos_read_default com.apple.menuextra.clock ShowDayOfWeek)" 1
+    _macos_emit_drift menu-bar ShowDate "$(macos_read_default com.apple.menuextra.clock ShowDate)" 1
+    _macos_emit_drift menu-bar DateFormat "$(macos_read_default com.apple.menuextra.clock DateFormat)" 'EEE dd MMM HH:mm:ss'
+  fi
+
+  if [[ "${RESOLVED_MACOS_MOUSE:-true}" == "true" ]]; then
+    _macos_emit_drift mouse com.apple.mouse.scaling "$(macos_read_default NSGlobalDomain com.apple.mouse.scaling)" -1
+  fi
+
+  if [[ "${RESOLVED_MACOS_POWER:-true}" == "true" ]]; then
+    local source key
+    if [[ "$profile" == "mac-mini" ]]; then
+      for key in displaysleep disksleep sleep autorestart womp tcpkeepalive; do
+        case "$key" in
+          displaysleep|disksleep) expected=10 ;;
+          sleep) expected=0 ;;
+          *) expected=1 ;;
+        esac
+        _macos_emit_drift power "AC-$key" "$(macos_pmset_value AC "$key")" "$expected"
+      done
+    else
+      for source in Battery AC; do
+        for key in displaysleep disksleep sleep; do
+          [[ "$key" == sleep ]] && expected=20 || expected=10
+          _macos_emit_drift power "$source-$key" "$(macos_pmset_value "$source" "$key")" "$expected"
+        done
+      done
+    fi
+  fi
+
+  if [[ "${RESOLVED_MACOS_FINDER:-true}" == "true" ]]; then
+    _macos_emit_drift finder ShowPathbar "$(macos_read_default com.apple.finder ShowPathbar)" 1
+    _macos_emit_drift finder ShowStatusBar "$(macos_read_default com.apple.finder ShowStatusBar)" 1
+    _macos_emit_drift finder AppleShowAllExtensions "$(macos_read_default NSGlobalDomain AppleShowAllExtensions)" 1
+    _macos_emit_drift finder FXEnableExtensionChangeWarning "$(macos_read_default com.apple.finder FXEnableExtensionChangeWarning)" 0
+    current="$(ls -ldO "$HOME/Library" 2>/dev/null | grep -qw hidden && printf hidden || printf visible)"
+    _macos_emit_drift finder Library "$current" visible
+  fi
+
+  if [[ "${RESOLVED_MACOS_SCREENSHOTS:-true}" == "true" ]]; then
+    _macos_emit_drift screenshots type "$(macos_read_default com.apple.screencapture type)" png
+  fi
+
+  if [[ "${RESOLVED_MACOS_TOUCH_ID:-true}" == "true" ]]; then
+    local pam_module="" sudo_local_state="configured"
+    if command_exists brew; then
+      pam_module="$(brew --prefix)/lib/pam/pam_reattach.so"
+    fi
+    if [[ -z "$pam_module" || ! -f "$pam_module" ]]; then
+      sudo_local_state="pam-reattach missing"
+    elif [[ ! -f /etc/pam.d/sudo_local ]]; then
+      sudo_local_state="sudo_local missing"
+    elif ! grep -Fq "$pam_module ignore_ssh" /etc/pam.d/sudo_local \
+      || ! grep -Eq '^auth[[:space:]]+sufficient[[:space:]]+pam_tid\.so$' /etc/pam.d/sudo_local; then
+      sudo_local_state="sudo_local differs"
+    fi
+    _macos_emit_drift touch-id configuration "$sudo_local_state" configured
+  fi
+}
+
+remote_access_drift_lines() {
+  local remote_overrides="" group membership
+  remote_overrides="$(launchctl print-disabled system 2>/dev/null || true)"
+  if ! printf '%s\n' "$remote_overrides" \
+    | grep -Eq '"com\.openssh\.sshd"[[:space:]]*=>[[:space:]]*(enabled|false)'; then
+    printf 'service\tRemote Login\tnot enabled\tenabled\n'
+  fi
+  if ! printf '%s\n' "$remote_overrides" \
+    | grep -Eq '"com\.apple\.screensharing"[[:space:]]*=>[[:space:]]*(enabled|false)'; then
+    printf 'service\tScreen Sharing\tnot enabled\tenabled\n'
+  fi
+  if ! launchctl print system/com.apple.screensharing >/dev/null 2>&1; then
+    printf 'service\tScreen Sharing daemon\tnot running\trunning\n'
+  fi
+  for group in com.apple.access_ssh com.apple.access_screensharing; do
+    membership="$(dseditgroup -o checkmember -m "$USER" "$group" 2>/dev/null || true)"
+    if [[ "$membership" != yes\ * ]]; then
+      printf 'access\t%s membership\tabsent\tpresent\n' "$group"
+    fi
+  done
+}
+
+remote_access_current_lines() {
+  local remote_overrides="" state="disabled" membership="" group
+  remote_overrides="$(launchctl print-disabled system 2>/dev/null || true)"
+  if printf '%s\n' "$remote_overrides" \
+    | grep -Eq '"com\.openssh\.sshd"[[:space:]]*=>[[:space:]]*(enabled|false)'; then
+    state="enabled"
+  fi
+  printf 'service\tRemote Login\t%s\n' "$state"
+  state="disabled"
+  if printf '%s\n' "$remote_overrides" \
+    | grep -Eq '"com\.apple\.screensharing"[[:space:]]*=>[[:space:]]*(enabled|false)'; then
+    state="enabled"
+  fi
+  printf 'service\tScreen Sharing\t%s\n' "$state"
+  if launchctl print system/com.apple.screensharing >/dev/null 2>&1; then
+    state="running"
+  else
+    state="not running"
+  fi
+  printf 'service\tScreen Sharing daemon\t%s\n' "$state"
+  for group in com.apple.access_ssh com.apple.access_screensharing; do
+    membership="$(dseditgroup -o checkmember -m "$USER" "$group" 2>/dev/null || true)"
+    if [[ "$membership" == yes\ * ]]; then
+      state="member"
+    else
+      state="not a member"
+    fi
+    printf 'access\t%s membership\t%s\n' "$group" "$state"
+  done
+}
+
+resolve_adoption_values() {
+  typeset -g RESOLVED_DEVICE_NAME="${CLI_DEVICE_NAME:-${DEVICE_NAME:-$(state_get DEVICE_NAME)}}"
+  [[ -n "$RESOLVED_DEVICE_NAME" ]] || RESOLVED_DEVICE_NAME="$(default_device_name)"
+  if [[ ! "$RESOLVED_DEVICE_NAME" =~ '^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$' ]]; then
+    fail "Device name must contain only letters, numbers, and internal hyphens (maximum 63 characters)"
+  fi
+
+  typeset -g RESOLVED_GIT_USER_NAME="${CLI_GIT_USER_NAME:-${GIT_USER_NAME:-$(state_get GIT_USER_NAME)}}"
+  typeset -g RESOLVED_GIT_USER_EMAIL="${CLI_GIT_USER_EMAIL:-${GIT_USER_EMAIL:-$(state_get GIT_USER_EMAIL)}}"
+  if [[ "$RESOLVED_GIT_IDENTITY" == "true" ]]; then
+    [[ -n "$RESOLVED_GIT_USER_NAME" ]] \
+      || RESOLVED_GIT_USER_NAME="$(git config --global --includes --get user.name 2>/dev/null || true)"
+    [[ -n "$RESOLVED_GIT_USER_EMAIL" ]] \
+      || RESOLVED_GIT_USER_EMAIL="$(git config --global --includes --get user.email 2>/dev/null || true)"
+    [[ "$RESOLVED_GIT_USER_NAME" != *$'\n'* ]] || fail "Git author name cannot contain a newline"
+    [[ -n "$RESOLVED_GIT_USER_NAME" ]] || fail "Git author name is required when Git identity is selected"
+    [[ "$RESOLVED_GIT_USER_EMAIL" == *@*.* ]] || fail "A valid Git author email is required when Git identity is selected"
+  else
+    RESOLVED_GIT_USER_NAME=""
+    RESOLVED_GIT_USER_EMAIL=""
+  fi
 }
 
 

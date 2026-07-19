@@ -1,4 +1,9 @@
 # macOS-only dotfiles
+[env]
+# The vfox gcloud installer disables Google's Python bootstrap but gcloud 576+
+# requires Python 3.10 or newer. Use mise's stable shim for install and runtime.
+CLOUDSDK_PYTHON = "{{ env.HOME }}/.local/share/mise/shims/python3"
+
 [dotfiles]
 "~/.aerospace.toml" = "~/.dotfiles/aerospace/.aerospace.toml"
 "~/Brewfile" = "~/.dotfiles/brew/Brewfile"
@@ -12,7 +17,6 @@
 "brew:git" = "latest"
 "brew:tree" = "latest"
 "brew:tmux" = "latest"
-"brew:tpm" = "latest"
 "brew:fish" = "latest"
 "brew:fisher" = "latest"
 "brew:neovim" = "latest"
@@ -22,7 +26,6 @@
 "brew:hf" = "latest"
 "brew:llama.cpp" = "latest"
 "brew:jq" = "latest"
-"brew:yq" = "latest"
 "brew:gh" = "latest"
 "brew:gitleaks" = "latest"
 "brew:zoxide" = "latest"
@@ -36,8 +39,7 @@
 "brew:ykman" = "latest"              # YubiKey Manager CLI
 "brew:gnupg" = "latest"              # GPG for OpenPGP applet + ssh-agent
 "brew:pinentry-mac" = "latest"       # macOS GPG passphrase entry
-"brew:mssql-tools18" = "latest"      # SQL Server command-line tools
-"brew:msodbcsql18" = "latest"        # SQL Server ODBC driver
+"brew:pam-reattach" = "latest"       # Touch ID for sudo inside tmux
 "brew:tokei" = "latest"
 "brew:caddy" = "latest"
 "brew:duckdb" = "latest"
@@ -50,8 +52,6 @@
 "brew:gcc" = "latest"
 "brew:pkgconf" = "latest"
 "brew:protobuf" = "latest"
-"brew:luarocks" = "latest"
-"brew:stylua" = "latest"
 "brew:wget" = "latest"
 "brew:pngpaste" = "latest"
 "brew:coreutils" = "latest"

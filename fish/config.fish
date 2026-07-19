@@ -1,9 +1,16 @@
 # Disable fish greeting
 set fish_greeting ""
 
+# Initialise Homebrew for Apple Silicon and Intel prefixes.
+if test -x /opt/homebrew/bin/brew
+    eval (/opt/homebrew/bin/brew shellenv)
+else if test -x /usr/local/bin/brew
+    eval (/usr/local/bin/brew shellenv)
+end
+
 # Add ~/.local/bin to PATH
 if test -d "$HOME/.local/bin"
-    fish_add_path "$HOME/.local/bin"
+    fish_add_path --global "$HOME/.local/bin"
 end
 
 # Initialise mise
@@ -38,3 +45,5 @@ if status is-interactive
     fastfetch
 end
 
+# opencode
+fish_add_path "$HOME/.opencode/bin"

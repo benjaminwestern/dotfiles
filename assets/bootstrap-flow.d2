@@ -49,8 +49,13 @@ macos: {
     class: entry
   }
 
+  prerequisites: {
+    label: "Factory-Mac prerequisite gate\nOpen and wait for Command Line Tools\nuntil Apple Git is operational"
+    class: guard
+  }
+
   checkout: {
-    label: "Ensure the repo exists locally\nReuse checkout, clone, or use archive fallback"
+    label: "Ensure the repo exists locally\nReuse checkout or clone with global Git config disabled"
     class: step
   }
 
@@ -74,7 +79,7 @@ macos: {
     class: step
   }
 
-  loader -> checkout -> bootstrap
+  loader -> prerequisites -> checkout -> bootstrap
   bootstrap -> foundation: "default path"
   bootstrap -> audit: "audit"
   bootstrap -> personal: "personal"

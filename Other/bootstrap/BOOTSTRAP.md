@@ -4,14 +4,14 @@ This is the single source of truth for taking a fresh machine to a working shell
 
 ## The SSH chicken-and-egg problem
 
-`git/.gitconfig` contains:
+`git/github-ssh.inc` contains:
 
 ```ini
 [url "git@github.com:"]
     insteadOf = https://github.com
 ```
 
-Once this file is symlinked into `~/.gitconfig`, **every** `git clone https://github.com/...` is rewritten to use SSH. On a fresh machine with no SSH key registered at GitHub, those operations fail with permission denied. This affects:
+Once an active Git config includes this file, **every** `git clone https://github.com/...` is rewritten to use SSH. On a fresh machine with no SSH key registered at GitHub, those operations fail with permission denied. This affects:
 
 - The initial dotfiles clone
 - `cargo install --git https://github.com/...`
@@ -29,36 +29,86 @@ GIT_CONFIG_GLOBAL=/dev/null cargo install --git https://github.com/owner/repo
 GIT_CONFIG_GLOBAL=/dev/null pipx install git+https://github.com/owner/repo
 ```
 
-The bootstrap task generates an SSH key, but you must still register the public key at GitHub manually before normal git operations work.
+The bootstrap deliberately does not generate or import SSH keys. Generated Git
+configs include the safe shared settings immediately but add the GitHub rewrite
+only after `ssh -T git@github.com` proves that key and host trust are ready.
+Keep using the per-command `GIT_CONFIG_GLOBAL=/dev/null` bypass for recovery
+commands that must use HTTPS before then.
 
 ## macOS bootstrap
 
 Use the public loader on a fresh machine:
 
 ```bash
-# Install mise standalone first (do NOT use Homebrew for mise itself)
-curl https://mise.run | sh
-export PATH="$HOME/.local/bin:$PATH"
-
 curl -fsSL https://raw.githubusercontent.com/benjaminwestern/dotfiles/main/install.sh \
-  | bash -s -- setup --shell fish --profile work --personal
+  | bash
 ```
+
+That is the complete starting point. The loader attaches the interactive flow
+to the terminal, opens and waits for Apple's Command Line Tools installer when
+needed, clones the repository with Git configuration disabled, installs
+Homebrew, installs mise through its standalone installer, installs Gum through
+mise, and then presents the action/profile/shell/stage menus. Password,
+installer, trust, and licence decisions remain visible in the same terminal.
+
+After Brewfile application installation, bootstrap verifies Chrome's deep code
+signature, expected Google signing identity, and Gatekeeper acceptance when the
+bundle is quarantined. A failed assessment stops the run instead of leaving a
+supposedly successful but unlaunchable browser.
+
+### Profiles and adopter inputs
+
+The mandatory foundation is deliberately small: Homebrew, standalone mise,
+and mise-managed Gum. The Gum interface explains and then exposes three
+editable presets:
+
+| Preset | Defaults |
+| --- | --- |
+| `work` | Ben's package, app, tool, and dotfile catalogues; all macOS preferences; Fish; home layout; remote access; Rosetta; Git identity; Zscaler auto-detection |
+| `home` | Ben's complete setup without Zscaler |
+| `minimal` | Neutral adopter baseline: Ben's catalogues off; zsh unchanged; device naming, Git identity, and `~/code` selected; other personal/system stages off |
+
+Before applying anything, the operator can independently enable or disable
+Ben's Homebrew package catalogue, Brewfile apps/fonts, mise tools, dotfiles,
+`~/code`, the Downloads-to-iCloud link, Git identity, remote access, Rosetta,
+login-shell change, Zscaler, and each macOS preference group. The latter are
+hostname, Dock, desktop, Chrome handlers, menu bar/clock, mouse, power, Finder,
+screenshots, and Touch ID sudo.
+
+The root Audit action first asks for a perspective: general machine inventory,
+or comparison with explicit `minimal`, `home`, or `work` defaults. The automatic
+audit after bootstrap instead compares with the exact saved customised plan.
+
+When the Downloads link is selected, bootstrap replaces an absent folder or a
+fresh folder containing only Finder's `.localized` and `.DS_Store` metadata.
+It clears the stock deny-delete ACL only after that safety check. Any real
+download or unexpected symlink is preserved for manual reconciliation.
+
+The current macOS username is detected for home paths and sharing ACLs and is
+never renamed. The device name is separately prompted and applied to
+ComputerName, LocalHostName, and HostName. If `~/.gitconfig` is absent,
+bootstrap creates a user-owned file containing the selected author identity.
+When Ben's dotfiles are selected it also includes `git/config.shared`. If a config already exists, the interactive
+flow offers to replace it. Declining replacement—or running non-interactively—
+preserves it and adds the identity through `~/.config/git/bootstrap-user.inc`.
+The legacy tracked wrapper remains valid for Ben's existing symlink, but mise
+no longer owns `~/.gitconfig` as a mandatory dotfile target.
 
 Or clone first and run locally:
 
 ```bash
-# Install mise standalone first (do NOT use Homebrew for mise itself)
-curl https://mise.run | sh
-export PATH="$HOME/.local/bin:$PATH"
-
-git clone https://github.com/benjaminwestern/dotfiles ~/.dotfiles
-~/.dotfiles/install.sh setup --shell fish --profile work --personal
+GIT_CONFIG_GLOBAL=/dev/null git clone \
+  https://github.com/benjaminwestern/dotfiles ~/.dotfiles
+~/.dotfiles/install.sh
 ```
+
+On a factory Mac, use the remote loader rather than trying to clone manually:
+`/usr/bin/git` is only an Xcode shim until Command Line Tools are installed.
 
 Routine maintenance:
 
 ```bash
-~/.dotfiles/install.sh ensure --personal
+~/.dotfiles/install.sh ensure
 ~/.dotfiles/install.sh update
 mise doctor
 mise up
@@ -83,10 +133,11 @@ mise bootstrap
 # 4. Install language runtimes and tools
 mise install
 
-# 5. Install TPM
+# 5. Install TPM and the declared post-bootstrap extras
 mise run bootstrap
 
-# 6. Register a new SSH key at GitHub manually, then restart the shell
+# 6. Generate or copy an SSH key, register it at GitHub, then restart the shell
+ssh-keygen -t ed25519 -C "$USER@$(hostname)"
 exec fish
 ```
 
@@ -123,20 +174,29 @@ mise run bundle-update
 
 ## What `mise bootstrap` does
 
-1. Reads `[bootstrap.packages]` and installs system packages:
-   - macOS: `brew:*` formulae
-   - Arch: `pacman:*` packages
-2. Reads `[bootstrap.user]` and sets the login shell (Arch only; macOS uses `install.sh`)
-3. Reads `[dotfiles]` and symlinks config from `~/.dotfiles/` into `~/$HOME`
+The generic `mise bootstrap` command, used directly by the Linux path:
+
+1. Reads the active platform's `[bootstrap.packages]` declarations and installs
+   its system packages (`pacman:*` on Arch; `brew:*` declarations are available
+   to the separately orchestrated macOS path).
+2. Reads `[bootstrap.user]` and sets the login shell.
+3. Reads `[dotfiles]` and symlinks config from `~/.dotfiles/` into `$HOME`.
 
 Then `mise install` installs everything in `[tools]`.
+
+The macOS loader does not run that monolithic sequence. It links the repository
+mise config only when Ben's packages, tools, or dotfiles were selected, invokes
+the package catalogue and tools independently, and hands selected application,
+dotfile, identity, layout, and system stages to the personal layer.
 
 ## The unified config layout
 
 A single file, `~/.dotfiles/mise/config.toml`, is shared by both platforms:
 
-- macOS gets it via mise `[dotfiles]`
-- Arch gets it via a symlink: `~/.config/mise` → `~/.dotfiles/mise`
+- On macOS, the foundation links `~/.config/mise` to `~/.dotfiles/mise`
+  before using any selected Ben catalogue. A neutral `minimal` run with those
+  catalogues disabled leaves an adopter's mise config alone.
+- Arch gets the same directory symlink through its bootstrap path.
 
 Because `~/.config/mise` is a **directory** symlink, both `config.toml` and the task scripts in `scripts/` resolve through the same link. Machine-local secrets live in `~/.config/mise/.env`, which is gitignored.
 
@@ -155,15 +215,18 @@ Then verify with `mise version` and `mise doctor`.
 
 ### 2. Pacman mise is too old
 
-### 2. Initial clone must bypass `~/.gitconfig`
+### 3. Initial clone must bypass `~/.gitconfig`
 
-Run `GIT_CONFIG_GLOBAL=/dev/null git clone ...` before the SSH key exists. Once `~/.gitconfig` is symlinked, every HTTPS GitHub URL becomes SSH.
+Run `GIT_CONFIG_GLOBAL=/dev/null git clone ...` before the SSH key exists. The
+generated config activates the GitHub HTTPS-to-SSH include only after SSH
+authentication succeeds; the bypass also protects recovery on machines with an
+older or independently managed rewrite.
 
-### 3. `~/.config/mise` must be a directory symlink
+### 4. `~/.config/mise` must be a directory symlink
 
 Originally only `~/.config/mise/config.toml` was symlinked. After the `Configs/` → root restructure, `~/.config/mise` itself is symlinked to `~/.dotfiles/mise` so task scripts resolve correctly.
 
-### 4. Old `Configs/` symlinks break after restructure
+### 5. Old `Configs/` symlinks break after restructure
 
 If upgrading from the old layout, symlinks still point to `~/.dotfiles/Configs/...`. Delete the stale directory and reapply:
 
@@ -172,7 +235,7 @@ rm -rf ~/.dotfiles/Configs
 mise dotfiles apply
 ```
 
-### 5. Real files can block dotfiles apply
+### 6. Real files can block dotfiles apply
 
 If a target path exists as a real file or directory, mise refuses to overwrite it. We hit this with:
 
@@ -181,7 +244,7 @@ If a target path exists as a real file or directory, mise refuses to overwrite i
 
 Remove or back them up, then rerun `mise dotfiles apply`.
 
-### 6. `~/.pi` was a stale directory symlink
+### 7. `~/.pi` was a stale directory symlink
 
 In the old layout `~/.pi` symlinked to `~/.dotfiles/Configs/pi/.pi`. The new layout manages individual files under `~/.pi/agent/`. Remove the old symlink and recreate the parent directory:
 
@@ -191,11 +254,13 @@ mkdir -p ~/.pi/agent
 mise dotfiles apply
 ```
 
-### 7. TPM clone fails without `GIT_CONFIG_GLOBAL=/dev/null`
+### 8. TPM clone fails without `GIT_CONFIG_GLOBAL=/dev/null`
 
-The bootstrap task clones `tmux-plugins/tpm` over HTTPS. Because `~/.gitconfig` is already in place, the task uses `GIT_CONFIG_GLOBAL=/dev/null` to avoid the SSH rewrite.
+The bootstrap task clones `tmux-plugins/tpm` over HTTPS. It always uses
+`GIT_CONFIG_GLOBAL=/dev/null` so an existing or bootstrap-managed GitHub rewrite
+cannot redirect that prerequisite clone.
 
-### 8. `.env` is not created automatically
+### 9. `.env` is not created automatically
 
 `mise/.example.env` is tracked; `mise/.env` is gitignored. Copy and edit it per machine:
 
@@ -203,15 +268,15 @@ The bootstrap task clones `tmux-plugins/tpm` over HTTPS. Because `~/.gitconfig` 
 cp ~/.dotfiles/mise/.example.env ~/.config/mise/.env
 ```
 
-### 9. Some dotfiles are platform-only
+### 10. Some dotfiles are platform-only
 
 `~/.aerospace.toml`, `~/.config/ghostty/config`, and `~/Brewfile` are declared for macOS. On Arch they show as `applied` symlinks even though the tools themselves may not be installed.
 
-### 10. `mise doctor` PATH warning
+### 11. `mise doctor` PATH warning
 
 `~/.local/share/omarchy/bin` may take precedence over mise shims in `PATH`. This is a warning, not an error, but be aware if tools resolve unexpectedly.
 
-### 11. SSH key generation is manual
+### 12. SSH key generation is manual
 
 `mise run bootstrap` no longer creates an SSH key. Generate one yourself when you need git push/pull access:
 
@@ -222,7 +287,7 @@ cat ~/.ssh/id_ed25519.pub
 
 Then add the public key to GitHub at https://github.com/settings/keys.
 
-### 12. Scroll direction defaults to Apple-style natural scrolling
+### 13. Scroll direction defaults to Apple-style natural scrolling
 
 The Hyprland input config in `~/.config/hypr/input.conf` enables natural scrolling for both mice and trackpads:
 
@@ -239,7 +304,7 @@ input {
 
 This makes content follow your finger, matching macOS / Apple trackpad behavior. To revert to traditional scrolling, set both values to `false` and run `hyprctl reload`.
 
-### 13. Manual font installs
+### 14. Manual font installs
 
 Some fonts are not packaged and must be installed from upstream releases. Example: `psudoFont Liga Mono` from <https://github.com/psudo-dev/psudofont-liga-mono>:
 
@@ -354,8 +419,8 @@ mise env | grep -E 'EDITOR|PITCHFORK|OPENCODE'
 # login shell is fish
 echo $SHELL
 
-# SSH key exists
-ls ~/.ssh/id_ed25519
+# SSH key exists when this machine is intended to have one
+test -f ~/.ssh/id_ed25519 && echo "SSH key present" || echo "SSH key is still manual"
 ```
 
 ## Fingerprint authentication (Arch / fprintd)
@@ -629,7 +694,7 @@ The bootstrap is idempotent. If something fails partway through, fix the blocker
 ```bash
 mise bootstrap          # system packages + dotfiles + shell
 mise install            # tools
-mise run bootstrap      # SSH key + TPM
+mise run bootstrap      # TPM + declared post-bootstrap extras
 mise dotfiles apply     # re-converge symlinks
 ```
 

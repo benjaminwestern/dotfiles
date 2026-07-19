@@ -36,7 +36,6 @@ PITCHFORK_WEB_PORT = "19876"
 "~/.config/pitchfork/Caddyfile" = "~/.dotfiles/pitchfork/Caddyfile"
 "~/.config/pitchfork/config.toml" = "~/.dotfiles/pitchfork/config.toml"
 "~/.config/worktrunk/config.toml" = "~/.dotfiles/worktrunk/config.toml"
-"~/.gitconfig" = "~/.dotfiles/git/.gitconfig"
 "~/.hushlogin" = "~/.dotfiles/bash/.hushlogin"
 "~/.pi/agent/APPEND_SYSTEM.md" = "~/.dotfiles/pi/APPEND_SYSTEM.md"
 "~/.pi/agent/extensions" = "~/.dotfiles/pi/extensions"
@@ -102,6 +101,7 @@ skaffold = "latest"
 pkl = "latest"
 
 # Mise ecosystem
+gum = "latest"
 hk = "latest"
 fnox = "latest"
 communique = "latest"
@@ -152,11 +152,12 @@ tp = "mise run terraform-plan"
 description = "Updates system packages and mise tools"
 run = """
 if command -v brew &>/dev/null; then
-  brew update && brew upgrade && brew cleanup && brew autoremove
+  brew update && HOMEBREW_NO_UPGRADE_AUTO_UPDATES_CASKS=1 brew upgrade && brew cleanup && brew autoremove
 elif command -v pacman &>/dev/null; then
   sudo pacman -Syu --noconfirm
 fi
-mise up
+mise up --yes
+mise prune --yes
 """
 
 [tasks.readme-assets]
@@ -168,9 +169,14 @@ python "$HOME/.dotfiles/Other/repository/generate_readme_banners.py"
 [tasks.bootstrap]
 description = "Post-bootstrap setup: TPM"
 run = """
-if [ ! -d "$HOME/.tmux/plugins/tpm" ]; then
+if [ -e "$HOME/.tmux/plugins/tpm" ] && [ ! -d "$HOME/.tmux/plugins/tpm/.git" ]; then
+  printf 'error: %s exists but is not a TPM Git checkout\n' "$HOME/.tmux/plugins/tpm" >&2
+  exit 1
+fi
+if [ ! -d "$HOME/.tmux/plugins/tpm/.git" ]; then
   GIT_CONFIG_GLOBAL=/dev/null git clone https://github.com/tmux-plugins/tpm "$HOME/.tmux/plugins/tpm"
 fi
+GIT_CONFIG_GLOBAL=/dev/null "$HOME/.tmux/plugins/tpm/bin/install_plugins"
 mkdir -p "$HOME/.local/share/applications"
 """
 

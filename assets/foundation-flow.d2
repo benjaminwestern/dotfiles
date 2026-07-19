@@ -49,43 +49,38 @@ macos: {
     class: entry
   }
 
-  preflight: {
-    label: "Pre-flight inventory\nRead current state and resolve flags"
-    class: shell
-  }
-
-  homebrew: {
-    label: "Homebrew\nEnsure package manager and shellenv"
+  mandatory: {
+    label: "Mandatory baseline and UI\nHomebrew → standalone mise → mise-managed Gum"
     class: step
   }
 
-  packages: {
-    label: "Foundation packages"
-    class: step
-  }
-
-  mise: {
-    label: "mise"
-    class: step
-  }
-
-  shell_state: {
-    label: "Shell state\nManaged profile block and activation"
+  plan: {
+    label: "Inventory and interactive plan\nAction → editable profile → shell → stages\nResolve, confirm, and persist selections"
     class: shell
   }
 
   config: {
-    label: "Seed mise config"
+    label: "Selected mise config\nLink Ben's config only for packages, tools, or dotfiles"
     class: shell
   }
 
+  shell_state: {
+    label: "Shell state\nEnsure fallback activation and activate current process"
+    class: shell
+  }
+
+  packages: {
+    label: "Optional Ben's CLI catalogue\nmise bootstrap packages"
+    class: step
+  }
+
   zscaler: {
-    label: "Zscaler trust\nEnable or detect trust settings"
+    label: "Optional Python prerequisite and Zscaler trust\nEnable, disable, or auto-detect"
     class: trust
   }
 
   tools: {
-    label: "mise tools"
+    label: "Optional Ben's mise tools and post-bootstrap tasks"
     class: step
   }
 
@@ -95,11 +90,16 @@ macos: {
   }
 
   personal: {
-    label: "Optional personal layer\n--personal"
+    label: "Automatic selected-stage handoff\nApps, dotfiles, identity, layout, and macOS settings"
     class: finish
   }
 
-  entrypoint -> preflight -> homebrew -> packages -> mise -> shell_state -> config -> zscaler -> tools -> validation -> personal
+  audit: {
+    label: "Final read-only convergence audit"
+    class: finish
+  }
+
+  entrypoint -> mandatory -> plan -> config -> shell_state -> packages -> zscaler -> tools -> validation -> personal -> audit
 }
 
 windows: {
