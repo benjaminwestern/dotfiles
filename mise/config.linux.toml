@@ -2,29 +2,88 @@
 # [dotfiles]
 # "~/.config/hypr/hyprland.conf" = "~/.dotfiles/hypr/hyprland.conf"
 
-# System packages — Arch (pacman)
-# These map to the macOS brew list. Names that differ are noted inline.
+[env]
+# The vfox gcloud installer disables Google's Python bootstrap but current
+# gcloud requires Python 3.10+. Use mise's stable shim during install/runtime.
+CLOUDSDK_PYTHON = "{{ env.HOME }}/.local/share/mise/shims/python3"
+
+# Linux tools that are better versioned by mise than by a distribution. These
+# fill the same role as the Homebrew formulae on macOS while avoiding stale apt
+# builds and AUR-only dependencies.
+[tools]
+neovim = "latest"
+fastfetch = "latest"
+lazygit = "latest"
+github-cli = "latest"
+gitleaks = "latest"
+jq = "latest"
+zoxide = "latest"
+fzf = "latest"
+fd = "latest"
+ripgrep = "latest"
+btop = "latest"
+yt-dlp = "latest"
+shellcheck = "latest"
+cmake = "latest"
+protobuf = "latest"
+tokei = "latest"
+# aqua does not publish Linux ARM64 artifacts for these tools. Their official
+# crates are portable and preserve mise ownership on every supported Linux CPU.
+"cargo:resvg" = "latest"
+"cargo:tlrc" = "latest"
+worktrunk = "latest"
+duckdb = "latest"
+caddy = "latest"
+kubectl = "latest"
+"llama.cpp" = "latest"
+
+# Native libraries and machine-global utilities. mise selects only the manager
+# available on the host, so one config supports Debian/Ubuntu/Mint and
+# Arch/CachyOS without shell-side package installation logic.
 [bootstrap.packages]
+
+# Debian / Ubuntu / Mint (apt)
+"apt:bash" = "latest"
+"apt:git" = "latest"
+"apt:tree" = "latest"
+"apt:tmux" = "latest"
+"apt:fish" = "latest"
+"apt:graphviz" = "latest"
+"apt:make" = "latest"
+"apt:nmap" = "latest"
+"apt:yubikey-manager" = "latest"
+"apt:gnupg" = "latest"
+"apt:pinentry-curses" = "latest"
+"apt:p7zip-full" = "latest"
+"apt:automake" = "latest"
+"apt:gcc" = "latest"
+"apt:pkg-config" = "latest"
+"apt:luarocks" = "latest"
+"apt:wget" = "latest"
+"apt:coreutils" = "latest"
+"apt:ffmpeg" = "latest"
+"apt:imagemagick" = "latest"
+"apt:podman" = "latest"
+"apt:podman-compose" = "latest"
+"apt:build-essential" = "latest"
+"apt:ca-certificates" = "latest"
+"apt:curl" = "latest"
+"apt:unzip" = "latest"
+"apt:openssh-client" = "latest"
+"apt:libssl-dev" = "latest"
+"apt:libclang-dev" = "latest"
+"apt:xz-utils" = "latest"
+"apt:zsh" = "latest"
+"apt:flatpak" = "latest"
+
+# Arch / CachyOS / Manjaro (pacman)
 "pacman:bash" = "latest"        # brew:bash
 "pacman:git" = "latest"         # brew:git
 "pacman:tree" = "latest"        # brew:tree
 "pacman:tmux" = "latest"        # brew:tmux
 "pacman:fish" = "latest"        # brew:fish
 "pacman:fisher" = "latest"      # brew:fisher
-"pacman:neovim" = "latest"      # brew:neovim
-"pacman:fastfetch" = "latest"   # brew:fastfetch
 "pacman:graphviz" = "latest"    # brew:graphviz
-"pacman:lazygit" = "latest"     # brew:lazygit
-"pacman:jq" = "latest"          # brew:jq
-"pacman:yq" = "latest"          # brew:yq
-"pacman:github-cli" = "latest"  # brew:gh
-"pacman:gitleaks" = "latest"    # brew:gitleaks
-"pacman:zoxide" = "latest"      # brew:zoxide
-"pacman:fzf" = "latest"         # brew:fzf
-"pacman:fd" = "latest"          # brew:fd
-"pacman:ripgrep" = "latest"     # brew:ripgrep
-"pacman:worktrunk" = "latest"   # brew:worktrunk
-"pacman:btop" = "latest"        # brew:btop
 "pacman:usbutils" = "latest"    # lsusb (fingerprint troubleshooting)
 "pacman:fprintd" = "latest"           # fingerprint daemon (includes PAM module)
 "pacman:libfprint" = "latest"         # fingerprint driver library
@@ -35,26 +94,15 @@
 "pacman:gnupg" = "latest"             # GPG for OpenPGP applet + ssh-agent
 "pacman:pinentry" = "latest"          # GPG passphrase entry
 "pacman:nmap" = "latest"        # brew:nmap
-"pacman:tokei" = "latest"       # brew:tokei
-"pacman:caddy" = "latest"       # brew:caddy
-"pacman:duckdb" = "latest"      # brew:duckdb
-"pacman:yt-dlp" = "latest"      # brew:yt-dlp
 "pacman:7zip" = "latest"        # brew:p7zip
-"pacman:kubectl" = "latest"     # brew:kubernetes-cli
-"pacman:shellcheck" = "latest"  # brew:shellcheck
 "pacman:automake" = "latest"    # brew:automake
-"pacman:cmake" = "latest"       # brew:cmake
 "pacman:gcc" = "latest"         # brew:gcc
 "pacman:pkgconf" = "latest"     # brew:pkgconf
-"pacman:protobuf" = "latest"    # brew:protobuf
 "pacman:luarocks" = "latest"    # brew:luarocks
-"pacman:stylua" = "latest"      # brew:stylua
 "pacman:wget" = "latest"        # brew:wget
 "pacman:coreutils" = "latest"   # brew:coreutils
 "pacman:ffmpeg" = "latest"      # brew:ffmpeg
 "pacman:imagemagick" = "latest" # brew:imagemagick
-"pacman:resvg" = "latest"       # brew:resvg
-"pacman:tldr" = "latest"        # brew:tlrc
 "pacman:podman" = "latest"      # brew:podman
 "pacman:podman-compose" = "latest" # brew:podman-compose
 
@@ -67,11 +115,12 @@
 "pacman:clang" = "latest"
 "pacman:xz" = "latest"
 "pacman:zsh" = "latest"
+"pacman:flatpak" = "latest"
 
 # Not available in pacman/AUR equivalents:
 # - brew:tpm  → installed manually via git by the bootstrap task
 # - brew:hf   → not packaged; install manually (e.g. cargo install hf)
-# - brew:llama.cpp → not packaged; install manually (e.g. AUR llama.cpp-bin)
+# - portable/versioned CLIs are declared in [tools] above and installed by mise
 # - brew:pngpaste → macOS-only
 
 [bootstrap.user]

@@ -1,5 +1,9 @@
 **/.env
 
+# Fish universal variables are machine-local runtime state. Older distro Fish
+# releases may create this while Fisher initializes; never track it as config.
+fish/fish_variables
+
 # macos ignores 
 **/.DS_Store
 .AppleDouble

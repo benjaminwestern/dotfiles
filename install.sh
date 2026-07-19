@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ###############################################################################
-# install.sh -- Remote/local macOS bootstrap entrypoint
+# install.sh -- Remote/local macOS and Linux bootstrap entrypoint
 #
 # This script is the public Unix entrypoint for the dotfiles bootstrap. It can
 # be run from a local repository checkout or streamed remotely via curl. It
@@ -19,6 +19,7 @@ MODE=""
 PREFERRED_SHELL=""
 DEVICE_PROFILE=""
 DEVICE_NAME=""
+DOWNLOADS_TARGET=""
 GIT_USER_NAME=""
 GIT_USER_EMAIL=""
 NON_INTERACTIVE=0
@@ -53,12 +54,14 @@ usage() {
 Usage:
   install.sh [setup|ensure|update|personal|audit] [options]
 
-With no arguments on macOS, the normal interface is an interactive gum menu.
+With no arguments on macOS or Linux, the normal interface is an interactive
+Gum workflow after the mandatory platform prerequisites are ready.
 
 Options:
-  --shell <fish|zsh>       Set preferred shell (persisted to state file)
+  --shell <fish|zsh|bash>  Set preferred shell (bash is Linux-only)
   --profile <work|home|minimal>  Set device profile preset
-  --device-name <name>     Set the Mac's ComputerName and hostnames
+  --device-name <name>     Set the platform hostname/computer name
+  --downloads-target <path>  Linux: absolute directory for an optional Downloads link
   --git-name <name>        Seed the Git author name
   --git-email <address>    Seed the Git author email
   --enable-<flag>          Enable a feature flag (for example, --enable-zscaler)
@@ -73,14 +76,18 @@ Options:
 Profiles are editable presets:
   work     Ben's complete setup plus Zscaler auto-detection
   home     Ben's complete personal setup without Zscaler
-  minimal  Neutral baseline for other adopters. Homebrew, standalone mise,
-           and mise-managed Gum are installed, while Ben's catalogues
-           start disabled. Device name, Git identity, and ~/code are prompted.
+  minimal  Neutral baseline for other adopters. The platform prerequisite
+           layer, standalone mise, and mise-managed Gum are installed while
+           Ben's catalogues start disabled. Device name, Git identity, and
+           ~/code are prompted.
 
 Feature flags:
   packages, applications, mise-tools, dotfiles, code-directory,
   downloads-link, git-identity, macos-defaults, remote-access, rosetta,
   shell-default, zscaler
+
+Linux system flags:
+  linux-defaults, linux-hostname, linux-default-apps
 
 Granular macOS flags:
   macos-hostname, macos-dock, macos-desktop, macos-default-apps,
@@ -104,6 +111,9 @@ Repo-local scripts:
   Other/scripts/macos/foundation-macos.zsh
   Other/scripts/macos/personal-bootstrap-macos.zsh
   Other/scripts/macos/audit-macos.zsh
+  Other/scripts/linux/bootstrap-linux.sh
+  Other/scripts/linux/foundation-linux.sh
+  Other/scripts/linux/audit-linux.sh
 
 Examples:
   curl -fsSL https://raw.githubusercontent.com/benjaminwestern/dotfiles/main/install.sh | bash
@@ -122,24 +132,22 @@ Examples:
   install.sh audit --section tools
   install.sh audit --json
 
+  # Linux: provide adopter values without the Gum questions
+  curl -fsSL https://raw.githubusercontent.com/benjaminwestern/dotfiles/main/install.sh \
+    | bash -s -- setup --profile home --shell fish --device-name dev-linux \
+        --git-name "Ada Lovelace" --git-email ada@example.com --non-interactive
+
+Linux:
+  Supports apt distributions (Debian, Ubuntu, Mint, Raspberry Pi OS) and
+  pacman distributions (Arch, CachyOS, Manjaro, EndeavourOS). The same
+  work/home/minimal presets are editable, and the signed-in account is never
+  renamed. Native packages and Flatpak apps are reconciled through mise;
+  standalone mise and Gum require no manual prerequisite commands. Use
+  audit --general, audit --profile NAME, or audit --expect-state.
+
 Windows:
   Use install.cmd instead.
 
-### Linux (Debian / Raspberry Pi OS)
-
-```bash
-# Remote one-liner
-curl -fsSL https://raw.githubusercontent.com/benjaminwestern/dotfiles/main/install.sh \
-  | bash -s -- setup
-
-# Clone first, then run
-git clone https://github.com/benjaminwestern/dotfiles ~/.dotfiles
-~/.dotfiles/install.sh setup
-
-# Routine repair or inspection
-~/.dotfiles/install.sh ensure
-~/.dotfiles/install.sh update
-```
 EOF
 }
 
@@ -150,6 +158,12 @@ _flag_name_to_var() {
     raw="${raw#macos-}"
     upper="$(echo "$raw" | tr '[:lower:]-' '[:upper:]_')"
     echo "MACOS_${upper}"
+    return 0
+  fi
+  if [[ "$raw" == linux-* && "$raw" != "linux-defaults" ]]; then
+    raw="${raw#linux-}"
+    upper="$(echo "$raw" | tr '[:lower:]-' '[:upper:]_')"
+    echo "LINUX_${upper}"
     return 0
   fi
   upper="$(echo "$raw" | tr '[:lower:]-' '[:upper:]_')"
@@ -183,6 +197,12 @@ parse_args() {
       --device-name)
         [[ $# -ge 2 ]] || fail "--device-name requires a value"
         DEVICE_NAME="$2"
+        shift 2
+        ;;
+      --downloads-target)
+        [[ $# -ge 2 ]] || fail "--downloads-target requires a value"
+        DOWNLOADS_TARGET="$2"
+        _DYNAMIC_FLAGS="${_DYNAMIC_FLAGS:+${_DYNAMIC_FLAGS}$'\n'}ENABLE_DOWNLOADS_LINK=true"
         shift 2
         ;;
       --git-name)
@@ -263,6 +283,7 @@ export_flags() {
   export PREFERRED_SHELL
   export DEVICE_PROFILE
   export DEVICE_NAME
+  export DOWNLOADS_TARGET
   export GIT_USER_NAME
   export GIT_USER_EMAIL
   export NON_INTERACTIVE
@@ -281,7 +302,9 @@ export_flags() {
 }
 
 local_repo_root() {
-  if [[ -n "$SELF_DIR" ]] && [[ -f "$SELF_DIR/Other/scripts/macos/bootstrap-macos.zsh" ]]; then
+  if [[ -n "$SELF_DIR" ]] \
+    && [[ -f "$SELF_DIR/Other/scripts/macos/bootstrap-macos.zsh" ]] \
+    && [[ -f "$SELF_DIR/Other/scripts/linux/bootstrap-linux.sh" ]]; then
     printf '%s\n' "$SELF_DIR"
     return 0
   fi
@@ -310,7 +333,7 @@ bootstrap_git() {
 }
 
 configure_interactive_input() {
-  [[ "$OS" == "macos" ]] || return 0
+  [[ "$OS" == "macos" || "$OS" == "linux" ]] || return 0
   [[ "$NON_INTERACTIVE" -eq 0 ]] || return 0
   [[ "$MODE" != "audit" ]] || return 0
   [[ -t 0 ]] && return 0
@@ -340,7 +363,8 @@ ensure_macos_repo_prerequisites() {
   if local_root="$(local_repo_root 2>/dev/null)"; then
     return 0
   fi
-  if [[ -f "$DOTFILES_DIR/Other/scripts/macos/bootstrap-macos.zsh" ]]; then
+  if [[ -f "$DOTFILES_DIR/Other/scripts/macos/bootstrap-macos.zsh" \
+    && -f "$DOTFILES_DIR/Other/scripts/linux/bootstrap-linux.sh" ]]; then
     return 0
   fi
   if have_git; then
@@ -386,7 +410,13 @@ download_repo_archive() {
   local archive_path="$temp_root/dotfiles-main.tar.gz"
 
   display_message "Downloading temporary dotfiles archive"
-  curl -fsSL "$DEFAULT_ARCHIVE_URL" -o "$archive_path"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$DEFAULT_ARCHIVE_URL" -o "$archive_path"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -qO "$archive_path" "$DEFAULT_ARCHIVE_URL"
+  else
+    fail "Downloading the bootstrap archive requires curl or wget"
+  fi
   tar -xzf "$archive_path" -C "$temp_root"
 
   ARCHIVE_RUN_ROOT="$temp_root/dotfiles-main"
@@ -505,7 +535,17 @@ fi
 
 run_linux_entrypoint() {
   local exit_code
-  /bin/bash "$RUN_ROOT/Other/scripts/linux/foundation-debian.sh" "$MODE"
+  local -a args=()
+  if [[ "$MODE" == "audit" && ${#AUDIT_ARGS[@]} -gt 0 ]]; then
+    args=(audit "${AUDIT_ARGS[@]}")
+  else
+    args=("$MODE")
+  fi
+  if [[ -n "$INTERACTIVE_TTY" && "$MODE" != "audit" ]]; then
+    /bin/bash "$RUN_ROOT/Other/scripts/linux/bootstrap-linux.sh" "${args[@]}" </dev/tty
+  else
+    /bin/bash "$RUN_ROOT/Other/scripts/linux/bootstrap-linux.sh" "${args[@]}"
+  fi
   exit_code=$?
   maybe_persist_repo_after_archive_run
   exit "$exit_code"
