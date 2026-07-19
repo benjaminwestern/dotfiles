@@ -24,7 +24,7 @@ if status is-interactive
         if test "$TERM_PROGRAM" != "vscode"
             if test (uname) = Darwin -o "$DOTFILES_TMUX_AUTO" = "1"
                 set -l tmux_bin (command -v tmux || echo /usr/bin/tmux)
-                exec $tmux_bin new-session -As main
+                $tmux_bin new-session -As main
             end
         end
     end
