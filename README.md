@@ -117,13 +117,53 @@ git clone https://github.com/benjaminwestern/dotfiles $HOME\.dotfiles
 # Routine repair or inspection
 & "$HOME\.dotfiles\install.cmd" ensure
 & "$HOME\.dotfiles\install.cmd" update
+& "$HOME\.dotfiles\install.cmd" audit
+& "$HOME\.dotfiles\install.cmd" audit --profile home
 & "$HOME\.dotfiles\install.cmd" audit --populate-state
+
+# Optional WSL layer; native Windows does not depend on this
+& "$HOME\.dotfiles\install.cmd" wsl --profile home
+& "$HOME\.dotfiles\install.cmd" audit --section wsl --profile home
 & "$HOME\.dotfiles\Other\scripts\windows\resign-windows.cmd"
 ```
 
 > **Important**
 > On Windows, use `install.cmd` or the repo-local `.cmd` entrypoints on a
 > fresh machine. Do not start with the `.ps1` implementation files directly.
+
+The Windows loader uses Scoop for native prerequisites and desktop apps, then
+uses mise for the same shared runtime and portable CLI catalogue as macOS and
+Linux. A general audit inventories current state; adding `--profile home`,
+`work`, or `minimal` compares that inventory with the selected preset.
+
+The Windows `home` catalogue mirrors the macOS intent with native equivalents:
+Windows Terminal/PowerShell 7 replaces Ghostty/Fish, Ditto replaces Maccy,
+DBeaver replaces DBngin, PowerToys replaces the window-management utilities,
+MiKTeX replaces MacTeX, and ARM64 `scc` replaces source-built `tokei`. Scoop
+also owns Windows-only upstream bundles for gcloud, skaffold, Lua/StyLua,
+mitmproxy, and the GUI/font catalogue. Mise still owns the portable runtimes
+and CLIs. Podman Desktop is installed but no Podman machine is created.
+
+WSL is an explicit second layer, never a hidden requirement of the native
+profile. Selecting it installs Ubuntu by default, creates a Linux account that
+matches the Windows user, and runs the same Linux `home`, `work`, or `minimal`
+bootstrap inside the distribution. `--wsl-shell`, `--wsl-downloads-target`,
+and the normal `--enable-*`/`--disable-*` switches keep that preset editable.
+Enabling WSL can require one Windows
+restart; the bootstrap stops at that boundary and is safely rerun afterward.
+The Windows audit reports WSL independently and, when a profile is requested,
+runs the Linux profile audit inside an installed distribution as well.
+WSL 2 is preferred on physical hosts. Nested VMs that do not expose the
+required hypervisor can opt into Microsoft's translation-based WSL 1 with
+`--wsl-version 1`; the Linux bootstrap remains the same, but systemd and full
+kernel compatibility are unavailable. In that mode the bootstrap retains the
+portable CLI, Mise, Fish, dotfiles, Git identity, hostname, and code-directory
+layers while skipping Flatpak applications, YubiKey device services, desktop
+MIME defaults, a duplicate Linux SSH service, and the two uv-managed Python
+applications (SQLFluff and mitmproxy) that fail on WSL 1's filesystem copy
+path. WSL 2 retains the full Linux profile. Shared Bash, Zsh, and Fish startup
+files move an ordinary WSL login from the native Windows home to Linux home
+before activating Mise, so the Windows Mise config cannot be loaded by accident.
 
 ![Bootstrap overview banner](./assets/readme/root-bootstrap-overview.svg)
 
@@ -210,6 +250,7 @@ mise dotfiles status
 & "$HOME\.dotfiles\install.cmd" ensure
 & "$HOME\.dotfiles\install.cmd" update
 & "$HOME\.dotfiles\install.cmd" audit --populate-state
+& "$HOME\.dotfiles\install.cmd" wsl --profile home
 & "$HOME\.dotfiles\Other\scripts\windows\resign-windows.cmd"
 ```
 

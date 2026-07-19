@@ -35,7 +35,8 @@ function global:Ensure-PrecursorCodeSigningCert {
 function global:Update-PrecursorPath {
   $prepend = @(
     (Join-Path $HOME 'scoop\shims'),
-    (Join-Path $HOME 'scoop\apps\pwsh\current')
+    (Join-Path $HOME 'scoop\apps\pwsh\current'),
+    (Join-Path $HOME 'scoop\apps\openssl\current\bin')
   )
 
   for ($index = $prepend.Count - 1; $index -ge 0; $index--) {
@@ -63,6 +64,29 @@ function global:Update-PrecursorPath {
   }
 }
 
+function global:Invoke-PrecursorScoop {
+  param([Parameter(Mandatory)][string[]]$ArgumentList)
+
+  $previousErrorActionPreference = $ErrorActionPreference
+  $exitCode = 0
+  try {
+    # Scoop manifests intentionally emit some non-terminating cleanup errors.
+    # Do not let a caller's Stop preference convert those into a failed install;
+    # Scoop's own process exit code remains the authority for success or failure.
+    $ErrorActionPreference = 'Continue'
+    & scoop @ArgumentList
+    if ($null -ne $LASTEXITCODE) {
+      $exitCode = $LASTEXITCODE
+    }
+  } finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+  }
+
+  if ($exitCode -ne 0) {
+    throw "scoop $($ArgumentList -join ' ') failed with exit code $exitCode"
+  }
+}
+
 function global:Sign-PrecursorScripts {
   param(
     [string]$ScriptsRoot = (Join-Path $HOME '.dotfiles\Other\scripts')
@@ -82,10 +106,6 @@ function global:Sign-PrecursorScripts {
 function global:Install-PrecursorScoop {
   if (Test-PrecursorCommandExists 'scoop') {
     Update-PrecursorPath
-    $extrasBucket = Join-Path $HOME 'scoop\buckets\extras'
-    if (-not (Test-Path $extrasBucket)) {
-      scoop bucket add extras 2>$null
-    }
     return
   }
 
@@ -111,13 +131,11 @@ function global:Install-PrecursorScoop {
     }
   }
 
-  & $installerPath -RunAsAdmin:$false
+  $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+    [Security.Principal.WindowsBuiltInRole]::Administrator
+  )
+  & $installerPath -RunAsAdmin:$isAdmin
   Update-PrecursorPath
-
-  $extrasBucket = Join-Path $HOME 'scoop\buckets\extras'
-  if (-not (Test-Path $extrasBucket)) {
-    scoop bucket add extras 2>$null
-  }
 
   $cert = Get-PrecursorCodeSigningCert
   if ($cert) {
@@ -143,7 +161,7 @@ function global:Install-PrecursorPwsh {
     throw 'Scoop was not available after precursor bootstrap.'
   }
 
-  scoop install pwsh 2>$null
+  Invoke-PrecursorScoop -ArgumentList @('install', 'pwsh')
   Update-PrecursorPath
 
   $cert = if ((Get-ExecutionPolicy) -eq 'AllSigned') {
@@ -173,7 +191,12 @@ function global:Invoke-PwshPrecursor {
   Install-PrecursorScoop
   Install-PrecursorPwsh
   Update-PrecursorPath
-  Sign-PrecursorScripts -ScriptsRoot (Split-Path -Parent $ScriptPath)
+  # A certificate may remain from an earlier AllSigned setup. Its mere
+  # presence must not mutate a clean dotfiles checkout under RemoteSigned;
+  # signatures are required only while AllSigned is actually effective.
+  if ((Get-ExecutionPolicy) -eq 'AllSigned') {
+    Sign-PrecursorScripts -ScriptsRoot (Split-Path -Parent $ScriptPath)
+  }
 
   $pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue | Select-Object -First 1).Source
   if (-not $pwsh) {

@@ -77,9 +77,9 @@ detect_linux_platform() {
   DISTRO_ID=unknown DISTRO_LIKE='' DISTRO_NAME=Linux PACKAGE_MANAGER=''
   if [[ -r "$release_file" ]]; then
     local detected_id detected_like detected_name
-    detected_id="$(awk -F= '$1=="ID" {gsub(/^\"|\"$/, "", $2); print tolower($2)}' "$release_file")"
-    detected_like="$(awk -F= '$1=="ID_LIKE" {gsub(/^\"|\"$/, "", $2); print tolower($2)}' "$release_file")"
-    detected_name="$(awk -F= '$1=="PRETTY_NAME" {sub(/^[^=]*=/, ""); gsub(/^\"|\"$/, ""); print}' "$release_file")"
+    detected_id="$(awk -F= '$1=="ID" {gsub(/^"|"$/, "", $2); print tolower($2)}' "$release_file")"
+    detected_like="$(awk -F= '$1=="ID_LIKE" {gsub(/^"|"$/, "", $2); print tolower($2)}' "$release_file")"
+    detected_name="$(awk -F= '$1=="PRETTY_NAME" {sub(/^[^=]*=/, ""); gsub(/^"|"$/, ""); print}' "$release_file")"
     [[ -z "$detected_id" ]] || DISTRO_ID="$detected_id"
     [[ -z "$detected_like" ]] || DISTRO_LIKE="$detected_like"
     [[ -z "$detected_name" ]] || DISTRO_NAME="$detected_name"
@@ -376,7 +376,17 @@ linux_package_catalogue() {
       sub("\".*$", "", line)
       print line
     }
-  ' "$config"
+  ' "$config" | {
+    if [[ "${BOOTSTRAP_WSL_VERSION:-}" == 1 ]]; then
+      # WSL 1 has no systemd or device-service support. Keep the portable CLI
+      # catalogue, but do not ask dpkg to configure packages whose maintainer
+      # scripts require those facilities. WSL 2 and ordinary Linux hosts retain
+      # the complete package set.
+      grep -Ev '^(flatpak|yubikey-manager)$' || true
+    else
+      cat
+    fi
+  }
 }
 
 linux_baseline_package_specs() {
@@ -387,6 +397,7 @@ linux_baseline_package_specs() {
 }
 
 linux_application_catalogue() {
+  [[ "${BOOTSTRAP_WSL_VERSION:-}" != 1 ]] || return 0
   printf '%s\n' com.visualstudio.code
   case "$(uname -m)" in
     x86_64|amd64) printf '%s\n' com.google.Chrome ;;

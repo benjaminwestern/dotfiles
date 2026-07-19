@@ -575,7 +575,7 @@ profile_block_zsh() {
   cat <<'EOF'
 # >>> foundation-bootstrap >>>
 if command -v brew >/dev/null 2>&1; then eval "$(brew shellenv)"; fi
-if command -v mise >/dev/null 2>&1; then eval "$(mise activate zsh)"; fi
+if command -v mise >/dev/null 2>&1; then eval "$(mise -C "$HOME" activate zsh)"; fi
 if command -v zoxide >/dev/null 2>&1; then eval "$(zoxide init zsh)"; fi
 # <<< foundation-bootstrap <<<
 EOF
@@ -595,7 +595,7 @@ profile_block_fish() {
   cat <<'EOF'
 # >>> foundation-bootstrap >>>
 if type -q brew; eval (brew shellenv); end
-if type -q mise; mise activate fish | source; end
+if type -q mise; mise -C "$HOME" activate fish | source; end
 if type -q zoxide; zoxide init fish | source; end
 # <<< foundation-bootstrap <<<
 EOF
@@ -666,7 +666,7 @@ activate_shell() {
   eval "$(brew shellenv)"
 
   if command_exists mise; then
-    eval "$(mise activate zsh)"
+    eval "$(mise -C "$HOME" activate zsh)"
   fi
 
   if command_exists zoxide; then

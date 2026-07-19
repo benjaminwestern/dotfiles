@@ -70,14 +70,52 @@ function Ensure-Repo {
       Idempotency: Safe. Uses --ff-only so it will never force-merge.
   #>
   if (Test-Path (Join-Path $DotfilesDir '.git')) {
-    Invoke-OrDry -Label 'git fetch --all --prune' -Command { git -C $DotfilesDir fetch --all --prune 2>$null }
-    Invoke-OrDry -Label 'git pull --ff-only' -Command { git -C $DotfilesDir pull --ff-only 2>$null }
-
     if (Test-DryRun) {
-      Write-StatusFix 'Dotfiles repo' -Action 'would pull latest'
-    } else {
-      Write-StatusPass 'Dotfiles repo' -Detail 'up to date'
+      # A dry-run must not fetch or rewrite refs. Compare the checked-out
+      # commit with the remote branch directly instead. Ignore the user's
+      # global config so personal URL rewrites cannot alter bootstrap transport.
+      $previousGitConfigGlobal = $env:GIT_CONFIG_GLOBAL
+      try {
+        # Git for Windows understands its MSYS null device here. The native
+        # spelling NUL is treated as a config path and fails with EINVAL.
+        $env:GIT_CONFIG_GLOBAL = '/dev/null'
+        $head = [string](git -C $DotfilesDir rev-parse HEAD 2>$null | Select-Object -Last 1)
+        $branch = [string](git -C $DotfilesDir symbolic-ref --quiet --short HEAD 2>$null | Select-Object -Last 1)
+        $head = if ($head) { $head.Trim() } else { '' }
+        $branch = if ($branch) { $branch.Trim() } else { '' }
+        $remoteLine = if ($branch) {
+          git -C $DotfilesDir ls-remote --exit-code origin "refs/heads/$branch" 2>$null | Select-Object -First 1
+        }
+      } finally {
+        $env:GIT_CONFIG_GLOBAL = $previousGitConfigGlobal
+      }
+      $remoteHead = if ($remoteLine) { ($remoteLine -split "`t")[0].Trim() } else { '' }
+
+      if ($head -and $remoteHead -and $head -eq $remoteHead) {
+        Write-StatusPass 'Dotfiles repo' -Detail 'up to date'
+      } elseif ($head -and $remoteHead) {
+        Write-StatusFix 'Dotfiles repo' -Action "would fast-forward $branch"
+      } else {
+        Write-StatusSkip 'Dotfiles repo' -Reason 'could not compare local and remote revisions'
+      }
+      return
     }
+
+    $previousGitConfigGlobal = $env:GIT_CONFIG_GLOBAL
+    try {
+      $env:GIT_CONFIG_GLOBAL = '/dev/null'
+      Invoke-OrDry -Label 'git fetch --all --prune' -Command {
+        git -C $DotfilesDir fetch --all --prune 2>$null
+        if ($LASTEXITCODE -ne 0) { throw "git fetch failed with exit code $LASTEXITCODE" }
+      }
+      Invoke-OrDry -Label 'git pull --ff-only' -Command {
+        git -C $DotfilesDir pull --ff-only 2>$null
+        if ($LASTEXITCODE -ne 0) { throw "git pull failed with exit code $LASTEXITCODE" }
+      }
+    } finally {
+      $env:GIT_CONFIG_GLOBAL = $previousGitConfigGlobal
+    }
+    Write-StatusPass 'Dotfiles repo' -Detail 'up to date'
     return
   }
 
@@ -202,11 +240,11 @@ function Apply-SshConfig {
 function Apply-MiseConfig {
   <#
   .SYNOPSIS
-      Copy mise config.toml, .env, and scripts from dotfiles to $HOME\.config\mise.
+      Copy the shared and Windows mise configs, local env, and scripts to $HOME\.config\mise.
   .DESCRIPTION
       Mirrors the dotfiles mise config tree into the user's .config\mise directory.
-      Copies config.toml, .env (if present), and the scripts directory. Compares
-      each file before overwriting.
+      Copies config.toml, config.windows.toml, miserc.toml, .env (if present),
+      and the scripts directory. Compares each file before overwriting.
   .NOTES
       Checks: Whether source mise config directory exists.
       Gates: ENABLE_MISE_CONFIG env var (default: true).
@@ -229,17 +267,14 @@ function Apply-MiseConfig {
 
   # Count files that need updating (used for both dry-run and real mode)
   $pending = 0
-  $srcConfig = Join-Path $srcDir 'config.toml'
-  $dstConfig = Join-Path $dstDir 'config.toml'
-  if ((Test-Path $srcConfig) -and ((-not (Test-Path $dstConfig)) -or
-      (Get-FileHash $srcConfig -Algorithm SHA256).Hash -ne (Get-FileHash $dstConfig -Algorithm SHA256).Hash)) {
-    $pending++
-  }
-  $srcEnv = Join-Path $srcDir '.env'
-  $dstEnv = Join-Path $dstDir '.env'
-  if ((Test-Path $srcEnv) -and ((-not (Test-Path $dstEnv)) -or
-      (Get-FileHash $srcEnv -Algorithm SHA256).Hash -ne (Get-FileHash $dstEnv -Algorithm SHA256).Hash)) {
-    $pending++
+  $managedRootFiles = @('config.toml', 'config.windows.toml', 'miserc.toml', '.env')
+  foreach ($name in $managedRootFiles) {
+    $srcFile = Join-Path $srcDir $name
+    $dstFile = Join-Path $dstDir $name
+    if ((Test-Path $srcFile) -and ((-not (Test-Path $dstFile)) -or
+        (Get-FileHash $srcFile -Algorithm SHA256).Hash -ne (Get-FileHash $dstFile -Algorithm SHA256).Hash)) {
+      $pending++
+    }
   }
   $srcScripts = Join-Path $srcDir 'scripts'
   $dstScripts = Join-Path $dstDir 'scripts'
@@ -272,18 +307,14 @@ function Apply-MiseConfig {
 
   $copied = 0
 
-  # Copy config.toml
-  if ((Test-Path $srcConfig) -and ((-not (Test-Path $dstConfig)) -or
-      (Get-FileHash $srcConfig -Algorithm SHA256).Hash -ne (Get-FileHash $dstConfig -Algorithm SHA256).Hash)) {
-    Copy-Item -Path $srcConfig -Destination $dstConfig -Force
-    $copied++
-  }
-
-  # Copy .env (if present)
-  if ((Test-Path $srcEnv) -and ((-not (Test-Path $dstEnv)) -or
-      (Get-FileHash $srcEnv -Algorithm SHA256).Hash -ne (Get-FileHash $dstEnv -Algorithm SHA256).Hash)) {
-    Copy-Item -Path $srcEnv -Destination $dstEnv -Force
-    $copied++
+  foreach ($name in $managedRootFiles) {
+    $srcFile = Join-Path $srcDir $name
+    $dstFile = Join-Path $dstDir $name
+    if ((Test-Path $srcFile) -and ((-not (Test-Path $dstFile)) -or
+        (Get-FileHash $srcFile -Algorithm SHA256).Hash -ne (Get-FileHash $dstFile -Algorithm SHA256).Hash)) {
+      Copy-Item -Path $srcFile -Destination $dstFile -Force
+      $copied++
+    }
   }
 
   # Copy scripts directory (recursive)
@@ -421,7 +452,7 @@ function Apply-ProfileExtras {
   .DESCRIPTION
       Uses Write-ManagedBlock to maintain a fenced block of personal additions
       in the PowerShell $PROFILE. Content includes common aliases, directory
-      shortcuts, and tool integrations (zoxide, fzf, starship) that go beyond
+      shortcuts, and tool integrations (fzf and starship) that go beyond
       the foundation-managed PATH setup.
   .NOTES
       Checks: Whether $PROFILE path is set.
@@ -463,11 +494,6 @@ function gp { git pull @args }
 function gc { git commit @args }
 
 # -- Tool integrations --------------------------------------------------------
-# Zoxide (smarter cd) -- only if installed
-if (Get-Command zoxide -ErrorAction SilentlyContinue) {
-  Invoke-Expression (& { (zoxide init powershell | Out-String) })
-}
-
 # Fzf integration -- only if installed
 if (Get-Command fzf -ErrorAction SilentlyContinue) {
   `$env:FZF_DEFAULT_OPTS = '--height 40% --layout=reverse --border'
@@ -480,6 +506,25 @@ if (Get-Command starship -ErrorAction SilentlyContinue) {
 
 $endMarker
 "@
+
+  $changed = $true
+  if (Test-Path $PROFILE) {
+    $currentContent = Get-Content $PROFILE -Raw -ErrorAction SilentlyContinue
+    if ($currentContent -and $currentContent.Contains($beginMarker) -and $currentContent.Contains($endMarker)) {
+      $currentBlock = $currentContent.Substring(
+        $currentContent.IndexOf($beginMarker),
+        ($currentContent.IndexOf($endMarker) + $endMarker.Length) - $currentContent.IndexOf($beginMarker)
+      )
+      $currentBlockNormalized = $currentBlock -replace "`r`n", "`n"
+      $blockContentNormalized = $blockContent -replace "`r`n", "`n"
+      $changed = $currentBlockNormalized -ne $blockContentNormalized
+    }
+  }
+
+  if (-not $changed) {
+    Write-StatusPass 'Profile extras' -Detail 'managed block up to date'
+    return
+  }
 
   Write-ManagedBlock `
     -FilePath $PROFILE `

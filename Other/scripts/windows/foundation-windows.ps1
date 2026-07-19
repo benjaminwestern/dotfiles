@@ -110,8 +110,23 @@ $FoundationPackages = @(
   # live in mise/config.windows.toml instead of being duplicated here.
   'git', 'openssl', 'pwsh'
 )
-$OptionalNativePackages = @('jid')
-$ApplicationPackages = @('vscode', 'googlechrome')
+$RequiredWindowsRuntimePackages = @('vcredist2022')
+$OptionalNativePackages = @(
+  'jid',
+  # Windows ARM substitutions for shared mise entries whose upstream release
+  # or build path is Unix-only. Windows transparently runs these signed x64
+  # packages where an ARM64 binary is not published.
+  'gcloud', 'skaffold', 'stylua', 'lua-for-windows', 'ngrok', 'scc', 'mitmproxy'
+)
+$ApplicationPackages = @(
+  # Direct macOS catalogue counterparts.
+  'vscode', 'googlechrome', 'obsidian', 'podman-desktop', 'yubioath', 'codex',
+  # Windows-native counterparts: Maccy -> Ditto, DBngin -> DBeaver,
+  # Rectangle/Aerospace -> PowerToys, MacTeX -> MiKTeX.
+  'ditto', 'dbeaver', 'powertoys', 'miktex',
+  # Match the managed macOS terminal font catalogue.
+  'JetBrainsMono-NF', 'NerdFontsSymbolsOnly'
+)
 
 $EffectiveExecutionPolicy = Get-ExecutionPolicy
 $RequiresSigning = @(
@@ -159,7 +174,7 @@ function Ensure-ScoopBucket {
   }
 
   Invoke-OrDry -Label "scoop bucket add $Name" -Command {
-    scoop bucket add $Name 2>$null
+    Invoke-PrecursorScoop -ArgumentList @('bucket', 'add', $Name)
   }
 }
 
@@ -202,7 +217,6 @@ function Convert-CertificateToPemText {
 function Ensure-Scoop {
   if (Test-CommandExists 'scoop') {
     Update-PrecursorPath
-    Ensure-ScoopBucket -Name 'extras'
     Write-StatusPass 'Scoop' -Detail 'already installed'
     return
   }
@@ -243,14 +257,16 @@ function Ensure-Scoop {
     }
   }
 
-  & $installerPath -RunAsAdmin:$false
+  $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+    [Security.Principal.WindowsBuiltInRole]::Administrator
+  )
+  & $installerPath -RunAsAdmin:$isAdmin
   Update-PrecursorPath
 
   if ($RequiresSigning) {
     Sign-ScoopScripts
   }
 
-  Ensure-ScoopBucket -Name 'extras'
   Write-StatusFix 'Scoop' -Action 'installed'
 }
 
@@ -258,8 +274,6 @@ function Ensure-FoundationPackages {
   if ($RequiresSigning) {
     Ensure-LocalCodeSigningCert | Out-Null
   }
-
-  Ensure-ScoopBucket -Name 'extras'
 
   $present = 0
   $missing = 0
@@ -272,12 +286,13 @@ function Ensure-FoundationPackages {
     }
 
     Invoke-OrDry -Label "scoop install $package" -Command {
-      scoop install $package 2>$null
+      Invoke-PrecursorScoop -ArgumentList @('install', $package)
     }
     $missing++
   }
 
   Update-PrecursorPath
+  Ensure-ScoopBucket -Name 'extras'
 
   if ($RequiresSigning) {
     Invoke-OrDry -Label 'Sign-ScoopScripts' -Command { Sign-ScoopScripts }
@@ -291,15 +306,37 @@ function Ensure-FoundationPackages {
   }
 }
 
+function Ensure-WindowsRuntimePackages {
+  $missing = 0
+  foreach ($package in $RequiredWindowsRuntimePackages) {
+    if (Test-ScoopPackageInstalled -Name $package) { continue }
+    Invoke-OrDry -Label "scoop install $package" -Command {
+      Invoke-PrecursorScoop -ArgumentList @('install', $package)
+    }
+    $missing++
+  }
+
+  Update-PrecursorPath
+  if ($missing -eq 0) {
+    Write-StatusPass 'Windows runtime packages' -Detail 'all present'
+  } else {
+    $action = if (Test-DryRun) { "would install $missing" } else { "installed $missing" }
+    Write-StatusFix 'Windows runtime packages' -Action $action
+  }
+}
+
 function Ensure-OptionalNativePackages {
   if ($global:RESOLVED_PACKAGES -ne 'true') {
     Write-StatusSkip 'Optional native packages' -Reason 'disabled by plan'
     return
   }
   $missing = 0
+  Ensure-ScoopBucket -Name 'extras'
   foreach ($package in $OptionalNativePackages) {
     if (Test-ScoopPackageInstalled -Name $package) { continue }
-    Invoke-OrDry -Label "scoop install $package" -Command { scoop install $package 2>$null }
+    Invoke-OrDry -Label "scoop install $package" -Command {
+      Invoke-PrecursorScoop -ArgumentList @('install', $package)
+    }
     $missing++
   }
   if ($missing -eq 0) { Write-StatusPass 'Optional native packages' -Detail 'all present' }
@@ -312,13 +349,16 @@ function Ensure-WindowsApplications {
     return
   }
   Ensure-ScoopBucket -Name 'extras'
+  Ensure-ScoopBucket -Name 'nerd-fonts'
   $missing = 0
   foreach ($package in $ApplicationPackages) {
     if (Test-ScoopPackageInstalled -Name $package) { continue }
-    Invoke-OrDry -Label "scoop install $package" -Command { scoop install $package 2>$null }
+    Invoke-OrDry -Label "scoop install $package" -Command {
+      Invoke-PrecursorScoop -ArgumentList @('install', $package)
+    }
     $missing++
   }
-  if ($missing -eq 0) { Write-StatusPass 'Windows applications' -Detail 'VS Code and Chrome present' }
+  if ($missing -eq 0) { Write-StatusPass 'Windows applications' -Detail 'macOS-equivalent app and font catalogue present' }
   else { Write-StatusFix 'Windows applications' -Action $(if (Test-DryRun) { "would install $missing" } else { "installed $missing" }) }
 }
 
@@ -361,17 +401,45 @@ function Ensure-WindowsComputerName {
 
 function Ensure-RemoteAccess {
   if ($global:RESOLVED_REMOTE_ACCESS -ne 'true') { Write-StatusSkip 'Remote access' -Reason 'disabled by plan'; return }
-  $capability = Get-WindowsCapability -Online -Name 'OpenSSH.Server*' -ErrorAction SilentlyContinue | Select-Object -First 1
-  if (-not $capability -or $capability.State -ne 'Installed') {
-    Invoke-OrDry -Label 'Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0 (administrator)' -Command {
-      Add-WindowsCapability -Online -Name 'OpenSSH.Server~~~~0.0.1.0' | Out-Null
-    }
-  }
   $service = Get-Service sshd -ErrorAction SilentlyContinue
-  if ($service -and $service.Status -eq 'Running' -and $service.StartType -eq 'Automatic') {
+  $firewallRule = Get-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -ErrorAction SilentlyContinue
+  if (-not $firewallRule) {
+    $firewallRule = Get-NetFirewallRule -Name 'sshd' -ErrorAction SilentlyContinue
+  }
+  if ($service -and $service.Status -eq 'Running' -and $service.StartType -eq 'Automatic' -and
+      $firewallRule -and $firewallRule.Enabled -eq 'True') {
     Write-StatusPass 'Remote access' -Detail 'OpenSSH Server enabled and running'
     return
   }
+
+  if (-not $service) {
+    $capability = Get-WindowsCapability -Online -Name 'OpenSSH.Server*' -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $capability -or $capability.State -ne 'Installed') {
+      if (Test-DryRun) {
+        Write-DryRunLog 'install OpenSSH Server from Windows capability; fall back to Microsoft.OpenSSH.Preview via WinGet'
+      } else {
+        try {
+          Add-WindowsCapability -Online -Name 'OpenSSH.Server~~~~0.0.1.0' -ErrorAction Stop | Out-Null
+        } catch {
+          if (-not (Test-CommandExists 'winget')) {
+            throw "OpenSSH Server capability installation failed and WinGet is unavailable: $($_.Exception.Message)"
+          }
+
+          & winget install `
+            --id Microsoft.OpenSSH.Preview `
+            --exact `
+            --source winget `
+            --accept-source-agreements `
+            --accept-package-agreements `
+            --silent
+          if ($LASTEXITCODE -ne 0) {
+            throw "OpenSSH Server capability and WinGet fallback both failed (WinGet exit $LASTEXITCODE)."
+          }
+        }
+      }
+    }
+  }
+
   Invoke-OrDry -Label 'Set-Service sshd Automatic; Start-Service sshd (administrator)' -Command {
     Set-Service -Name sshd -StartupType Automatic
     Start-Service sshd
@@ -408,7 +476,7 @@ function Ensure-Mise {
       Ensure-Scoop
     }
 
-    scoop install mise 2>$null
+    Invoke-PrecursorScoop -ArgumentList @('install', 'mise')
     Update-PrecursorPath
     Sign-ScoopScripts
     Sign-MiseScripts
@@ -422,7 +490,7 @@ function Ensure-Mise {
   }
 
   if (Test-CommandExists 'scoop') {
-    scoop install mise 2>$null
+    Invoke-PrecursorScoop -ArgumentList @('install', 'mise')
     Update-PrecursorPath
     if (Test-CommandExists 'mise') {
       Write-StatusFix 'Mise' -Action 'installed via Scoop'
@@ -721,12 +789,26 @@ function Ensure-Profile {
   $blockContent = @(
     $PROFILE_BEGIN
     '$env:MISE_PWSH_CHPWD_WARNING=0'
-    '. "~/.dotfiles/Other/scripts/windows/lib/common.ps1"'
-    'Remove-MiseInstallPathsFromSessionPath'
+    '$_bootstrapCommon = Join-Path $HOME ".dotfiles/Other/scripts/windows/lib/common.ps1"'
+    'if (Test-Path $_bootstrapCommon) {'
+    '  . $_bootstrapCommon'
+    '  Remove-MiseInstallPathsFromSessionPath'
+    '}'
+    '$_bootstrapLocalBin = Join-Path $HOME ".local/bin"'
+    'if (($env:PATH -split ";") -notcontains $_bootstrapLocalBin) {'
+    '  $env:PATH = "$_bootstrapLocalBin;$env:PATH"'
+    '}'
     '(& mise activate pwsh --shims) | Out-String | Invoke-Expression'
-    '(& zoxide init powershell) | Out-String | Invoke-Expression'
+    'if (Get-Command zoxide -ErrorAction SilentlyContinue) {'
+    '  $_bootstrapZoxide = (& zoxide init powershell 2>$null | Out-String)'
+    '  if ($LASTEXITCODE -eq 0 -and $_bootstrapZoxide.Trim()) {'
+    '    Invoke-Expression $_bootstrapZoxide'
+    '  }'
+    '}'
     ''
-    '. "~/.dotfiles/Other/scripts/windows/lib/signing-helpers-windows.ps1"'
+    '$_bootstrapSigning = Join-Path $HOME ".dotfiles/Other/scripts/windows/lib/signing-helpers-windows.ps1"'
+    'if (Test-Path $_bootstrapSigning) { . $_bootstrapSigning }'
+    'Remove-Variable _bootstrapCommon, _bootstrapLocalBin, _bootstrapZoxide, _bootstrapSigning -ErrorAction SilentlyContinue'
     $PROFILE_END
   ) -join "`n"
 
@@ -738,14 +820,21 @@ function Ensure-Profile {
         $currentContent.IndexOf($PROFILE_BEGIN),
         ($currentContent.IndexOf($PROFILE_END) + $PROFILE_END.Length) - $currentContent.IndexOf($PROFILE_BEGIN)
       ))
-      $changed = $currentBlock -ne $blockContent
+      # Set-Content uses Windows newlines while the generated block is joined
+      # with LF. Compare normalized content so a converged profile does not
+      # appear to drift on every audit or dry-run.
+      $currentBlockNormalized = $currentBlock -replace "`r`n", "`n"
+      $blockContentNormalized = $blockContent -replace "`r`n", "`n"
+      $changed = $currentBlockNormalized -ne $blockContentNormalized
     }
   }
 
-  Write-ManagedBlock -FilePath $PROFILE `
-    -BeginMarker $PROFILE_BEGIN `
-    -EndMarker $PROFILE_END `
-    -BlockContent $blockContent
+  if ($changed) {
+    Write-ManagedBlock -FilePath $PROFILE `
+      -BeginMarker $PROFILE_BEGIN `
+      -EndMarker $PROFILE_END `
+      -BlockContent $blockContent
+  }
 
   if ($RequiresSigning) {
     Invoke-OrDry -Label 'Sign-DotfilesWindowsScripts' -Command { Sign-DotfilesWindowsScripts }
@@ -772,11 +861,18 @@ function Ensure-CurrentPwshActivation {
   }
 
   Remove-MiseInstallPathsFromSessionPath
+  $localBin = Join-Path $HOME '.local\bin'
+  if (($env:PATH -split ';') -notcontains $localBin) {
+    $env:PATH = "$localBin;$env:PATH"
+  }
   (& mise activate pwsh --shims) | Out-String | Invoke-Expression
   $zoxideActivated = $false
   if (Test-CommandExists 'zoxide') {
-    (& zoxide init powershell) | Out-String | Invoke-Expression
-    $zoxideActivated = $true
+    $zoxideInit = (& zoxide init powershell 2>$null | Out-String)
+    if ($LASTEXITCODE -eq 0 -and $zoxideInit.Trim()) {
+      Invoke-Expression $zoxideInit
+      $zoxideActivated = $true
+    }
   }
 
   $doctor = Get-MiseDoctorJson
@@ -887,7 +983,6 @@ function Get-MiseSeedBlock {
     'uv = "latest"'
     'zig = "latest"'
     'terraform = "latest"'
-    'gcloud = "latest"'
     'usage = "latest"'
     'pkl = "latest"'
     'hk = "latest"'
@@ -903,8 +998,10 @@ function Get-MiseSeedBlock {
 }
 
 function Ensure-MiseConfig {
-  Invoke-OrDry -Label "mkdir $MiseConfigDir" -Command {
-    New-Item -ItemType Directory -Force $MiseConfigDir | Out-Null
+  if (-not (Test-Path $MiseConfigDir)) {
+    Invoke-OrDry -Label "mkdir $MiseConfigDir" -Command {
+      New-Item -ItemType Directory -Force $MiseConfigDir | Out-Null
+    }
   }
 
   $seedBlock = Get-MiseSeedBlock
@@ -925,7 +1022,9 @@ function Ensure-MiseConfig {
       ($content.IndexOf($MISE_END) + $MISE_END.Length) - $content.IndexOf($MISE_BEGIN)
     )
 
-    if ($currentBlock -eq $seedBlock) {
+    $currentBlockNormalized = $currentBlock -replace "`r`n", "`n"
+    $seedBlockNormalized = $seedBlock -replace "`r`n", "`n"
+    if ($currentBlockNormalized -eq $seedBlockNormalized) {
       Write-StatusPass 'Mise seed config' -Detail 'managed block up to date'
     } else {
       Write-ManagedBlock -FilePath $MiseConfigPath `
@@ -968,24 +1067,124 @@ function Ensure-MiseTools {
   $useRepoConfig = $global:RESOLVED_PROFILE -in @('home', 'work') -and (Test-Path $repoConfig)
   $label = if ($useRepoConfig) { 'mise install (repository Windows toolset)' } else { 'mise install (user seed toolset)' }
 
+  if (Test-DryRun) {
+    $previousConfig = $env:MISE_GLOBAL_CONFIG_FILE
+    $previousConfigDir = $env:MISE_CONFIG_DIR
+    $previousRoot = $env:MISE_GLOBAL_CONFIG_ROOT
+    $previousAutoEnv = $env:MISE_AUTO_ENV
+    try {
+      if ($useRepoConfig) {
+        $env:MISE_CONFIG_DIR = Join-Path $BootstrapRoot 'mise'
+        $env:MISE_GLOBAL_CONFIG_FILE = $null
+        $env:MISE_GLOBAL_CONFIG_ROOT = $null
+        $env:MISE_AUTO_ENV = 'true'
+      }
+      $missingOutput = (& mise -C $HOME ls --missing 2>&1 | Out-String).Trim()
+      $missingExitCode = $LASTEXITCODE
+    } finally {
+      $env:MISE_GLOBAL_CONFIG_FILE = $previousConfig
+      $env:MISE_CONFIG_DIR = $previousConfigDir
+      $env:MISE_GLOBAL_CONFIG_ROOT = $previousRoot
+      $env:MISE_AUTO_ENV = $previousAutoEnv
+    }
+
+    if ($missingExitCode -eq 0 -and -not $missingOutput) {
+      Write-StatusPass 'Mise tools install' -Detail 'complete'
+    } elseif ($missingExitCode -eq 0) {
+      Write-DryRunLog $label
+      Write-StatusFix 'Mise tools install' -Action 'would install missing tools'
+    } else {
+      Write-StatusSkip 'Mise tools install' -Reason 'could not evaluate missing tools without changing trust state'
+    }
+    return
+  }
+
   Write-Host "  Running $label..." -ForegroundColor Cyan
   Invoke-OrDry -Label $label -Command {
-    if ($useRepoConfig) {
-      $previousConfig = $env:MISE_GLOBAL_CONFIG_FILE
-      $previousRoot = $env:MISE_GLOBAL_CONFIG_ROOT
-      $previousAutoEnv = $env:MISE_AUTO_ENV
-      try {
-        $env:MISE_GLOBAL_CONFIG_FILE = $repoConfig
-        $env:MISE_GLOBAL_CONFIG_ROOT = $HOME
+    $previousConfig = $env:MISE_GLOBAL_CONFIG_FILE
+    $previousConfigDir = $env:MISE_CONFIG_DIR
+    $previousRoot = $env:MISE_GLOBAL_CONFIG_ROOT
+    $previousAutoEnv = $env:MISE_AUTO_ENV
+    $previousErrorActionPreference = $ErrorActionPreference
+    $exitCode = 0
+    try {
+      if ($useRepoConfig) {
+        # Point mise at the repository's config directory rather than only its
+        # base file. Setting MISE_GLOBAL_CONFIG_FILE directly suppresses the
+        # sibling config.windows.toml file and also permits ~/.config/mise to
+        # override platform restrictions while bootstrapping from $HOME.
+        $env:MISE_CONFIG_DIR = Join-Path $BootstrapRoot 'mise'
+        $env:MISE_GLOBAL_CONFIG_FILE = $null
+        $env:MISE_GLOBAL_CONFIG_ROOT = $null
         $env:MISE_AUTO_ENV = 'true'
-        mise -C $HOME install 2>$null
-      } finally {
-        $env:MISE_GLOBAL_CONFIG_FILE = $previousConfig
-        $env:MISE_GLOBAL_CONFIG_ROOT = $previousRoot
-        $env:MISE_AUTO_ENV = $previousAutoEnv
       }
-    } else {
-      mise -C $HOME install 2>$null
+
+      # Native commands do not reliably become terminating errors under every
+      # PowerShell version. Preserve their output and treat the process exit
+      # code as the source of truth so a failed mise install cannot be reported
+      # as complete.
+      $ErrorActionPreference = 'Continue'
+      $repoWindowsConfig = Join-Path $BootstrapRoot 'mise\config.windows.toml'
+      foreach ($configToTrust in @($MiseConfigPath, $repoConfig, $repoWindowsConfig)) {
+        if (Test-Path $configToTrust) {
+          mise trust --yes $configToTrust
+          if ($LASTEXITCODE -ne 0) {
+            throw "mise trust failed for $configToTrust with exit code $LASTEXITCODE"
+          }
+        }
+      }
+
+      if ($useRepoConfig) {
+        # Install the Python tool backend and uv before the remaining parallel
+        # plan. Windows intentionally skips the unsupported standalone pipx
+        # release; mise's pipx backend then installs Python CLIs through uv.
+        mise -C $HOME install python uv
+        if ($LASTEXITCODE -ne 0) {
+          throw "mise prerequisite install failed for python/uv with exit code $LASTEXITCODE"
+        }
+      }
+
+      mise -C $HOME install
+      if ($null -ne $LASTEXITCODE) {
+        $exitCode = $LASTEXITCODE
+      }
+      if ($exitCode -eq 0 -and $useRepoConfig) {
+        # The pipx backend currently reaches uv through the Windows mise shim.
+        # During a parent `mise install` that shim recursively starts mise and
+        # waits on the parent's install state. Resolve mise's real uv binary and
+        # install SQLFluff directly instead. Mitmproxy's Python dependencies do
+        # not publish Windows ARM wheels, so its upstream x64 bundle uses Scoop.
+        $uvRoot = (& mise -C $HOME where uv | Select-Object -Last 1).Trim()
+        if ($LASTEXITCODE -ne 0 -or -not $uvRoot) {
+          throw "mise could not resolve the installed uv directory"
+        }
+        $uvExe = Join-Path $uvRoot 'uv.exe'
+        if (-not (Test-Path $uvExe -PathType Leaf)) {
+          throw "mise-managed uv executable not found at $uvExe"
+        }
+        foreach ($pythonTool in @('sqlfluff')) {
+          & $uvExe tool install $pythonTool
+          if ($LASTEXITCODE -ne 0) {
+            throw "uv tool install $pythonTool failed with exit code $LASTEXITCODE"
+          }
+        }
+      }
+      if ($exitCode -eq 0) {
+        mise -C $HOME reshim
+        if ($null -ne $LASTEXITCODE) {
+          $exitCode = $LASTEXITCODE
+        }
+      }
+    } finally {
+      $ErrorActionPreference = $previousErrorActionPreference
+      $env:MISE_GLOBAL_CONFIG_FILE = $previousConfig
+      $env:MISE_CONFIG_DIR = $previousConfigDir
+      $env:MISE_GLOBAL_CONFIG_ROOT = $previousRoot
+      $env:MISE_AUTO_ENV = $previousAutoEnv
+    }
+
+    if ($exitCode -ne 0) {
+      throw "$label failed with exit code $exitCode"
     }
   }
 
@@ -993,11 +1192,7 @@ function Ensure-MiseTools {
     Invoke-OrDry -Label 'Sign-MiseScripts' -Command { Sign-MiseScripts }
   }
 
-  if (Test-DryRun) {
-    Write-StatusFix 'Mise tools install' -Action 'would install'
-  } else {
-    Write-StatusPass 'Mise tools install' -Detail 'complete'
-  }
+  Write-StatusPass 'Mise tools install' -Detail 'complete'
 }
 
 function Invoke-FoundationValidation {
@@ -1126,7 +1321,8 @@ function Get-PersonalScriptPath {
 }
 
 function Invoke-PersonalLayer {
-  if (-not $Personal) {
+  $profileRequestsDotfiles = $global:RESOLVED_DOTFILES -eq 'true'
+  if (-not $Personal -and -not $profileRequestsDotfiles) {
     Write-Host '  Personal layer: not requested' -ForegroundColor DarkGray
     return
   }
@@ -1140,12 +1336,14 @@ function Invoke-PersonalLayer {
   if (Test-DryRun) { $personalArgs['DryRun'] = $true }
 
   & $scriptPath @personalArgs
-  Write-StatusPass 'Personal layer' -Detail 'completed'
+  $source = if ($Personal) { 'explicit request' } else { "$global:RESOLVED_PROFILE profile" }
+  Write-StatusPass 'Personal layer' -Detail "completed ($source)"
 }
 
 function Invoke-FoundationEnsureFlow {
   Ensure-Scoop
   Ensure-FoundationPackages
+  Ensure-WindowsRuntimePackages
   Ensure-Mise
   Ensure-OptionalNativePackages
   Ensure-WindowsApplications
@@ -1168,7 +1366,9 @@ function Invoke-FoundationUpdate {
   Ensure-Scoop
 
   Write-Host '  Updating Scoop packages...' -ForegroundColor Cyan
-  Invoke-OrDry -Label 'scoop update *' -Command { scoop update * 2>$null }
+  Invoke-OrDry -Label 'scoop update *' -Command {
+    Invoke-PrecursorScoop -ArgumentList @('update', '*')
+  }
   if ($RequiresSigning) {
     Invoke-OrDry -Label 'Sign-ScoopScripts' -Command { Sign-ScoopScripts }
   }
@@ -1260,6 +1460,9 @@ function Main {
   if ($global:RESOLVED_DOWNLOADS_LINK -eq 'true' -and -not $global:RESOLVED_DOWNLOADS_TARGET) {
     if (-not $NonInteractive) { $global:RESOLVED_DOWNLOADS_TARGET = Read-Host 'Absolute directory for the Downloads link' }
     if (-not $global:RESOLVED_DOWNLOADS_TARGET) { Write-Fatal 'DownloadsTarget is required when downloads-link is enabled.' }
+  }
+  if ($global:RESOLVED_DOWNLOADS_LINK -ne 'true') {
+    $global:RESOLVED_DOWNLOADS_TARGET = ''
   }
   Write-AllState
 

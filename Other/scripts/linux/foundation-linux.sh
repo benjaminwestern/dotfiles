@@ -310,12 +310,14 @@ ensure_catalogue() {
     return 0
   fi
   wait_for_package_manager
+  local missing_specs=()
+  for package in "${missing[@]}"; do missing_specs+=("$PACKAGE_MANAGER:$package"); done
   if dry_run_active; then
-    bootstrap_repo_mise bootstrap packages apply --manager "$PACKAGE_MANAGER" --dry-run --update
+    bootstrap_repo_mise bootstrap packages apply --dry-run --update "${missing_specs[@]}"
     status_fix "Ben's native package catalogue" "mise would install ${#missing[@]} missing package(s)"
   else
     note "mise will show the native package plan before using sudo; confirmation is pre-authorised by this bootstrap plan."
-    bootstrap_repo_mise bootstrap packages apply --manager "$PACKAGE_MANAGER" --yes --update
+    bootstrap_repo_mise bootstrap packages apply --yes --update "${missing_specs[@]}"
     status_pass "Ben's native package catalogue" "mise reconciled $PACKAGE_MANAGER declarations"
   fi
 }
@@ -366,15 +368,29 @@ ensure_applications() {
 }
 
 ensure_mise_tools() {
+  local uv_bin uv_dir python_bin missing_json supported_missing_count
+  local -a missing_tools=()
   if [[ "$RESOLVED_MISE_TOOLS" != true ]]; then status_skip "Ben's mise tools" "disabled by plan"; return 0; fi
   if dry_run_active; then
     if command_exists mise; then
       local plan
       plan="$(bootstrap_repo_mise install --dry-run 2>&1 || true)"
-      printf '%s\n' "$plan"
-      if grep -Fq 'all tools are installed' <<< "$plan"; then
+      if [[ "${BOOTSTRAP_WSL_VERSION:-}" == 1 ]]; then
+        missing_json="$(bootstrap_repo_mise ls --missing --json 2>/dev/null || printf '{}')"
+        supported_missing_count="$(awk '
+          /^  "pipx:(mitmproxy|sqlfluff)"/ { skip=1; next }
+          skip && /^  ]/ { skip=0; next }
+          !skip && /"version"/ { count++ }
+          END { print count+0 }
+        ' <<< "$missing_json")"
+        status_skip "WSL 1 Python applications" "SQLFluff and mitmproxy require WSL 2"
+      else
+        supported_missing_count=''
+      fi
+      if [[ "$supported_missing_count" == 0 ]] || grep -Fq 'all tools are installed' <<< "$plan"; then
         status_pass "Ben's mise tools" "all declared tools installed"
       else
+        printf '%s\n' "$plan"
         status_fix "Ben's mise tools" "would install missing declared tools"
       fi
     else
@@ -390,11 +406,36 @@ ensure_mise_tools() {
       # break tool resolution inside the checkout.
       bootstrap_mise trust "$BOOTSTRAP_ROOT/mise.toml" 2>/dev/null || true
     fi
-    # gcloud's vfox post-install hook uses CLOUDSDK_PYTHON immediately. Make
-    # sure the configured shim already resolves instead of racing Python in
-    # mise's parallel full-tool installation.
-    bootstrap_repo_mise install python
-    bootstrap_repo_mise install
+    # gcloud's vfox post-install hook uses CLOUDSDK_PYTHON immediately. The
+    # pipx backend also invokes uv while the parent mise install is active.
+    # Preinstall those Mise-owned runtimes and put uv's real binary ahead of
+    # the shims so neither backend recursively re-enters the parent process.
+    bootstrap_repo_mise install python uv pipx
+    uv_bin="$(bootstrap_repo_mise which uv)"
+    [[ -x "$uv_bin" ]] || fail "mise installed uv but did not return an executable"
+    uv_dir="$(dirname "$uv_bin")"
+    if [[ "${BOOTSTRAP_WSL_VERSION:-}" == 1 ]]; then
+      # WSL 1 repeatedly returns ENOMEM while uv copies SQLFluff/mitmproxy's
+      # Python environments, even with free RAM and swap. Keep every portable
+      # release/language tool under Mise and exclude only these two apps. WSL 2
+      # and ordinary Linux continue to install the complete catalogue.
+      python_bin="$(bootstrap_repo_mise which python)"
+      missing_json="$(bootstrap_repo_mise ls --missing --json)"
+      while IFS= read -r tool; do
+        [[ -z "$tool" ]] || missing_tools+=("$tool")
+      done < <("$python_bin" -c 'import json, sys
+excluded = {"pipx:mitmproxy", "pipx:sqlfluff"}
+for tool in json.load(sys.stdin):
+    if tool not in excluded:
+        print(tool)
+' <<< "$missing_json")
+      if [[ ${#missing_tools[@]} -gt 0 ]]; then
+        PATH="$uv_dir:$PATH" bootstrap_repo_mise install "${missing_tools[@]}"
+      fi
+      status_skip "WSL 1 Python applications" "SQLFluff and mitmproxy require WSL 2"
+    else
+      PATH="$uv_dir:$PATH" bootstrap_repo_mise install
+    fi
     status_pass "Ben's mise tools" "declarative toolset installed"
   fi
 }
@@ -584,8 +625,13 @@ ensure_hostname() {
   if [[ "$RESOLVED_LINUX_HOSTNAME" != true ]]; then status_skip "Linux hostname" "disabled by plan"; return 0; fi
   local current; current="$(hostname -s 2>/dev/null || true)"
   if [[ "$current" == "$RESOLVED_DEVICE_NAME" ]]; then status_pass "Linux hostname" "$current"; return 0; fi
-  if command_exists hostnamectl; then run_elevated_or_dry hostnamectl set-hostname "$RESOLVED_DEVICE_NAME"
-  else run_elevated_or_dry sh -c "printf '%s\\n' '$RESOLVED_DEVICE_NAME' > /etc/hostname"; fi
+  if command_exists hostnamectl && command_exists systemctl && systemctl is-system-running >/dev/null 2>&1; then
+    run_elevated_or_dry hostnamectl set-hostname "$RESOLVED_DEVICE_NAME"
+  else
+    # WSL 1 and other non-systemd environments still support the traditional
+    # hostname interface. Persist it and update the current namespace.
+    run_elevated_or_dry sh -c "printf '%s\\n' '$RESOLVED_DEVICE_NAME' > /etc/hostname && hostname '$RESOLVED_DEVICE_NAME'"
+  fi
   if dry_run_active; then status_fix "Linux hostname" "would change $current -> $RESOLVED_DEVICE_NAME"
   else status_fix "Linux hostname" "changed $current -> $RESOLVED_DEVICE_NAME"; fi
 }
@@ -616,15 +662,15 @@ ensure_shell_profile() {
   case "$RESOLVED_SHELL" in
     fish)
       path="$HOME/.config/fish/conf.d/00-foundation.fish"
-      content=$'# >>> foundation-bootstrap >>>\nif test -x "$HOME/.local/bin/mise"; $HOME/.local/bin/mise activate fish | source; end\nif type -q zoxide; zoxide init fish | source; end\n# <<< foundation-bootstrap <<<'
+      content=$'# >>> foundation-bootstrap >>>\nif test -r /proc/sys/kernel/osrelease; and string match -qi "*microsoft*" (cat /proc/sys/kernel/osrelease); and string match -q "/mnt/*/Users/$USER" "$PWD"; cd "$HOME"; end\nif test -x "$HOME/.local/bin/mise"; $HOME/.local/bin/mise -C "$HOME" activate fish | source; end\nif type -q zoxide; zoxide init fish | source; end\n# <<< foundation-bootstrap <<<'
       ;;
     zsh)
       path="$HOME/.zshrc"
-      content=$'# >>> foundation-bootstrap >>>\nif [[ -x "$HOME/.local/bin/mise" ]]; then eval "$("$HOME/.local/bin/mise" activate zsh)"; fi\nif command -v zoxide >/dev/null 2>&1; then eval "$(zoxide init zsh)"; fi\n# <<< foundation-bootstrap <<<'
+      content=$'# >>> foundation-bootstrap >>>\nif grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null; then case "$PWD" in /mnt/?/Users/"${USER:-${HOME:t}}") cd "$HOME" || true ;; esac; fi\nif [[ -x "$HOME/.local/bin/mise" ]]; then eval "$("$HOME/.local/bin/mise" -C "$HOME" activate zsh)"; fi\nif command -v zoxide >/dev/null 2>&1; then eval "$(zoxide init zsh)"; fi\n# <<< foundation-bootstrap <<<'
       ;;
     bash)
       path="$HOME/.bashrc"
-      content=$'# >>> foundation-bootstrap >>>\nif [[ -x "$HOME/.local/bin/mise" ]]; then eval "$("$HOME/.local/bin/mise" activate bash)"; fi\nif command -v zoxide >/dev/null 2>&1; then eval "$(zoxide init bash)"; fi\n# <<< foundation-bootstrap <<<'
+      content=$'# >>> foundation-bootstrap >>>\nif grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null; then case "$PWD" in /mnt/?/Users/"${USER:-$(basename "$HOME")}") cd "$HOME" || true ;; esac; fi\nif [[ -x "$HOME/.local/bin/mise" ]]; then eval "$("$HOME/.local/bin/mise" -C "$HOME" activate bash)"; fi\nif command -v zoxide >/dev/null 2>&1; then eval "$(zoxide init bash)"; fi\n# <<< foundation-bootstrap <<<'
       ;;
   esac
   write_managed_block "$path" "$PROFILE_BEGIN" "$PROFILE_END" "$content"

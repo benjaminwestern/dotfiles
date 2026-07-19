@@ -61,7 +61,7 @@ tool_version() {
 
 audit_packages() {
   local package state package_json=''
-  if command_exists mise && command_exists jq; then
+  if [[ "${BOOTSTRAP_WSL_VERSION:-}" != 1 ]] && command_exists mise && command_exists jq; then
     package_json="$(bootstrap_repo_mise bootstrap packages status --json 2>/dev/null || true)"
     if [[ -n "$package_json" ]] && printf '%s' "$package_json" | jq -e --arg manager "$PACKAGE_MANAGER" '.[$manager].packages' >/dev/null 2>&1; then
       while IFS=$'\t' read -r package state; do
@@ -244,7 +244,16 @@ build_drift() {
   expected="$(expected_value ENABLE_MISE_TOOLS)"
   if [[ "$expected" == true && -n "$(command -v mise 2>/dev/null || true)" ]]; then
     local missing_count
-    missing_count="$(bootstrap_repo_mise ls --missing --json 2>/dev/null | awk 'BEGIN{n=0} /"version"/{n++} END{print n}' || printf 0)"
+    if [[ "${BOOTSTRAP_WSL_VERSION:-}" == 1 ]]; then
+      missing_count="$(bootstrap_repo_mise ls --missing --json 2>/dev/null | awk '
+        /^  "pipx:(mitmproxy|sqlfluff)"/ { skip=1; next }
+        skip && /^  ]/ { skip=0; next }
+        !skip && /"version"/ { count++ }
+        END { print count+0 }
+      ' || printf 0)"
+    else
+      missing_count="$(bootstrap_repo_mise ls --missing --json 2>/dev/null | awk 'BEGIN{n=0} /"version"/{n++} END{print n}' || printf 0)"
+    fi
     [[ "$missing_count" == 0 ]] || add_drift tool mise-tools "$missing_count missing" all-installed
   elif [[ "$expected" == true ]]; then add_drift tool mise missing installed; fi
 
@@ -255,7 +264,7 @@ build_drift() {
   fi
 
   expected="$(expected_value LINUX_DEFAULT_APPS)"
-  if [[ "$expected" == true ]]; then
+  if [[ "$expected" == true && "${BOOTSTRAP_WSL_VERSION:-}" != 1 ]]; then
     local desired_desktop current_http current_pdf
     desired_desktop="$(configured_browser_desktop)"
     current_http="$(xdg_default_handler x-scheme-handler/http)"
@@ -276,7 +285,7 @@ build_drift() {
   fi
 
   expected="$(expected_value ENABLE_REMOTE_ACCESS)"
-  if [[ "$expected" == true ]]; then current="$(ssh_service_state)"; [[ "$current" == enabled-active ]] || add_drift service SSH "$current" enabled-active; fi
+  if [[ "$expected" == true && "${BOOTSTRAP_WSL_VERSION:-}" != 1 ]]; then current="$(ssh_service_state)"; [[ "$current" == enabled-active ]] || add_drift service SSH "$current" enabled-active; fi
 }
 
 print_header() {

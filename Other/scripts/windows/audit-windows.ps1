@@ -11,7 +11,11 @@ PopulateState, which records discovered values into the shared state file.
 
 .PARAMETER Section
 Limits the audit to one section. Supported values are tools, shell, configs,
-signing, zscaler, and all.
+signing, zscaler, wsl, and all.
+
+.PARAMETER Profile_
+Compares the current machine with the selected Windows bootstrap profile. When
+omitted, the audit remains a general current-state inventory.
 
 .PARAMETER Json
 Outputs machine-readable JSON instead of the formatted terminal report.
@@ -35,8 +39,10 @@ fresh machine so the PowerShell 5 precursor path and repo-local signing
 protections stay in place.
 #>
 param(
-  [ValidateSet('tools', 'shell', 'configs', 'signing', 'zscaler', 'all')]
+  [ValidateSet('tools', 'shell', 'configs', 'signing', 'zscaler', 'wsl', 'all')]
   [string]$Section = 'all',
+  [ValidateSet('work', 'home', 'minimal')]
+  [string]$Profile_,
   [switch]$Json,
   [switch]$PopulateState
 )
@@ -48,6 +54,7 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 $PrecursorArgs = @()
 if ($PSBoundParameters.ContainsKey('Section')) { $PrecursorArgs += @('-Section', $Section) }
+if ($PSBoundParameters.ContainsKey('Profile_')) { $PrecursorArgs += @('-Profile_', $Profile_) }
 if ($Json) { $PrecursorArgs += '-Json' }
 if ($PopulateState) { $PrecursorArgs += '-PopulateState' }
 Invoke-PwshPrecursor -ScriptPath $MyInvocation.MyCommand.Path -ArgumentList $PrecursorArgs
@@ -56,9 +63,16 @@ Invoke-PwshPrecursor -ScriptPath $MyInvocation.MyCommand.Path -ArgumentList $Pre
 . (Join-Path $ScriptDir 'lib\signing-helpers-windows.ps1')
 
 $FoundationPackages = @(
-  'git', 'jid', 'vscode', 'openssl', 'pwsh'
+  'git', 'openssl', 'pwsh', 'vcredist2022'
+)
+$OptionalNativePackages = @('jid', 'gcloud', 'skaffold', 'stylua', 'lua-for-windows', 'ngrok', 'scc', 'mitmproxy')
+$ApplicationPackages = @(
+  'vscode', 'googlechrome', 'obsidian', 'podman-desktop', 'yubioath', 'codex',
+  'ditto', 'dbeaver', 'powertoys', 'miktex', 'JetBrainsMono-NF',
+  'NerdFontsSymbolsOnly'
 )
 
+$BootstrapRoot      = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $ScriptDir))
 $DotfilesDir        = Join-Path $HOME '.dotfiles'
 $MiseConfigDir      = Join-Path $HOME '.config\mise'
 $MiseConfigPath     = Join-Path $MiseConfigDir 'config.toml'
@@ -152,14 +166,6 @@ function Get-SignableScriptAudit {
   }
 }
 
-function Test-PathContainsMiseShims {
-  param([string]$PathValue)
-
-  if (-not $PathValue) { return $false }
-  $normalized = $PathValue -replace '/', '\'
-  return [bool]($normalized -match '(?i)(^|;)[^;]*\\AppData\\Local\\mise\\shims($|;)')
-}
-
 function Get-MiseActivationBlockType {
   if (-not (Test-Path $PROFILE)) {
     return 'absent'
@@ -179,6 +185,36 @@ function Get-MiseActivationBlockType {
   }
 
   return 'absent'
+}
+
+function Get-MiseMissingToolNames {
+  param([string]$ProfileName)
+
+  if (-not (Test-CommandExists 'mise')) { return @('__mise_missing__') }
+  $previousConfig = $env:MISE_GLOBAL_CONFIG_FILE
+  $previousConfigDir = $env:MISE_CONFIG_DIR
+  $previousRoot = $env:MISE_GLOBAL_CONFIG_ROOT
+  $previousAutoEnv = $env:MISE_AUTO_ENV
+  try {
+    if ($ProfileName -in @('home', 'work') -and (Test-Path (Join-Path $BootstrapRoot 'mise\config.toml'))) {
+      $env:MISE_CONFIG_DIR = Join-Path $BootstrapRoot 'mise'
+      $env:MISE_GLOBAL_CONFIG_FILE = $null
+      $env:MISE_GLOBAL_CONFIG_ROOT = $null
+      $env:MISE_AUTO_ENV = 'true'
+    }
+    $json = (& mise -C $HOME ls --missing --json 2>$null | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) { return @('__audit_failed__') }
+    if (-not $json) { return @() }
+    $parsed = $json | ConvertFrom-Json
+    return @($parsed.PSObject.Properties.Name | Where-Object { $_ })
+  } catch {
+    return @('__audit_failed__')
+  } finally {
+    $env:MISE_GLOBAL_CONFIG_FILE = $previousConfig
+    $env:MISE_CONFIG_DIR = $previousConfigDir
+    $env:MISE_GLOBAL_CONFIG_ROOT = $previousRoot
+    $env:MISE_AUTO_ENV = $previousAutoEnv
+  }
 }
 
 function Get-MiseAuditState {
@@ -212,15 +248,9 @@ function Get-MiseAuditState {
 
   if ($state.activation_block_type -eq 'pwsh --shims') {
     $state.mise_activated = $true
+    $state.mise_shims_on_path = $true
     if ($state.mise_shell -eq 'unknown') {
       $state.mise_shell = 'pwsh --shims'
-    }
-  }
-
-  if (Test-CommandExists 'pwsh') {
-    $interactivePath = pwsh -NoLogo -Command '$env:PATH' 2>$null
-    if (Test-PathContainsMiseShims -PathValue $interactivePath) {
-      $state.mise_shims_on_path = $true
     }
   }
 
@@ -242,6 +272,7 @@ function Get-ZscalerEffectiveValue {
 }
 
 function Get-WindowsTerminalAudit {
+  $managedPwshGuid = '{e267f5ba-0552-4202-9426-d4f81d00e17f}'
   $settingsPath = Get-WindowsTerminalSettingsPath
   $settings = Get-WindowsTerminalSettingsObject
 
@@ -269,7 +300,8 @@ function Get-WindowsTerminalAudit {
         $commandLine = $defaultProfile.commandLine
       }
 
-      if ($defaultProfile.source -eq 'Windows.Terminal.PowershellCore' -or
+      if ([string]::Equals($result.default_profile_guid, $managedPwshGuid, [System.StringComparison]::OrdinalIgnoreCase) -or
+        $defaultProfile.source -eq 'Windows.Terminal.PowershellCore' -or
         ($commandLine -and $commandLine -match '(^|[\\/])pwsh(\.exe)?(\s|$)')) {
         $result.default_pwsh = $true
       }
@@ -285,16 +317,53 @@ function Get-ToolVersion {
     [string[]]$Arguments = @('--version')
   )
 
+  $commandToRun = $CommandName
+  if ($CommandName -in @('gum', 'lazygit', 'gh', 'node', 'python', 'go', 'terraform') -and (Test-CommandExists 'mise')) {
+    try {
+      $misePath = @(& mise -C $HOME which $CommandName 2>$null) | Select-Object -Last 1
+      if ($LASTEXITCODE -eq 0 -and $misePath -and (Test-Path $misePath -PathType Leaf)) {
+        $commandToRun = [string]$misePath
+      }
+    } catch {
+    }
+  }
   if (-not (Test-CommandExists $CommandName)) {
-    return 'not installed'
+    # The audit deliberately runs without loading the user's profile. Resolve
+    # installed mise tools directly instead of executing profile code merely to
+    # discover PATH, which could be slow, interactive, or have side effects.
+    if (-not (Test-CommandExists 'mise')) {
+      return 'not installed'
+    }
+
+    try {
+      $misePath = @(& mise which $CommandName 2>$null) | Select-Object -Last 1
+      if ($LASTEXITCODE -ne 0 -or -not $misePath -or -not (Test-Path $misePath -PathType Leaf)) {
+        return 'not installed'
+      }
+      $commandToRun = [string]$misePath
+    } catch {
+      return 'not installed'
+    }
   }
 
   try {
-    $output = & $CommandName @Arguments 2>$null | Select-Object -First 1
+    $output = & $commandToRun @Arguments 2>&1 | Select-Object -First 1
     if ($output) { return [string]$output }
   } catch {
   }
 
+  return 'installed'
+}
+
+function Get-ScoopInstalledVersion {
+  $manifest = Join-Path $HOME 'scoop\apps\scoop\current\manifest.json'
+  if (Test-Path $manifest) {
+    try {
+      $version = (Get-Content $manifest -Raw | ConvertFrom-Json).version
+      if ($version) { return [string]$version }
+    } catch {
+    }
+  }
   return 'installed'
 }
 
@@ -372,13 +441,30 @@ function Get-MiseOutdatedTools {
     return [pscustomobject]$result
   }
 
+  $previousConfig = $env:MISE_GLOBAL_CONFIG_FILE
+  $previousConfigDir = $env:MISE_CONFIG_DIR
+  $previousRoot = $env:MISE_GLOBAL_CONFIG_ROOT
+  $previousAutoEnv = $env:MISE_AUTO_ENV
   try {
-    $json = @((mise outdated --json 2>$null)) -join "`n"
-  } catch {
-    $result.note = 'outdated check failed'
-    return [pscustomobject]$result
+    if ($Profile_ -in @('home', 'work') -and (Test-Path (Join-Path $BootstrapRoot 'mise\config.toml'))) {
+      $env:MISE_CONFIG_DIR = Join-Path $BootstrapRoot 'mise'
+      $env:MISE_GLOBAL_CONFIG_FILE = $null
+      $env:MISE_GLOBAL_CONFIG_ROOT = $null
+      $env:MISE_AUTO_ENV = 'true'
+    }
+    try {
+      $json = @((mise -C $HOME outdated --json 2>$null)) -join "`n"
+      $outdatedExitCode = $LASTEXITCODE
+    } catch {
+      $result.note = 'outdated check failed'
+      return [pscustomobject]$result
+    }
+  } finally {
+    $env:MISE_GLOBAL_CONFIG_FILE = $previousConfig
+    $env:MISE_CONFIG_DIR = $previousConfigDir
+    $env:MISE_GLOBAL_CONFIG_ROOT = $previousRoot
+    $env:MISE_AUTO_ENV = $previousAutoEnv
   }
-  $outdatedExitCode = $LASTEXITCODE
   if ($outdatedExitCode -ne 0) {
     $result.note = "outdated check failed (exit $outdatedExitCode)"
     return [pscustomobject]$result
@@ -467,7 +553,7 @@ function Invoke-AuditTools {
   $miseOutdated = Get-MiseOutdatedTools
 
   if (Test-CommandExists 'scoop') {
-    Write-AuditLine 'Scoop:' (Get-ToolVersion -CommandName 'scoop')
+    Write-AuditLine 'Scoop:' (Get-ScoopInstalledVersion)
   } else {
     Write-AuditLine 'Scoop:' 'not installed'
   }
@@ -609,7 +695,13 @@ function Invoke-AuditConfigs {
   if (Test-Path $MiseConfigPath) {
     Write-AuditLine 'Mise config:' $MiseConfigPath
     $configContent = Get-Content $MiseConfigPath -Raw -ErrorAction SilentlyContinue
-    if ($configContent -and $configContent.Contains($MISE_BEGIN)) {
+    $repoMiseConfig = Join-Path $DotfilesDir 'mise\config.toml'
+    $matchesRepo = (Test-Path $repoMiseConfig -PathType Leaf) -and
+      ((Get-FileHash $MiseConfigPath -Algorithm SHA256).Hash -eq
+       (Get-FileHash $repoMiseConfig -Algorithm SHA256).Hash)
+    if ($matchesRepo) {
+      Write-AuditLine 'Mise config ownership:' 'dotfiles-managed copy'
+    } elseif ($configContent -and $configContent.Contains($MISE_BEGIN)) {
       Write-AuditLine 'Mise config ownership:' 'managed seed present'
     } else {
       Write-AuditLine 'Mise config ownership:' 'user-owned'
@@ -753,6 +845,140 @@ function Invoke-AuditZscaler {
   }
 }
 
+function Get-WslAuditState {
+  $linuxFeature = Get-WindowsOptionalFeature -Online -FeatureName 'Microsoft-Windows-Subsystem-Linux' -ErrorAction SilentlyContinue
+  $vmFeature = Get-WindowsOptionalFeature -Online -FeatureName 'VirtualMachinePlatform' -ErrorAction SilentlyContinue
+  $restartPending = (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') -or
+    (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired')
+  $distros = @()
+  $distroVersions = @{}
+
+  if ($linuxFeature.State -eq 'Enabled' -and -not $restartPending) {
+    $rawDistros = & wsl.exe --list --verbose 2>$null
+    if ($LASTEXITCODE -eq 0) {
+      foreach ($line in $rawDistros) {
+        $clean = ([string]$line).Replace([string][char]0, '').Trim()
+        if ($clean -match '^\*?\s*(\S+)\s+\S+\s+([12])\s*$') {
+          $distros += $Matches[1]
+          $distroVersions[$Matches[1]] = $Matches[2]
+        }
+      }
+    }
+  }
+
+  return [pscustomobject]@{
+    linux_feature = if ($linuxFeature) { [string]$linuxFeature.State } else { 'Unavailable' }
+    vm_feature = if ($vmFeature) { [string]$vmFeature.State } else { 'Unavailable' }
+    restart_pending = $restartPending
+    distributions = $distros
+    distribution_versions = $distroVersions
+  }
+}
+
+function Invoke-AuditWsl {
+  Write-SectionHeader 'Optional WSL'
+  $wslState = Get-WslAuditState
+  Write-AuditLine 'Linux feature:' $wslState.linux_feature
+  Write-AuditLine 'Virtual Machine Platform:' $wslState.vm_feature
+  Write-AuditLine 'Restart pending:' $(if ($wslState.restart_pending) { 'yes' } else { 'no' })
+  $distributionSummary = @($wslState.distributions | ForEach-Object { "$_ (WSL $($wslState.distribution_versions[$_]))" })
+  Write-AuditLine 'Distributions:' $(if ($distributionSummary.Count) { $distributionSummary -join ', ' } else { 'none' })
+
+  if (-not $Profile_ -or -not $wslState.distributions.Count -or $wslState.restart_pending) {
+    return
+  }
+
+  $distribution = if ($wslState.distributions -contains 'Ubuntu') { 'Ubuntu' } else { $wslState.distributions[0] }
+  $wslVersion = $wslState.distribution_versions[$distribution]
+  Write-AuditLine 'Linux profile audit:' "$Profile_ in $distribution"
+  $command = "if [ -x `"`$HOME/.dotfiles/install.sh`" ]; then BOOTSTRAP_WSL_VERSION='$wslVersion' `"`$HOME/.dotfiles/install.sh`" audit --profile '$Profile_'; else echo 'WSL dotfiles checkout is absent' >&2; exit 2; fi"
+  # Let the distribution's configured default user run the audit. This honors
+  # a custom --wsl-user instead of assuming it matches the Windows account.
+  & wsl.exe --distribution $distribution --cd '~' -- bash --noprofile --norc -lc $command
+  if ($LASTEXITCODE -ne 0) {
+    Write-AuditLine 'Linux profile result:' "failed (exit $LASTEXITCODE)"
+  } else {
+    Write-AuditLine 'Linux profile result:' 'complete'
+  }
+}
+
+function Get-ProfileComparison {
+  param([Parameter(Mandatory)][string]$ProfileName)
+
+  $items = [System.Collections.Generic.List[object]]::new()
+  $add = {
+    param([string]$Target, [bool]$Expected, [bool]$Actual, [string]$Detail)
+    $state = if ($Actual -eq $Expected) { 'ok' } elseif ($Expected) { 'missing' } else { 'unexpected' }
+    $items.Add([pscustomobject]@{
+      target   = $Target
+      expected = $Expected
+      actual   = $Actual
+      state    = $state
+      detail   = $Detail
+    })
+  }
+
+  $packagesEnabled = (Get-ProfileDefault -Profile_ $ProfileName -FlagKey 'ENABLE_PACKAGES') -eq 'true'
+  $applicationsEnabled = (Get-ProfileDefault -Profile_ $ProfileName -FlagKey 'ENABLE_APPLICATIONS') -eq 'true'
+  $miseToolsEnabled = (Get-ProfileDefault -Profile_ $ProfileName -FlagKey 'ENABLE_MISE_TOOLS') -eq 'true'
+  $dotfilesEnabled = (Get-ProfileDefault -Profile_ $ProfileName -FlagKey 'ENABLE_DOTFILES') -eq 'true'
+  $codeEnabled = (Get-ProfileDefault -Profile_ $ProfileName -FlagKey 'ENABLE_CODE_DIRECTORY') -eq 'true'
+  $gitIdentityEnabled = (Get-ProfileDefault -Profile_ $ProfileName -FlagKey 'ENABLE_GIT_IDENTITY') -eq 'true'
+  $windowsDefaultsEnabled = (Get-ProfileDefault -Profile_ $ProfileName -FlagKey 'ENABLE_WINDOWS_DEFAULTS') -eq 'true'
+  $remoteAccessEnabled = (Get-ProfileDefault -Profile_ $ProfileName -FlagKey 'ENABLE_REMOTE_ACCESS') -eq 'true'
+
+  & $add 'Scoop' $true (Test-CommandExists 'scoop') 'Windows-native package manager'
+  & $add 'Mise' $true (Test-CommandExists 'mise') 'cross-platform runtime manager'
+  foreach ($package in $FoundationPackages) {
+    & $add "Scoop package: $package" $true (Test-ScoopPackageInstalled -Name $package) 'native foundation'
+  }
+  foreach ($package in $OptionalNativePackages) {
+    & $add "Scoop package: $package" $packagesEnabled (Test-ScoopPackageInstalled -Name $package) 'profile package catalogue'
+  }
+  foreach ($package in $ApplicationPackages) {
+    & $add "Scoop app: $package" $applicationsEnabled (Test-ScoopPackageInstalled -Name $package) 'profile application catalogue'
+  }
+
+  $miseMissing = @(Get-MiseMissingToolNames -ProfileName $ProfileName)
+  & $add 'Mise toolset complete' $miseToolsEnabled ((Test-CommandExists 'mise') -and $miseMissing.Count -eq 0) $(if ($miseMissing.Count -eq 0) { 'no missing declared tools' } else { "missing: $($miseMissing -join ', ')" })
+
+  & $add 'Dotfiles repository' $dotfilesEnabled (Test-Path (Join-Path $DotfilesDir '.git')) $DotfilesDir
+  & $add 'Code directory' $codeEnabled (Test-Path (Join-Path $HOME 'code')) (Join-Path $HOME 'code')
+
+  $gitName = if (Test-CommandExists 'git') { [string](git config --global --get user.name 2>$null) } else { '' }
+  $gitEmail = if (Test-CommandExists 'git') { [string](git config --global --get user.email 2>$null) } else { '' }
+  & $add 'Git identity' $gitIdentityEnabled ([bool]($gitName -and $gitEmail)) $(if ($gitName -and $gitEmail) { "$gitName <$gitEmail>" } else { 'not configured' })
+
+  $desiredName = Get-StateValue -Key 'DEVICE_NAME'
+  $nameMatches = if ($desiredName) { $env:COMPUTERNAME -ieq $desiredName } else { $true }
+  & $add 'Windows computer name' $windowsDefaultsEnabled $nameMatches $(if ($desiredName) { "current=$env:COMPUTERNAME desired=$desiredName" } else { 'no desired name recorded' })
+
+  $sshd = Get-Service sshd -ErrorAction SilentlyContinue
+  $remoteReady = [bool]($sshd -and $sshd.Status -eq 'Running' -and $sshd.StartType -eq 'Automatic')
+  & $add 'Remote access' $remoteAccessEnabled $remoteReady $(if ($sshd) { "sshd=$($sshd.Status)/$($sshd.StartType)" } else { 'sshd absent' })
+
+  $expectedZscaler = (Get-ProfileDefault -Profile_ $ProfileName -FlagKey 'ENABLE_ZSCALER')
+  if ($expectedZscaler -eq 'auto') {
+    $expectedZscaler = if ($script:Detection.detected) { 'true' } else { 'false' }
+  }
+  $actualZscaler = (Get-ZscalerEffectiveValue) -eq 'true'
+  & $add 'Zscaler trust' ($expectedZscaler -eq 'true') $actualZscaler 'profile-aware TLS interception support'
+
+  return @($items)
+}
+
+function Invoke-AuditProfileComparison {
+  param([Parameter(Mandatory)][string]$ProfileName)
+
+  Write-SectionHeader "Profile Comparison: $ProfileName"
+  $items = @(Get-ProfileComparison -ProfileName $ProfileName)
+  foreach ($item in $items) {
+    Write-AuditLine $item.target ("{0} - {1}" -f $item.state, $item.detail)
+  }
+  $drift = @($items | Where-Object { $_.state -ne 'ok' })
+  Write-AuditLine 'Profile result:' $(if ($drift.Count -eq 0) { 'matches' } else { "$($drift.Count) drift item(s)" })
+}
+
 function Invoke-PopulateState {
   Write-SectionHeader 'State Population'
 
@@ -790,6 +1016,7 @@ function Invoke-AuditJson {
 
   $result = [ordered]@{
     timestamp = (Get-Date -Format 'yyyy-MM-ddTHH:mm:ssZ')
+    requested_profile = $Profile_
     shell = @{
       powershell_version            = $PSVersionTable.PSVersion.ToString()
       execution_policy              = $EffectivePolicy.ToString()
@@ -848,6 +1075,16 @@ function Invoke-AuditJson {
       golden_bundle = (Test-Path $GoldenBundlePath)
       mise_env_present = (Test-Path $MiseEnvPath)
     }
+    wsl = Get-WslAuditState
+  }
+
+  if ($Profile_) {
+    $comparison = @(Get-ProfileComparison -ProfileName $Profile_)
+    $result.profile_comparison = @{
+      profile = $Profile_
+      drift_count = @($comparison | Where-Object { $_.state -ne 'ok' }).Count
+      items = $comparison
+    }
   }
 
   if (Test-CommandExists 'scoop') {
@@ -878,13 +1115,19 @@ switch ($Section) {
   'configs' { Invoke-AuditConfigs }
   'signing' { Invoke-AuditSigning }
   'zscaler' { Invoke-AuditZscaler }
+  'wsl'     { Invoke-AuditWsl }
   'all' {
     Invoke-AuditTools
     Invoke-AuditShell
     Invoke-AuditConfigs
     Invoke-AuditSigning
     Invoke-AuditZscaler
+    Invoke-AuditWsl
   }
+}
+
+if ($Profile_) {
+  Invoke-AuditProfileComparison -ProfileName $Profile_
 }
 
 if ($PopulateState) {
