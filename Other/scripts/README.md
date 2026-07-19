@@ -120,12 +120,14 @@ implementation layer directly.
 | Foundation | [`macos/foundation-macos.zsh`](macos/foundation-macos.zsh) | [`linux/foundation-linux.sh`](linux/foundation-linux.sh) | [`windows/foundation-windows.cmd`](windows/foundation-windows.cmd) | `setup`, `ensure`, or `update` |
 | Personal layer | [`macos/personal-bootstrap-macos.zsh`](macos/personal-bootstrap-macos.zsh) | Integrated selected stages | [`windows/personal-bootstrap-windows.cmd`](windows/personal-bootstrap-windows.cmd) | Personal reconciliation after foundation |
 | Audit | [`macos/audit-macos.zsh`](macos/audit-macos.zsh) | [`linux/audit-linux.sh`](linux/audit-linux.sh) | [`windows/audit-windows.cmd`](windows/audit-windows.cmd) | Read-only inspection of machine state |
+| Optional WSL | n/a | Reuses the Linux entrypoints | [`windows/wsl-bootstrap-windows.cmd`](windows/wsl-bootstrap-windows.cmd) | Add an independently auditable Linux layer to Windows |
 | Repair | Not needed | Not needed | [`windows/resign-windows.cmd`](windows/resign-windows.cmd) | PowerShell signing drift on Windows |
 
 Windows PowerShell implementation files:
 - [`windows/foundation-windows.ps1`](windows/foundation-windows.ps1)
 - [`windows/personal-bootstrap-windows.ps1`](windows/personal-bootstrap-windows.ps1)
 - [`windows/audit-windows.ps1`](windows/audit-windows.ps1)
+- [`windows/wsl-bootstrap-windows.ps1`](windows/wsl-bootstrap-windows.ps1)
 - [`windows/resign-windows.ps1`](windows/resign-windows.ps1)
 
 Support libraries:
@@ -137,7 +139,8 @@ Support libraries:
 
 The naming convention is purpose-first and OS-suffixed:
 `bootstrap-<os>`, `foundation-<os>`, `personal-bootstrap-<os>`, and
-`audit-<os>`. Windows keeps `.cmd` as the operator-facing wrapper layer and
+`audit-<os>`, with `wsl-bootstrap-windows` as the explicit optional layer.
+Windows keeps `.cmd` as the operator-facing wrapper layer and
 `.ps1` as the implementation layer. The directory split mirrors that model:
 `macos/`, `linux/`, and `windows/`.
 
@@ -169,8 +172,10 @@ path when a machine needs something different.
 | Linux | Ben's catalogues | `packages`, `applications`, `mise-tools`, `dotfiles` |
 | Linux | Adopter layout and identity | `code-directory`, `downloads-link`, `git-identity` plus `--device-name`, `--git-name`, `--git-email` |
 | Linux | System stages | `linux-defaults`, `linux-hostname`, `linux-default-apps`, `remote-access`, `shell-default`, `zscaler` |
-| Windows | Foundation | `zscaler`, `mise-tools` |
-| Windows | Personal layer | `git-config`, `ssh-config`, `mise-config`, `opencode-config`, `profile-extras` |
+| Windows | Ben's catalogues | `packages`, `applications`, `mise-tools`, `dotfiles` |
+| Windows | Adopter layout and identity | `code-directory`, `downloads-link`, `git-identity` plus `--device-name`, `--git-name`, `--git-email` |
+| Windows | System stages | `windows-defaults`, `remote-access`, `zscaler` |
+| Windows | Personal-layer overrides | `git-config`, `ssh-config`, `mise-config`, `opencode-config`, `profile-extras` |
 
 ![Recommended commands banner](../../assets/readme/scripts-recommended-commands.svg)
 
@@ -384,7 +389,12 @@ wrappers when you want a single-purpose entrypoint or a local repair path.
 ```powershell
 .\install.cmd setup --profile work --personal
 .\install.cmd ensure
+.\install.cmd audit
+.\install.cmd audit --profile home
 .\install.cmd audit --populate-state
+.\install.cmd wsl --profile home
+.\install.cmd wsl --profile minimal --wsl-shell bash --disable-dotfiles
+.\install.cmd audit --section wsl --profile home
 .\Other\scripts\windows\bootstrap-windows.cmd audit -Section tools
 .\Other\scripts\windows\resign-windows.cmd
 ```
@@ -413,9 +423,11 @@ for inspecting the PowerShell implementation layer directly.
 .\Other\scripts\windows\foundation-windows.cmd --help
 .\Other\scripts\windows\audit-windows.cmd --help
 .\Other\scripts\windows\personal-bootstrap-windows.cmd --help
+.\Other\scripts\windows\wsl-bootstrap-windows.cmd --help
 .\Other\scripts\windows\resign-windows.cmd --help
 Get-Help .\Other\scripts\windows\foundation-windows.ps1 -Detailed
 Get-Help .\Other\scripts\windows\personal-bootstrap-windows.ps1 -Detailed
+Get-Help .\Other\scripts\windows\wsl-bootstrap-windows.ps1 -Detailed
 Get-Help .\Other\scripts\windows\audit-windows.ps1 -Detailed
 Get-Help .\Other\scripts\windows\resign-windows.ps1 -Detailed
 ```
@@ -498,6 +510,33 @@ implementation layer. That split avoids a chicken-and-egg problem on fresh
 machines or `AllSigned` machines where direct PowerShell execution can fail
 before the local signing and PowerShell 7 precursor logic has run.
 
+### What has been proven on Windows ARM?
+
+The native `home` flow has been run end to end on a fresh Windows 11 ARM VM.
+It bootstraps Scoop, PowerShell 7, Git, OpenSSL, mise, the native application
+and font catalogue, the shared runtime/tool catalogue, the personal checkout,
+Git/SSH/config copies, terminal profile, computer name, and OpenSSH service.
+The general and profile audits were then run from the public `.cmd` entrypoint.
+Where an ARM64 artifact exists it is preferred; explicitly catalogued x64
+upstream bundles run through Windows ARM emulation. Podman Desktop installation
+does not create or start a Podman machine.
+
+The optional WSL contract is a separate `install.cmd wsl` target. It uses the
+same Linux profile implementation rather than duplicating an alternate package
+catalogue in PowerShell. The first run can stop at a required Windows restart;
+the identical command then resumes with distribution/user initialization and
+the Linux bootstrap. `audit --section wsl` reports the platform independently,
+while `audit --profile NAME` also runs that profile's Linux audit when WSL is
+present. No WSL resource limits or Podman machine initialization are applied.
+The `home` flow and its profile audit have also been run end to end with Ubuntu
+ARM64 under WSL 1 in the same nested VM. That proved the explicit WSL 1
+compatibility subset, non-interactive Linux user/login-shell setup, repeatable
+Mise ownership, and zero-drift audit. WSL 2 remains the preferred full-profile
+path, but it could not be exercised in this guest because Parallels did not
+expose nested virtualization. WSL orchestration starts explicitly in Linux
+home and bypasses interactive startup files; normal Bash, Zsh, and Fish logins
+also move from the mounted Windows home to Linux home before activating Mise.
+
 ![Validation roadmap banner](../../assets/readme/scripts-validation-roadmap.svg)
 
 The bootstrap contract is in place on macOS, Linux, and Windows. The remaining work is
@@ -506,8 +545,7 @@ redesigning the current two-layer model.
 
 - Repeat the proven macOS flow on a second erased Mac to validate the neutral
   adopter prompts and confirm convergence independently of the first machine.
-- Validate the Windows personal layer on a real Windows machine so the repo
-  copy, profile, SSH, Git, and config flows are proven outside dry-run paths.
+- Repeat the proven Windows 11 ARM native and WSL flows on x64 Windows.
 - Repeat the proven Ubuntu ARM64 VM flow on clean x86_64 Ubuntu and one
   pacman-family desktop to validate the alternate Flatpak/browser and package
   branches.

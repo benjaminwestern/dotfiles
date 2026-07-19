@@ -1,6 +1,10 @@
 # Windows tools that are portable and versioned by mise. Scoop remains the
 # precursor/native application manager because mise bootstrap packages does
-# not currently provide a Scoop or WinGet manager.
+# not currently provide a Scoop or WinGet manager. Windows gcloud is one of
+# those exceptions: its Scoop package carries a compatible bundled Python.
+# CLOUDSDK_PYTHON remains in the macOS/Linux configs solely for the vfox fix;
+# setting it here would replace Scoop's matching x64 Python with ARM Python.
+
 [tools]
 github-cli = "latest"
 jq = "latest"
@@ -12,7 +16,6 @@ lazygit = "latest"
 neovim = "latest"
 fastfetch = "latest"
 gitleaks = "latest"
-tokei = "latest"
 tlrc = "latest"
 worktrunk = "latest"
 duckdb = "latest"

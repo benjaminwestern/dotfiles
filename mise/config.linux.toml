@@ -29,8 +29,8 @@ protobuf = "latest"
 tokei = "latest"
 # aqua does not publish Linux ARM64 artifacts for these tools. Their official
 # crates are portable and preserve mise ownership on every supported Linux CPU.
-"cargo:resvg" = "latest"
-"cargo:tlrc" = "latest"
+"cargo:resvg" = { version = "latest", depends = ["rust"] }
+"cargo:tlrc" = { version = "latest", depends = ["rust"] }
 worktrunk = "latest"
 duckdb = "latest"
 caddy = "latest"
@@ -54,7 +54,7 @@ kubectl = "latest"
 "apt:yubikey-manager" = "latest"
 "apt:gnupg" = "latest"
 "apt:pinentry-curses" = "latest"
-"apt:p7zip-full" = "latest"
+"apt:7zip" = "latest"
 "apt:automake" = "latest"
 "apt:gcc" = "latest"
 "apt:pkg-config" = "latest"

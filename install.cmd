@@ -66,9 +66,17 @@ if /I "%~1"=="audit" (
   goto parse_args
 )
 
+if /I "%~1"=="wsl" (
+  if defined ENTRY_MODE set "FAIL_MESSAGE=Mode already set to %ENTRY_MODE%" & goto fatal
+  set "ENTRY_TARGET=wsl"
+  set "ENTRY_MODE=wsl"
+  shift
+  goto parse_args
+)
+
 if /I "%~1"=="--shell" (
   if "%~2"=="" set "FAIL_MESSAGE=--shell requires a value" & goto fatal
-  set "FORWARD_ARGS=%FORWARD_ARGS% -Shell ""%~2"""
+  set "FORWARD_ARGS=%FORWARD_ARGS% -Shell "%~2""
   shift
   shift
   goto parse_args
@@ -76,7 +84,7 @@ if /I "%~1"=="--shell" (
 
 if /I "%~1"=="--profile" (
   if "%~2"=="" set "FAIL_MESSAGE=--profile requires a value" & goto fatal
-  set "FORWARD_ARGS=%FORWARD_ARGS% -Profile_ ""%~2"""
+  set "FORWARD_ARGS=%FORWARD_ARGS% -Profile_ "%~2""
   shift
   shift
   goto parse_args
@@ -84,7 +92,7 @@ if /I "%~1"=="--profile" (
 
 if /I "%~1"=="--device-name" (
   if "%~2"=="" set "FAIL_MESSAGE=--device-name requires a value" & goto fatal
-  set "FORWARD_ARGS=%FORWARD_ARGS% -DeviceName ""%~2"""
+  set "FORWARD_ARGS=%FORWARD_ARGS% -DeviceName "%~2""
   shift
   shift
   goto parse_args
@@ -92,7 +100,7 @@ if /I "%~1"=="--device-name" (
 
 if /I "%~1"=="--git-name" (
   if "%~2"=="" set "FAIL_MESSAGE=--git-name requires a value" & goto fatal
-  set "FORWARD_ARGS=%FORWARD_ARGS% -GitName ""%~2"""
+  set "FORWARD_ARGS=%FORWARD_ARGS% -GitName "%~2""
   shift
   shift
   goto parse_args
@@ -100,7 +108,7 @@ if /I "%~1"=="--git-name" (
 
 if /I "%~1"=="--git-email" (
   if "%~2"=="" set "FAIL_MESSAGE=--git-email requires a value" & goto fatal
-  set "FORWARD_ARGS=%FORWARD_ARGS% -GitEmail ""%~2"""
+  set "FORWARD_ARGS=%FORWARD_ARGS% -GitEmail "%~2""
   shift
   shift
   goto parse_args
@@ -108,8 +116,48 @@ if /I "%~1"=="--git-email" (
 
 if /I "%~1"=="--downloads-target" (
   if "%~2"=="" set "FAIL_MESSAGE=--downloads-target requires a value" & goto fatal
-  set "FORWARD_ARGS=%FORWARD_ARGS% -DownloadsTarget ""%~2"""
+  set "FORWARD_ARGS=%FORWARD_ARGS% -DownloadsTarget "%~2""
   set "ENABLE_DOWNLOADS_LINK=true"
+  shift
+  shift
+  goto parse_args
+)
+
+if /I "%~1"=="--wsl-distribution" (
+  if "%~2"=="" set "FAIL_MESSAGE=--wsl-distribution requires a value" & goto fatal
+  set "FORWARD_ARGS=%FORWARD_ARGS% -Distribution "%~2""
+  shift
+  shift
+  goto parse_args
+)
+
+if /I "%~1"=="--wsl-version" (
+  if "%~2"=="" set "FAIL_MESSAGE=--wsl-version requires a value" & goto fatal
+  set "FORWARD_ARGS=%FORWARD_ARGS% -WslVersion "%~2""
+  shift
+  shift
+  goto parse_args
+)
+
+if /I "%~1"=="--wsl-user" (
+  if "%~2"=="" set "FAIL_MESSAGE=--wsl-user requires a value" & goto fatal
+  set "FORWARD_ARGS=%FORWARD_ARGS% -WslUser "%~2""
+  shift
+  shift
+  goto parse_args
+)
+
+if /I "%~1"=="--wsl-shell" (
+  if "%~2"=="" set "FAIL_MESSAGE=--wsl-shell requires a value" & goto fatal
+  set "FORWARD_ARGS=%FORWARD_ARGS% -WslShell "%~2""
+  shift
+  shift
+  goto parse_args
+)
+
+if /I "%~1"=="--wsl-downloads-target" (
+  if "%~2"=="" set "FAIL_MESSAGE=--wsl-downloads-target requires a value" & goto fatal
+  set "FORWARD_ARGS=%FORWARD_ARGS% -DownloadsTarget "%~2""
   shift
   shift
   goto parse_args
@@ -136,7 +184,7 @@ if /I "%~1"=="--dry-run" (
 if /I "%~1"=="--dotfiles-repo" (
   if "%~2"=="" set "FAIL_MESSAGE=--dotfiles-repo requires a value" & goto fatal
   set "DOTFILES_REPO=%~2"
-  set "FORWARD_ARGS=%FORWARD_ARGS% -DotfilesRepo ""%~2"""
+  set "FORWARD_ARGS=%FORWARD_ARGS% -DotfilesRepo "%~2""
   shift
   shift
   goto parse_args
@@ -152,7 +200,7 @@ if /I "%~1"=="--dotfiles-dir" (
 
 if /I "%~1"=="--personal-script" (
   if "%~2"=="" set "FAIL_MESSAGE=--personal-script requires a value" & goto fatal
-  set "FORWARD_ARGS=%FORWARD_ARGS% -PersonalScript ""%~2"""
+  set "FORWARD_ARGS=%FORWARD_ARGS% -PersonalScript "%~2""
   shift
   shift
   goto parse_args
@@ -160,7 +208,7 @@ if /I "%~1"=="--personal-script" (
 
 if /I "%~1"=="--section" (
   if "%~2"=="" set "FAIL_MESSAGE=--section requires a value" & goto fatal
-  set "FORWARD_ARGS=%FORWARD_ARGS% -Section ""%~2"""
+  set "FORWARD_ARGS=%FORWARD_ARGS% -Section "%~2""
   shift
   shift
   goto parse_args
@@ -222,6 +270,8 @@ if not errorlevel 1 (
 
 if /I "%ENTRY_TARGET%"=="audit" (
   call "%RUN_ROOT%\Other\scripts\windows\bootstrap-windows.cmd" audit %FORWARD_ARGS%
+) else if /I "%ENTRY_TARGET%"=="wsl" (
+  call "%RUN_ROOT%\Other\scripts\windows\bootstrap-windows.cmd" wsl -Mode ensure %FORWARD_ARGS%
 ) else if /I "%ENTRY_TARGET%"=="personal" (
   call "%RUN_ROOT%\Other\scripts\windows\bootstrap-windows.cmd" personal %FORWARD_ARGS%
 ) else (
@@ -229,13 +279,13 @@ if /I "%ENTRY_TARGET%"=="audit" (
 )
 set "EXITCODE=%ERRORLEVEL%"
 
-call :maybe_persist_repo_after_archive_run
+call :persist_repo
 
 endlocal & exit /b %EXITCODE%
 
 :usage
 echo Usage:
-echo   install.cmd ^<setup^|ensure^|update^|personal^|audit^> [options]
+echo   install.cmd ^<setup^|ensure^|update^|personal^|audit^|wsl^> [options]
 echo.
 echo Options:
 echo   --shell ^<pwsh^>            Set preferred shell ^(persisted to state file^)
@@ -244,6 +294,11 @@ echo   --device-name ^<name^>      Set the Windows computer name
 echo   --git-name ^<name^>         Seed the Git author name
 echo   --git-email ^<address^>     Seed the Git author email
 echo   --downloads-target ^<path^> Target for an optional Downloads junction
+echo   --wsl-distribution ^<name^> Optional WSL distribution ^(default: Ubuntu^)
+echo   --wsl-version ^<auto^|1^|2^> WSL 2 by default; WSL 1 for nested VMs
+echo   --wsl-user ^<name^>         Optional Linux user ^(default: Windows user^)
+echo   --wsl-shell ^<shell^>       WSL shell: fish, zsh, or bash ^(profile default^)
+echo   --wsl-downloads-target ^<path^>  Absolute Linux target for WSL Downloads
 echo   --enable-^<flag^>           Enable a feature flag
 echo   --disable-^<flag^>          Disable a feature flag
 echo   --personal                  Run the personal layer after foundation
@@ -263,11 +318,24 @@ echo               zscaler
 echo   Personal:   git-config, ssh-config, mise-config, opencode-config,
 echo               profile-extras
 echo.
+echo Profiles:
+echo   home      Ben's full native Windows apps, tools, dotfiles, identity,
+echo             terminal/defaults, hostname, code directory, and OpenSSH
+echo   work      home plus Zscaler detection and trust configuration
+echo   minimal   Scoop, PowerShell 7, Git, OpenSSL, and mise; adopter-owned
+echo             identity, naming, layout, and optional stages remain editable
+echo.
+echo Optional WSL:
+echo   Runs the matching Linux profile as an explicit second layer. WSL 2 is
+echo   preferred; WSL 1 keeps the portable development layers but skips
+echo   systemd/device/desktop services that its kernel model cannot support.
+echo.
 echo Repo-local scripts:
 echo   Other\scripts\windows\bootstrap-windows.cmd
 echo   Other\scripts\windows\foundation-windows.cmd
 echo   Other\scripts\windows\audit-windows.cmd
 echo   Other\scripts\windows\personal-bootstrap-windows.cmd
+echo   Other\scripts\windows\wsl-bootstrap-windows.cmd
 echo   Other\scripts\windows\resign-windows.cmd
 echo.
 echo Examples:
@@ -277,6 +345,7 @@ echo   install.cmd setup --enable-zscaler --disable-mise-tools
 echo   install.cmd personal --disable-opencode-config
 echo   install.cmd audit --section tools
 echo   install.cmd audit --json
+echo   install.cmd wsl --profile home
 endlocal & exit /b 0
 
 :fatal
@@ -338,7 +407,7 @@ if not errorlevel 1 (
 call :download_repo_archive
 exit /b %ERRORLEVEL%
 
-:maybe_persist_repo_after_archive_run
+:persist_repo
 if not defined ARCHIVE_RUN_ROOT exit /b 0
 if exist "%TARGET_DOTFILES_DIR%" exit /b 0
 

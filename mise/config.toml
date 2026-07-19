@@ -50,54 +50,66 @@ PITCHFORK_WEB_PORT = "19876"
 [tools]
 # Go
 go = "latest"
-"go:golang.org/x/tools/gopls" = { version = "latest" }
-"go:github.com/air-verse/air" = { version = "latest" }
-"go:github.com/golangci/golangci-lint/v2/cmd/golangci-lint" = { version = "latest" }
-"go:mvdan.cc/gofumpt" = { version = "latest" }
-"go:github.com/charmbracelet/glow" = { version = "latest" }
-"go:github.com/charmbracelet/freeze" = { version = "latest" }
-"go:github.com/charmbracelet/vhs" = { version = "latest" }
-"go:github.com/hashicorp/terraform-mcp-server/cmd/terraform-mcp-server" = { version = "latest" }
-"go:oss.terrastruct.com/d2" = { version = "latest" }
-"go:github.com/mikefarah/yq/v4" = { version = "latest" }
-"go:github.com/swaggo/swag/cmd/swag" = { version = "latest" }
-"go:github.com/sqlc-dev/sqlc/cmd/sqlc" = { version = "latest" }
-"go:github.com/GoogleCloudPlatform/cloud-sql-proxy/v2" = { version = "latest" }
+"go:golang.org/x/tools/gopls" = { version = "latest", depends = ["go"] }
+"go:github.com/air-verse/air" = { version = "latest", depends = ["go"] }
+# These projects publish native archives for every supported bootstrap target,
+# including Windows ARM64. Prefer mise's GitHub backend over a source build.
+"github:golangci/golangci-lint" = { version = "latest" }
+"go:mvdan.cc/gofumpt" = { version = "latest", depends = ["go"] }
+"go:github.com/charmbracelet/glow" = { version = "latest", depends = ["go"] }
+"go:github.com/charmbracelet/freeze" = { version = "latest", depends = ["go"] }
+"go:github.com/charmbracelet/vhs" = { version = "latest", depends = ["go"] }
+"go:github.com/hashicorp/terraform-mcp-server/cmd/terraform-mcp-server" = { version = "latest", depends = ["go"] }
+"go:oss.terrastruct.com/d2" = { version = "latest", depends = ["go"] }
+"github:mikefarah/yq" = { version = "latest" }
+"go:github.com/swaggo/swag/cmd/swag" = { version = "latest", depends = ["go"] }
+# sqlc publishes native macOS, Linux, and Windows ARM64 archives. Let mise's
+# GitHub backend select those instead of compiling the full Go dependency graph.
+"github:sqlc-dev/sqlc" = { version = "latest" }
+"go:github.com/GoogleCloudPlatform/cloud-sql-proxy/v2" = { version = "latest", depends = ["go"] }
 
 # Cargo
-"cargo:stylua" = { version = "latest" }
-"cargo:tree-sitter-cli" = { version = "latest" }
+"cargo:stylua" = { version = "latest", os = ["linux", "macos"], depends = ["rust"] }
+# tree-sitter publishes a native Windows ARM64 CLI. Prefer the release asset
+# everywhere instead of compiling it through Cargo on each new machine.
+"github:tree-sitter/tree-sitter" = { version = "latest" }
 
 # Node / npm
 node = "latest"
 bun = "latest"
-"npm:opencode-ai" = { version = "latest", minimum_release_age = "0s", npm_args = "--ignore-scripts=false" }
-"npm:@earendil-works/pi-coding-agent" = { version = "latest", minimum_release_age = "0s" }
-"npm:@playwright/cli" = "latest"
-"npm:@dataform/cli" = "latest"
-"npm:wrangler" = "latest"
-"npm:@googleworkspace/cli" = "latest"
-"npm:markit-ai" = "latest"
-"npm:@kitlangton/ghui" = "latest"
-"npm:hunkdiff" = "latest"
-"npm:@kitlangton/motel" = "latest"
+"npm:opencode-ai" = { version = "latest", minimum_release_age = "0s", npm_args = "--ignore-scripts=false", depends = ["node"] }
+"npm:@earendil-works/pi-coding-agent" = { version = "latest", minimum_release_age = "0s", depends = ["node"] }
+"npm:@playwright/cli" = { version = "latest", depends = ["node"] }
+"npm:@dataform/cli" = { version = "latest", depends = ["node"] }
+"npm:wrangler" = { version = "latest", depends = ["node"] }
+"npm:@googleworkspace/cli" = { version = "latest", depends = ["node"] }
+"npm:markit-ai" = { version = "latest", depends = ["node"] }
+"npm:@kitlangton/ghui" = { version = "latest", depends = ["node"] }
+"npm:hunkdiff" = { version = "latest", depends = ["node"] }
+"npm:@kitlangton/motel" = { version = "latest", depends = ["node"] }
 
 # Python ecosystem
 python = "latest"
-uv = "latest"
-pipx = "latest"
-"pipx:sqlfluff/sqlfluff" = "latest"
-"pipx:mitmproxy" = "latest"
+uv = { version = "latest", depends = ["python"] }
+pipx = { version = "latest", os = ["linux", "macos"], depends = ["python"] }
+# Mise's pipx backend resolves through the uv shim on Windows, which recursively
+# enters mise while the parent install holds its state. The Windows foundation
+# keeps Python and uv in mise, invokes uv's real binary for SQLFluff, and uses
+# mitmproxy's published Windows bundle through Scoop.
+# Use SQLFluff's PyPI package name here; the owner/repository form forces a
+# source build and is needlessly fragile on constrained WSL installations.
+"pipx:sqlfluff" = { version = "latest", depends = ["uv"], os = ["linux", "macos"] }
+"pipx:mitmproxy" = { version = "latest", depends = ["pipx:sqlfluff"], os = ["linux", "macos"] }
 
 # Languages / runtimes
-lua = "5.1"
+lua = { version = "5.1", os = ["linux", "macos"] }
 rust = "latest"
 
 # Infrastructure
 terraform = "latest"
 pitchfork = "latest"
-gcloud = "latest"
-skaffold = "latest"
+gcloud = { version = "latest", os = ["linux", "macos"], depends = ["python"] }
+skaffold = { version = "latest", os = ["linux", "macos"] }
 pkl = "latest"
 
 # Mise ecosystem

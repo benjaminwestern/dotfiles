@@ -13,9 +13,18 @@ if test -d "$HOME/.local/bin"
     fish_add_path --global "$HOME/.local/bin"
 end
 
+# WSL launched from Windows inherits the native Windows working directory.
+# Start an ordinary login in Linux home so mise does not mistake the native
+# Windows ~/.config/mise tree for a project configuration.
+if test -r /proc/sys/kernel/osrelease; and string match -qi '*microsoft*' (cat /proc/sys/kernel/osrelease)
+    if string match -q "/mnt/*/Users/$USER" "$PWD"
+        cd "$HOME"
+    end
+end
+
 # Initialise mise
 if command -v mise >/dev/null 2>&1
-  mise activate fish | source
+  mise -C "$HOME" activate fish | source
 end
 
 # Tmux auto-launch (macOS always; Linux only if DOTFILES_TMUX_AUTO=1)

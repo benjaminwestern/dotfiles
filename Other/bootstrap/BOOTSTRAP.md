@@ -1,6 +1,6 @@
 # Unified Bootstrap Guide
 
-This is the single source of truth for taking a fresh machine to a working shell, runtime manager, and personal config. It covers macOS and the supported apt/pacman Linux families, plus every ordering gotcha and manual workaround we hit while bringing this repo online.
+This is the single source of truth for taking a fresh machine to a working shell, runtime manager, and personal config. It covers macOS, native Windows, and the supported apt/pacman Linux families, plus every ordering gotcha and manual workaround we hit while bringing this repo online.
 
 ## The SSH chicken-and-egg problem
 
@@ -196,6 +196,158 @@ Routine maintenance goes through the same public contract:
 ~/.dotfiles/install.sh update
 ~/.dotfiles/install.sh audit --expect-state
 ```
+
+## Native Windows bootstrap
+
+Use the batch loader from PowerShell, Windows PowerShell, or `cmd.exe`. The
+`.cmd` first hop is intentional: it can establish a safe PowerShell execution
+policy and install PowerShell 7 before any implementation script must parse.
+
+```powershell
+# Canonical fresh-machine path
+curl.exe -fsSL -o "$env:TEMP\install.cmd" `
+  "https://raw.githubusercontent.com/benjaminwestern/dotfiles/main/install.cmd"
+& "$env:TEMP\install.cmd" setup
+
+# Fully specified home plan
+& "$env:TEMP\install.cmd" setup --profile home `
+  --device-name windows-arm `
+  --git-name "Ada Lovelace" --git-email ada@example.com `
+  --non-interactive
+```
+
+The loader downloads only the public Windows bootstrap files into an exact
+temporary directory. Scoop is the native precursor and application manager;
+it installs Git, OpenSSL, PowerShell 7, the Visual C++ runtime, and mise before
+the normal foundation starts. `RemoteSigned` is set for the current user only
+when no Group Policy controls execution. Existing `AllSigned` policy is
+respected through the local signing path rather than weakened.
+
+The three presets have the same meaning as macOS and Linux:
+
+| Preset | Native Windows defaults |
+| --- | --- |
+| `home` | Ben's native package, application/font, mise, dotfile, Git/SSH/config, `~/code`, hostname, OpenSSH, terminal, and shell catalogue; Zscaler off |
+| `work` | The `home` catalogue plus Zscaler detection and trust configuration |
+| `minimal` | Scoop, PowerShell 7, Git, OpenSSL, mise, and adopter-selected naming/identity/layout only; Ben's catalogues remain off |
+
+Every plan value can be changed with the same `--enable-*` or `--disable-*`
+contract. Windows exposes `packages`, `applications`, `mise-tools`, `dotfiles`,
+`code-directory`, `downloads-link`, `git-identity`, `windows-defaults`,
+`remote-access`, and `zscaler`, plus `--device-name`, `--git-name`,
+`--git-email`, and `--downloads-target`. The normal interactive path explains
+the presets and collects adopter-owned values; passwords and API keys are never
+accepted as command-line options.
+
+### Windows parity and ownership
+
+The goal is functional parity, not pretending Unix-only applications exist on
+Windows:
+
+- Windows Terminal with PowerShell 7 replaces Ghostty with Fish.
+- Ditto replaces Maccy, DBeaver replaces DBngin, PowerToys replaces the macOS
+  window-management utilities, and MiKTeX replaces MacTeX.
+- `scc` is the ARM64 code-counter equivalent because `tokei` 14 publishes no
+  Windows binary and otherwise requires the full MSVC build toolchain.
+- Scoop owns upstream Windows bundles for gcloud, skaffold, Lua/StyLua,
+  mitmproxy, ngrok, VS Code, Chrome, Obsidian, Podman Desktop, Yubico
+  Authenticator, Codex, and the Nerd Fonts. Signed x64 bundles are used under
+  Windows ARM emulation only when upstream has no ARM64 build.
+- Mise owns the shared portable runtimes and CLI releases. `MISE_CONFIG_DIR`
+  points at the complete repository `mise` directory during installation so
+  both `config.toml` and `config.windows.toml` participate. Pointing only
+  `MISE_GLOBAL_CONFIG_FILE` at the base file is incorrect because it suppresses
+  the sibling platform config.
+- Python and uv remain Mise-managed. SQLFluff is installed by uv's real binary;
+  invoking Mise's pipx backend through the Windows uv shim recursively enters
+  the parent Mise installation. Mitmproxy uses its official Windows bundle
+  because its Python dependencies do not publish Windows ARM wheels.
+- Podman Desktop is installed without creating, initializing, or starting a
+  Podman machine.
+
+The personal layer copies selected files on Windows rather than creating Unix
+symlinks. It creates or updates `~/.dotfiles`, Git and SSH config, the entire
+public mise config set, OpenCode config, and managed PowerShell profile blocks.
+It never invents SSH keys and never copies `~/.config/mise/.env` from the public
+repository. Copy private keys and that secret env file through a separately
+authenticated channel when explicitly required.
+
+Computer rename is staged immediately but requires a restart. OpenSSH Server is
+enabled, started, and set to Automatic before that restart is requested. The
+bootstrap does not restart the machine itself.
+
+### Optional WSL layer
+
+Native Windows is a complete target on its own. WSL is selected separately and
+uses the same Linux bootstrap already proven on Ubuntu and Debian:
+
+```powershell
+& "$HOME\.dotfiles\install.cmd" wsl --profile home
+```
+
+The default distribution is Ubuntu and the default Linux user is the current
+Windows username. Override those adopter-owned values when needed:
+
+```powershell
+& "$HOME\.dotfiles\install.cmd" wsl --profile minimal `
+  --wsl-distribution Ubuntu --wsl-version auto --wsl-user ada --wsl-shell bash `
+  --device-name ada-wsl --git-name "Ada Lovelace" `
+  --git-email ada@example.com
+```
+
+The WSL layer performs these bounded stages:
+
+1. Enable WSL with Microsoft's supported `wsl --install --no-launch` path;
+   enable Virtual Machine Platform when WSL 2 is selected.
+2. Stop when Windows reports a restart boundary. It never restarts the machine
+   itself; rerun the same command after signing back in.
+3. Install or initialize the selected ARM64/x64 distribution for the host,
+   create the Linux user, enable systemd, and make that user the default.
+4. Add a temporary passwordless sudo rule only for the Linux bootstrap, invoke
+   the public `install.sh` with the selected `home`, `work`, or `minimal`
+   profile, then remove the temporary rule even when the bootstrap fails.
+5. Leave secrets separate. The public repository and command line never carry
+   the Windows or Linux Mise `.env`, SSH private keys, or account passwords.
+
+WSL does not initialize Podman, apply Windows packages again, or impose memory,
+CPU, job, or resume limits. Windows and Linux package managers retain ownership
+of their respective layers.
+
+The WSL plan accepts the same Linux-relevant `--enable-*`/`--disable-*`
+overrides as `install.sh`. Use `--wsl-shell fish|zsh|bash` and
+`--wsl-downloads-target /absolute/linux/path` for WSL-owned values; the native
+Windows `--shell` and `--downloads-target` options remain separate.
+
+`auto` selects WSL 2 for a new distribution and preserves the version of an
+existing distribution. On a nested VM that does not expose Hyper-V, rerun with
+`--wsl-version 1`. WSL 1 is a supported Windows/Linux integration path but has
+no managed VM, full Linux kernel, full system-call compatibility, or systemd;
+the script therefore keeps the portable CLI, Mise, Fish, dotfile, identity,
+hostname, code-directory, and audit stages while skipping Flatpak applications,
+YubiKey device services, desktop MIME defaults, duplicate Linux SSH, SQLFluff,
+and mitmproxy. The last two remain Mise-owned on WSL 2 and ordinary Linux but
+are excluded on WSL 1 because its filesystem copy path repeatedly returns
+`ENOMEM` while uv constructs their environments. WSL 2 keeps the complete
+Linux profile. The WSL orchestrator itself runs without interactive shell
+startup files, and the shared Bash/Zsh/Fish configs move an ordinary WSL login
+from the native Windows home to Linux home before activating Mise.
+
+Audit both perspectives after convergence:
+
+```powershell
+& "$HOME\.dotfiles\install.cmd" audit
+& "$HOME\.dotfiles\install.cmd" audit --profile home
+& "$HOME\.dotfiles\install.cmd" audit --section wsl --profile home
+& "$HOME\.dotfiles\install.cmd" ensure --dry-run
+```
+
+The general audit runs without loading arbitrary user profile code and reports
+the current machine. The profile comparison checks the selected Scoop
+catalogue, Mise toolset, dotfiles, identity, layout, hostname, remote access,
+and Zscaler posture. `--populate-state` is the only audit option that writes,
+and it says so explicitly. The WSL section is also read-only. A general audit
+reports features, restart state, and distributions; a profile audit additionally
+delegates to the Linux audit inside the selected distribution.
 
 ## What `mise bootstrap` does
 

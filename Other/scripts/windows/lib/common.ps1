@@ -551,9 +551,9 @@ function global:Resolve-ShellPreference {
   $envVal   = $env:PREFERRED_SHELL
   $stateVal = Get-StateValue -Key 'PREFERRED_SHELL'
 
-  if ($CliVal)   { return $CliVal }
-  if ($envVal)   { return $envVal }
-  if ($stateVal) { return $stateVal }
+  foreach ($candidate in @($CliVal, $envVal, $stateVal)) {
+    if ($candidate -eq 'pwsh') { return 'pwsh' }
+  }
 
   # Windows default
   return 'pwsh'
@@ -862,7 +862,9 @@ function global:Get-InteractivePwshMiseDoctorJson {
   }
 
   try {
-    $raw = pwsh -NoLogo -Command 'mise doctor --json' 2>$null
+    # Audit a fresh interactive configuration without executing arbitrary user
+    # profile code. The activation is process-local and does not mutate state.
+    $raw = pwsh -NoLogo -NoProfile -Command '(& mise activate pwsh --shims) | Out-String | Invoke-Expression; mise doctor --json' 2>$null
     if (-not $raw) { return $null }
     return ($raw | ConvertFrom-Json)
   } catch {

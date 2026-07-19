@@ -12,7 +12,7 @@ endlocal & exit /b %EXITCODE%
 
 :usage
 echo Usage:
-echo   audit-windows.cmd [-Section ^<tools^|shell^|configs^|signing^|zscaler^|all^>] [-Json] [-PopulateState]
+echo   audit-windows.cmd [-Section ^<tools^|shell^|configs^|signing^|zscaler^|wsl^|all^>] [-Profile_ ^<work^|home^|minimal^>] [-Json] [-PopulateState]
 echo.
 echo Safe wrapper for audit-windows.ps1. Routes through bootstrap-windows.cmd
 echo so the local signing and PowerShell 7 precursor path run before the
@@ -20,6 +20,7 @@ echo audit implementation.
 echo.
 echo Examples:
 echo   audit-windows.cmd -Section tools
+echo   audit-windows.cmd -Profile_ home
 echo   audit-windows.cmd -Json
 echo   audit-windows.cmd -PopulateState
 endlocal & exit /b 0
