@@ -7,6 +7,7 @@ fetch_remote_versions_timeout = "60s"
 http_timeout = "60s"
 minimum_release_age_excludes = [
     "npm:opencode-ai",
+    "npm:@opencode-ai/cli",
     "npm:@earendil-works/pi-coding-agent",
     "hk",
     "fnox",
@@ -88,6 +89,7 @@ go = "latest"
 node = "latest"
 bun = "latest"
 "npm:opencode-ai" = { version = "latest", minimum_release_age = "0s", npm_args = "--ignore-scripts=false", depends = ["node"] }
+"npm:@opencode-ai/cli" = { version = "next", minimum_release_age = "0s", allow_builds = ["@opencode-ai/cli"], depends = ["node"] }
 "npm:@earendil-works/pi-coding-agent" = { version = "latest", minimum_release_age = "0s", depends = ["node"] }
 "npm:@playwright/cli" = { version = "latest", depends = ["node"] }
 "npm:@dataform/cli" = { version = "latest", depends = ["node"] }
