@@ -96,7 +96,7 @@ bun = "latest"
 "npm:markit-ai" = { version = "latest", depends = ["node"] }
 "npm:@kitlangton/ghui" = { version = "latest", depends = ["node"], allow_low_downloads = true }
 "npm:hunkdiff" = { version = "latest", depends = ["node"] }
-"npm:@kitlangton/motel" = { version = "latest", depends = ["node"], allow_low_downloads = true }
+"npm:@kitlangton/motel" = { version = "latest", depends = ["node"], allow_low_downloads = true, trust_policy_excludes = ["@effect/*", "effect"] }
 
 # Python ecosystem
 python = "latest"

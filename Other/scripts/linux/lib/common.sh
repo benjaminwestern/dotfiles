@@ -436,6 +436,7 @@ linux_application_catalogue() {
     x86_64|amd64) printf '%s\n' com.google.Chrome ;;
     aarch64|arm64) printf '%s\n' org.chromium.Chromium ;;
   esac
+  printf '%s\n' app.zen_browser.zen
 }
 
 linux_application_package_specs() {

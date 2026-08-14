@@ -105,6 +105,7 @@ kubectl = "latest"
 "pacman:imagemagick" = "latest" # brew:imagemagick
 "pacman:podman" = "latest"      # brew:podman
 "pacman:podman-compose" = "latest" # brew:podman-compose
+"pacman:ghostty" = "latest"     # brew:ghostty (GUI terminal; config managed via [dotfiles])
 
 # Helpers already present on Omarchy/Arch installs
 "pacman:base-devel" = "latest"

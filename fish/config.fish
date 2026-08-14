@@ -22,14 +22,20 @@ if test -r /proc/sys/kernel/osrelease; and string match -qi '*microsoft*' (cat /
     end
 end
 
-# Tmux auto-launch (macOS always; Linux only if DOTFILES_TMUX_AUTO=1)
-if status is-interactive
+# Tmux auto-launch (macOS always; Linux opt-in via DOTFILES_TMUX_AUTO=1 in
+# ~/.config/mise/.env). The .env is read directly because mise activates
+# after this file loads, so its variables are not yet in the shell here.
+set -l tmux_auto off
+if test (uname) = Darwin
+    set tmux_auto on
+else if test -r "$HOME/.config/mise/.env"; and string match -rq '^[[:space:]]*DOTFILES_TMUX_AUTO[[:space:]]*=[[:space:]]*1' < "$HOME/.config/mise/.env"
+    set tmux_auto on
+end
+if test "$tmux_auto" = on; and status is-interactive
     if not set -q TMUX
         if test "$TERM_PROGRAM" != "vscode"
-            if test (uname) = Darwin -o "$DOTFILES_TMUX_AUTO" = "1"
-                set -l tmux_bin (command -v tmux || echo /usr/bin/tmux)
-                $tmux_bin new-session -As main
-            end
+            set -l tmux_bin (command -v tmux || echo /usr/bin/tmux)
+            $tmux_bin new-session -As main
         end
     end
 end
@@ -48,6 +54,3 @@ end
 if status is-interactive
     fastfetch
 end
-
-# opencode
-fish_add_path "$HOME/.opencode/bin"
