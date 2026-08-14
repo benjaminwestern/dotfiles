@@ -28,6 +28,8 @@ ENABLE_PERSONAL=0
 DOTFILES_REPO="${DOTFILES_REPO:-$DEFAULT_DOTFILES_REPO}"
 DOTFILES_DIR="${DOTFILES_DIR:-$HOME/.dotfiles}"
 PERSONAL_SCRIPT=""
+PRESERVE_PATHS="${PRESERVE_PATHS:-}"
+PRESERVE_PATHS_SET=0
 AUDIT_ARGS=()
 _DYNAMIC_FLAGS=""
 RUN_ROOT=""
@@ -72,6 +74,8 @@ Options:
   --dotfiles-repo <url>    Override dotfiles repository URL
   --dotfiles-dir <path>    Override the local dotfiles checkout path
   --personal-script <path> Override personal bootstrap script path
+  --preserve <path>        Keep a conflicting dotfile target (repeatable)
+  --clear-preserve         Clear saved preserve exceptions
 
 Profiles are editable presets:
   work     Ben's complete setup plus Zscaler auto-detection
@@ -258,6 +262,19 @@ parse_args() {
         PERSONAL_SCRIPT="$2"
         shift 2
         ;;
+      --preserve)
+        [[ $# -ge 2 ]] || fail "--preserve requires a path"
+        [[ "$2" != *'|'* ]] || fail "--preserve paths cannot contain |"
+        [[ "$PRESERVE_PATHS" != __CLEAR__ ]] || PRESERVE_PATHS=""
+        PRESERVE_PATHS="${PRESERVE_PATHS:+${PRESERVE_PATHS}|}$2"
+        PRESERVE_PATHS_SET=1
+        shift 2
+        ;;
+      --clear-preserve)
+        PRESERVE_PATHS="__CLEAR__"
+        PRESERVE_PATHS_SET=1
+        shift
+        ;;
       -h|--help)
         usage
         exit 0
@@ -292,6 +309,8 @@ export_flags() {
   export DOTFILES_REPO
   export DOTFILES_DIR
   export PERSONAL_SCRIPT
+  export PRESERVE_PATHS
+  export PRESERVE_PATHS_SET
   export BOOTSTRAP_ROOT="$RUN_ROOT"
 
   if [[ -n "$_DYNAMIC_FLAGS" ]]; then

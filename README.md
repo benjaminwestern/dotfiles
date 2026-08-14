@@ -211,10 +211,11 @@ afterward.
   declared as system Flatpaks through mise.
 - The repo-local `mise.toml` installs the contributor toolchain for the README
   asset pipeline.
-- The managed home config at `mise/config.toml` defines runtimes, tasks, and
-  shell aliases. macOS links it at `~/.config/mise/` only when Ben's packages,
-  tools, or dotfiles are selected; a neutral adopter run leaves existing mise
-  config untouched.
+- The managed home config at `mise/config.toml` defines runtimes, tasks, shell
+  aliases, dotfiles, and shell activation. Home/work runs make it the active
+  `~/.config/mise/`; an existing config is backed up and imported as a local,
+  gitignored tools-only override. Use `--preserve ~/.config/mise` to opt out;
+  use `--clear-preserve` to return to profile defaults later.
 - The personal layer applies only the application, dotfile, identity, layout,
   and system stages selected in the plan. Windows uses its own selective-copy
   profile extras.
@@ -235,7 +236,8 @@ same public entrypoints.
 ./install.sh update
 mise doctor
 mise up
-mise dotfiles status
+mise bootstrap dotfiles status --missing
+mise bootstrap mise-shell-activate status --missing
 
 
 # Linux
@@ -263,8 +265,8 @@ before you reach for manual edits.
 - Re-run `./install.sh ensure` after a partial install and select the same plan;
   each stage converges independently.
 - Restart your shell or terminal after shell-default changes.
-- If `mise` is on disk but not on `PATH`, re-open the shell first, then run the
-  correct `mise activate` command for your shell.
+- If mise activation drifts, rerun `./install.sh ensure`; the declarative shell
+  activation stage repairs Bash, Zsh, and Fish without hand-editing startup files.
 - Manual macOS recovery commands live in
   [Other/scripts/README.md](Other/scripts/README.md) for diagnosis after an
   interrupted installer; they are not prerequisites for the normal loader.
@@ -272,7 +274,8 @@ before you reach for manual edits.
   help, audit sections, and the detailed platform flow diagrams.
 - Use [Other/bootstrap/BOOTSTRAP.md](Other/bootstrap/BOOTSTRAP.md) for the full
   bootstrap ordering gotchas, recovery steps, and validation checklist.
-- Use `mise dotfiles status` to inspect symlink state.
+- Use `mise bootstrap dotfiles status` and
+  `mise bootstrap mise-shell-activate status` to inspect managed state.
 - Use `GIT_CONFIG_GLOBAL=/dev/null` before any recovery git operation that must
   use HTTPS while an existing Git config has an active GitHub SSH rewrite.
 

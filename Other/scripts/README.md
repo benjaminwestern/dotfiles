@@ -370,11 +370,15 @@ curl -fsSL https://raw.githubusercontent.com/benjaminwestern/dotfiles/main/insta
 
 The home plan installs the declared apt/pacman packages, architecture-aware
 Flatpak applications, shared mise tools, Fish and Fisher, TPM, dotfiles, Git
-identity, `~/code`, hostname, SSH, and browser/PDF handlers. Existing
-user-owned dotfiles are preserved; an unchanged file copied from `/etc/skel`
-is considered factory state and can be replaced by the requested dotfile
-symlink. The audit resolves Flatpak desktop exports even over SSH, so its MIME
-results match a graphical login rather than producing false drift.
+identity, `~/code`, hostname, SSH, and browser/PDF handlers. The confirmed plan
+replaces conflicting dotfile targets by default so mise can converge them;
+repeat `--preserve <path>` for explicit exceptions. The audit resolves Flatpak
+desktop exports even over SSH, so its MIME results match a graphical login
+rather than producing false drift.
+
+Preserve exceptions are saved with the plan. Pass `--clear-preserve` to remove
+them. Managed home/work profiles use the conventional `~/.dotfiles` checkout;
+`--dotfiles-dir` is only useful when the managed catalogues remain disabled.
 
 On an already-converged machine, `ensure --dry-run` reports zero fixes. Sudo
 or `chsh` authentication is only requested by an apply run when a privileged

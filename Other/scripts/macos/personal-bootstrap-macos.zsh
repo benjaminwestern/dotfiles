@@ -27,6 +27,7 @@ MODE="${MODE:-personal}"
 DOTFILES_REPO="${DOTFILES_REPO:-https://github.com/benjaminwestern/dotfiles.git}"
 DOTFILES_DIR="${DOTFILES_DIR:-$HOME/.dotfiles}"
 BOOTSTRAP_ROOT="${BOOTSTRAP_ROOT:-$(cd "$SCRIPT_DIR/../../.." && pwd)}"
+PRESERVE_ARGS_SET="${PRESERVE_PATHS_SET:-0}"
 
 personal_usage() {
   cat <<'EOF'
@@ -38,6 +39,8 @@ Options:
   --dotfiles-dir <path>    Override the local dotfiles checkout path
   --dry-run                Inspect drift and print only required repairs; do not apply them
   --non-interactive        Disable gum-styled prompts and panels
+  --preserve <path>        Keep a conflicting dotfile target (repeatable)
+  --clear-preserve         Clear saved preserve exceptions
   -h, --help               Show this help text
 
 Notes:
@@ -66,6 +69,19 @@ parse_personal_args() {
         ;;
       --non-interactive)
         NON_INTERACTIVE=1
+        shift
+        ;;
+      --preserve)
+        [[ $# -ge 2 ]] || fail "--preserve requires a path"
+        [[ "$2" != *'|'* ]] || fail "--preserve paths cannot contain |"
+        [[ "${PRESERVE_PATHS:-}" != __CLEAR__ ]] || PRESERVE_PATHS=""
+        PRESERVE_PATHS="${PRESERVE_PATHS:+${PRESERVE_PATHS}|}$2"
+        PRESERVE_ARGS_SET=1
+        shift 2
+        ;;
+      --clear-preserve)
+        PRESERVE_PATHS="__CLEAR__"
+        PRESERVE_ARGS_SET=1
         shift
         ;;
       -h|--help)
@@ -113,6 +129,7 @@ local env_macos_power="${MACOS_POWER:-}"
 local env_macos_finder="${MACOS_FINDER:-}"
 local env_macos_screenshots="${MACOS_SCREENSHOTS:-}"
 local env_macos_touch_id="${MACOS_TOUCH_ID:-}"
+local env_preserve_paths="${PRESERVE_PATHS:-}"
 state_read
 
 # The state file stores ENABLE_* keys, but this script consumes RESOLVED_*.
@@ -143,6 +160,11 @@ RESOLVED_MACOS_POWER="${RESOLVED_MACOS_POWER:-${env_macos_power:-${MACOS_POWER:-
 RESOLVED_MACOS_FINDER="${RESOLVED_MACOS_FINDER:-${env_macos_finder:-${MACOS_FINDER:-true}}}"
 RESOLVED_MACOS_SCREENSHOTS="${RESOLVED_MACOS_SCREENSHOTS:-${env_macos_screenshots:-${MACOS_SCREENSHOTS:-true}}}"
 RESOLVED_MACOS_TOUCH_ID="${RESOLVED_MACOS_TOUCH_ID:-${env_macos_touch_id:-${MACOS_TOUCH_ID:-true}}}"
+RESOLVED_PRESERVE_PATHS="${RESOLVED_PRESERVE_PATHS:-${env_preserve_paths:-${PRESERVE_PATHS:-$(state_get PRESERVE_PATHS)}}}"
+[[ "$RESOLVED_PRESERVE_PATHS" != __CLEAR__ ]] || RESOLVED_PRESERVE_PATHS=""
+if [[ "$PRESERVE_ARGS_SET" == 1 ]] && ! dry_run_active; then
+  state_set PRESERVE_PATHS "$RESOLVED_PRESERVE_PATHS"
+fi
 
 
 # =============================================================================
@@ -519,6 +541,24 @@ apply_brew_bundle() {
 #   pass -- dotfiles applied
 #   skip -- RESOLVED_DOTFILES is false
 #   fail -- mise not found on PATH
+fish_dotfiles_managed() {
+  grep -Fq '# >>> mise:dotfiles >>>' "$HOME/.config/fish/config.fish" 2>/dev/null && return 0
+  local source relative target
+  for source in "$DOTFILES_DIR/fish"/{conf.d,completions,functions}/*(N); do
+    relative="${source#"$DOTFILES_DIR/fish/"}"
+    target="$HOME/.config/fish/$relative"
+    [[ -L "$target" && -e "$target" && "$target" -ef "$source" ]] && return 0
+  done
+  return 1
+}
+
+restore_fish_config_backup() {
+  local backup="$1"
+  [[ -n "$backup" && -e "$backup" ]] || return 0
+  rm -rf "$HOME/.config/fish"
+  mv "$backup" "$HOME/.config/fish"
+}
+
 apply_dotfiles() {
   local enabled="${RESOLVED_DOTFILES:-true}"
 
@@ -532,80 +572,99 @@ apply_dotfiles() {
     return 0
   fi
 
-  if ! command_exists jq; then
-    run_or_dry brew install jq
-  fi
-
   local dotfiles_json="" ssh_mode="absent"
-  dotfiles_json="$(bootstrap_mise dotfiles status --json 2>/dev/null || true)"
+  dotfiles_json="$(bootstrap_repo_mise bootstrap dotfiles status --json 2>/dev/null || true)"
   if [[ -z "$dotfiles_json" ]]; then
     status_fail "Mise dotfiles" "could not read declarative dotfile status"
     return 0
   fi
 
-  local -a dotfile_targets
-  dotfile_targets=()
-  local discovered_target
-  while IFS= read -r discovered_target; do
-    [[ -n "$discovered_target" ]] && dotfile_targets+=("$discovered_target")
-  done <<< "$(printf '%s\n' "$dotfiles_json" | jq -r '
-    [.files[], .edits[]?]
-    | .[]
-    | select(.target != "~/.gitconfig" and .state != "applied")
-    | .target
-  ')"
+  local -a dotfile_targets=() drift_targets=()
+  local discovered_target discovered_state absolute_target fish_state=missing fish_backup=""
+  while IFS=$'\t' read -r discovered_target discovered_state; do
+    [[ -n "$discovered_target" ]] || continue
+    [[ "$(expand_home_path "$discovered_target")" != "$HOME/.config/fish" ]] || fish_state="$discovered_state"
+    absolute_target="$(expand_home_path "$discovered_target")"
+    if ! path_preserved "$absolute_target"; then
+      dotfile_targets+=("$discovered_target")
+      [[ "$discovered_state" == applied ]] || drift_targets+=("$discovered_target")
+    fi
+  done <<< "$(printf '%s\n' "$dotfiles_json" | awk -F'"' '/"(target|path)":/ { target=$4 } /"state":/ { print target "\t" $4 }')"
   [[ -d "$HOME/.ssh" ]] && ssh_mode="$(stat -f '%Lp' "$HOME/.ssh" 2>/dev/null || printf unknown)"
 
-  local safe_total
-  safe_total="$(printf '%s\n' "$dotfiles_json" | jq -r '
-    [.files[], .edits[]?] | map(select(.target != "~/.gitconfig")) | length
-  ')"
+  local safe_total=${#dotfile_targets[@]}
 
   if [[ "$safe_total" -eq 0 ]]; then
-    status_fail "Mise dotfiles" "no safe targets discovered"
+    status_skip "Mise dotfiles" "all targets preserved by plan"
     return 0
   fi
 
   if dry_run_active; then
-    local change_count=${#dotfile_targets[@]}
+    local change_count=${#drift_targets[@]}
     if [[ "$ssh_mode" != "700" ]]; then
       dry_run_log "CHANGE ~/.ssh permissions: $ssh_mode -> 700"
       change_count=$((change_count + 1))
     fi
     local dotfile_target
-    for dotfile_target in "${dotfile_targets[@]}"; do
+    for dotfile_target in "${drift_targets[@]}"; do
       dry_run_log "APPLY $dotfile_target"
     done
+    if [[ -d "$HOME/.config/fish" && ! -L "$HOME/.config/fish" && "$fish_state" != applied ]] \
+      && ! fish_dotfiles_managed && ! path_preserved "$HOME/.config/fish"; then
+      dry_run_log "BACK UP conflicting $HOME/.config/fish before takeover"
+    fi
     if [[ "$change_count" -eq 0 ]]; then
-      status_pass "Mise dotfiles" "$safe_total safe targets applied; ~/.ssh mode 0700; Git config handled separately"
+      status_pass "Mise dotfiles" "$safe_total selected targets applied; ~/.ssh mode 0700"
     else
       status_fix "Mise dotfiles" "would correct $change_count target or permission change(s)"
     fi
     return 0
   fi
 
-  if [[ ${#dotfile_targets[@]} -eq 0 && "$ssh_mode" == "700" ]]; then
-    status_pass "Mise dotfiles" "$safe_total safe targets already applied; Git config handled separately"
+  local legacy_target
+  while IFS='|' read -r _ legacy_target; do
+    if [[ -L "$legacy_target" ]] && ! path_preserved "$legacy_target"; then
+      rm "$legacy_target"
+    fi
+  done <<EOF
+$DOTFILES_DIR/bash/.bashrc|$HOME/.bashrc
+$DOTFILES_DIR/bash/.bash_profile|$HOME/.bash_profile
+$DOTFILES_DIR/zsh/.zshrc|$HOME/.zshrc
+$DOTFILES_DIR/zsh/.zprofile|$HOME/.zprofile
+$DOTFILES_DIR/fish|$HOME/.config/fish
+EOF
+
+
+  if [[ -d "$HOME/.config/fish" && ! -L "$HOME/.config/fish" && "$fish_state" != applied ]] \
+    && ! fish_dotfiles_managed && ! path_preserved "$HOME/.config/fish"; then
+    fish_backup="$HOME/.config/dotfiles/backups/fish-$(date +%Y%m%d%H%M%S)-$$"
+    mkdir -p "${fish_backup:h}"
+    mv "$HOME/.config/fish" "$fish_backup"
+    trap 'trap - INT TERM HUP; restore_fish_config_backup "$fish_backup"; exit 130' INT TERM HUP
+  fi
+
+  if ! mkdir -p "$HOME/.ssh" || ! chmod 700 "$HOME/.ssh"; then
+    trap - INT TERM HUP
+    restore_fish_config_backup "$fish_backup"
+    status_fail "Mise dotfiles" "could not prepare ~/.ssh; Fish config restored"
     return 0
   fi
 
-  mkdir -p "$HOME/.ssh" "$HOME/.config" \
-           "$HOME/.config/borders" "$HOME/.config/gh" \
-           "$HOME/.config/ghostty" "$HOME/.config/git" \
-           "$HOME/.config/hypr" "$HOME/.config/opencode" \
-           "$HOME/.config/pitchfork" "$HOME/.config/worktrunk" \
-           "$HOME/.pi"
-  chmod 700 "$HOME/.ssh"
-
-  if [[ ${#dotfile_targets[@]} -gt 0 ]]; then
-    note "Mise will show only drifted dotfile links with Yes highlighted; press Return to apply them."
-    if ! bootstrap_mise dotfiles apply "${dotfile_targets[@]}"; then
-      status_fail "Mise dotfiles" "selective apply failed"
+  if [[ ${#drift_targets[@]} -gt 0 ]]; then
+    if ! bootstrap_repo_mise bootstrap dotfiles apply --force --yes "${dotfile_targets[@]}"; then
+      trap - INT TERM HUP
+      restore_fish_config_backup "$fish_backup"
+      status_fail "Mise dotfiles" "apply failed"
       return 0
     fi
   fi
-
-  status_pass "Mise dotfiles" "applied; Git config deferred"
+  trap - INT TERM HUP
+  if bootstrap_repo_mise bootstrap dotfiles status --missing "${dotfile_targets[@]}" >/dev/null; then
+    status_pass "Mise dotfiles" "$safe_total selected targets applied"
+  else
+    status_fail "Mise dotfiles" "mise reports remaining drift"
+  fi
+  [[ -z "$fish_backup" ]] || status_fix "Fish config takeover" "previous directory backed up at $fish_backup"
 }
 
 

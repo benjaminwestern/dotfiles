@@ -1,8 +1,10 @@
-min_version = "2026.3.0"
+min_version = "2026.7.14"
 
 [settings]
 experimental = true
 dotfiles.default_mode = "symlink"
+fetch_remote_versions_timeout = "60s"
+http_timeout = "60s"
 minimum_release_age_excludes = [
     "npm:opencode-ai",
     "npm:@earendil-works/pi-coding-agent",
@@ -22,11 +24,12 @@ PITCHFORK_WEB_PORT = "19876"
 # Source paths use the flat repo layout (each group at repo root)
 # Platform-specific dotfiles (macOS/Windows/Linux-only) live in the
 # respective config.{linux,macos,windows}.toml files.
-"~/.bash_profile" = "~/.dotfiles/bash/.bash_profile"
-"~/.bashrc" = "~/.dotfiles/bash/.bashrc"
-"~/.config/fish" = "~/.dotfiles/fish"
+"~/.bash_profile/dotfiles" = { source = "~/.dotfiles/bash/.bash_profile", template = "tera" }
+"~/.bashrc/dotfiles" = { source = "~/.dotfiles/bash/.bashrc", template = "tera" }
+# Fish must keep a real config.fish so native shell activation can own its block.
+"~/.config/fish" = { source = "~/.dotfiles/fish", mode = "symlink-each", exclude = ["config.fish"] }
+"~/.config/fish/config.fish/dotfiles" = { source = "~/.dotfiles/fish/config.fish", template = "tera" }
 "~/.config/gh/config.yml" = "~/.dotfiles/gh/config.yml"
-"~/.config/gh/hosts.yml" = "~/.dotfiles/gh/hosts.yml"
 "~/.config/ghostty/config" = "~/.dotfiles/ghostty/config"
 "~/.config/git/ignore" = "~/.dotfiles/git/ignore"
 "~/.config/mise" = "~/.dotfiles/mise"
@@ -44,8 +47,15 @@ PITCHFORK_WEB_PORT = "19876"
 "~/.pi/agent/settings.json" = "~/.dotfiles/pi/settings.json"
 "~/.ssh/config" = "~/.dotfiles/ssh/config"
 "~/.tmux.conf" = "~/.dotfiles/tmux/.tmux.conf"
-"~/.zprofile" = "~/.dotfiles/zsh/.zprofile"
-"~/.zshrc" = "~/.dotfiles/zsh/.zshrc"
+"~/.zprofile/dotfiles" = { source = "~/.dotfiles/zsh/.zprofile", template = "tera" }
+"~/.zshrc/dotfiles" = { source = "~/.dotfiles/zsh/.zshrc", template = "tera" }
+
+[bootstrap.mise_shell_activate]
+zprofile = "shims"
+zshrc = "activate"
+bash_profile = "shims"
+bashrc = "activate"
+fish = "activate"
 
 [tools]
 # Go
@@ -84,9 +94,9 @@ bun = "latest"
 "npm:wrangler" = { version = "latest", depends = ["node"] }
 "npm:@googleworkspace/cli" = { version = "latest", depends = ["node"] }
 "npm:markit-ai" = { version = "latest", depends = ["node"] }
-"npm:@kitlangton/ghui" = { version = "latest", depends = ["node"] }
+"npm:@kitlangton/ghui" = { version = "latest", depends = ["node"], allow_low_downloads = true }
 "npm:hunkdiff" = { version = "latest", depends = ["node"] }
-"npm:@kitlangton/motel" = { version = "latest", depends = ["node"] }
+"npm:@kitlangton/motel" = { version = "latest", depends = ["node"], allow_low_downloads = true }
 
 # Python ecosystem
 python = "latest"

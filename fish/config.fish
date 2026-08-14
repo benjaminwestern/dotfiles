@@ -22,11 +22,6 @@ if test -r /proc/sys/kernel/osrelease; and string match -qi '*microsoft*' (cat /
     end
 end
 
-# Initialise mise
-if command -v mise >/dev/null 2>&1
-  mise -C "$HOME" activate fish | source
-end
-
 # Tmux auto-launch (macOS always; Linux only if DOTFILES_TMUX_AUTO=1)
 if status is-interactive
     if not set -q TMUX

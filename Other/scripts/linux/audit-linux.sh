@@ -14,6 +14,7 @@ JSON=0
 DRIFT=()
 PACKAGE_ROWS=()
 DOTFILE_ROWS=()
+SHELL_ROWS=()
 
 usage() {
   cat <<'EOF'
@@ -88,42 +89,43 @@ audit_packages() {
   done < <(linux_application_catalogue)
 }
 
-dotfile_pairs_audit() {
-  cat <<EOF
-$BOOTSTRAP_ROOT/bash/.bashrc|$HOME/.bashrc
-$BOOTSTRAP_ROOT/bash/.bash_profile|$HOME/.bash_profile
-$BOOTSTRAP_ROOT/bash/.hushlogin|$HOME/.hushlogin
-$BOOTSTRAP_ROOT/zsh/.zshrc|$HOME/.zshrc
-$BOOTSTRAP_ROOT/zsh/.zprofile|$HOME/.zprofile
-$BOOTSTRAP_ROOT/tmux/.tmux.conf|$HOME/.tmux.conf
-$BOOTSTRAP_ROOT/git/ignore|$HOME/.config/git/ignore
-$BOOTSTRAP_ROOT/ssh/config|$HOME/.ssh/config
-$BOOTSTRAP_ROOT/gh/config.yml|$HOME/.config/gh/config.yml
-$BOOTSTRAP_ROOT/gh/hosts.yml|$HOME/.config/gh/hosts.yml
-$BOOTSTRAP_ROOT/worktrunk/config.toml|$HOME/.config/worktrunk/config.toml
-$BOOTSTRAP_ROOT/fish|$HOME/.config/fish
-$BOOTSTRAP_ROOT/nvim|$HOME/.config/nvim
-$BOOTSTRAP_ROOT/opencode/opencode.json|$HOME/.config/opencode/opencode.json
-$BOOTSTRAP_ROOT/opencode/plugins|$HOME/.config/opencode/plugins
-$BOOTSTRAP_ROOT/pi/APPEND_SYSTEM.md|$HOME/.pi/agent/APPEND_SYSTEM.md
-$BOOTSTRAP_ROOT/pi/extensions|$HOME/.pi/agent/extensions
-$BOOTSTRAP_ROOT/pi/mcp.json|$HOME/.pi/agent/mcp.json
-$BOOTSTRAP_ROOT/pi/model-system|$HOME/.pi/agent/model-system
-$BOOTSTRAP_ROOT/pi/settings.json|$HOME/.pi/agent/settings.json
-EOF
+audit_dotfiles() {
+  command_exists mise || return 0
+  local json
+  if ! json="$(bootstrap_repo_mise bootstrap dotfiles status --json 2>/dev/null)" || [[ -z "$json" ]]; then
+    DOTFILE_ROWS+=("mise-dotfiles-status"$'\t'"inspection-failed"$'\t'"could not read mise status")
+    return 0
+  fi
+  while IFS=$'\t' read -r target state detail; do
+    [[ -n "$target" ]] && DOTFILE_ROWS+=("$target"$'\t'"$state"$'\t'"$detail")
+  done < <(awk -F'"' '
+    /"(target|path)":/ { target=$4; detail="" }
+    /"source":/ { detail=$4 }
+    /"state":/ { print target "\t" $4 "\t" detail }
+  ' <<< "$json")
 }
 
-audit_dotfiles() {
-  local source target state detail
-  while IFS='|' read -r source target; do
-    [[ -e "$source" ]] || continue
-    if paths_same "$target" "$source"; then state=correct; detail="$source"
-    elif [[ -L "$target" ]]; then state=wrong-symlink; detail="$(readlink "$target" 2>/dev/null || true)"
-    elif [[ -e "$target" ]]; then state=user-owned; detail='preserved non-symlink'
-    else state=missing; detail="$source"
-    fi
-    DOTFILE_ROWS+=("$target"$'\t'"$state"$'\t'"$detail")
-  done < <(dotfile_pairs_audit)
+audit_shell_activation() {
+  command_exists mise || return 0
+  local json
+  if [[ "$AUDIT_CONTEXT" == saved-plan ]]; then
+    json="$(bootstrap_repo_mise bootstrap mise-shell-activate status --json 2>/dev/null)" || json=''
+  else
+    json="$(MISE_IGNORED_CONFIG_PATHS="$BOOTSTRAP_ROOT/mise/config.local.toml" \
+      bootstrap_repo_mise bootstrap mise-shell-activate status --json 2>/dev/null)" || json=''
+  fi
+  if [[ -z "$json" ]]; then
+    SHELL_ROWS+=("status"$'\t'"mise-shell-activate"$'\t'"unknown"$'\t'"inspection-failed")
+    return 0
+  fi
+  while IFS=$'\t' read -r target path mode state; do
+    [[ -n "$target" ]] && SHELL_ROWS+=("$target"$'\t'"$path"$'\t'"$mode"$'\t'"$state")
+  done < <(awk -F'"' '
+    /"target":/ { target=$4 }
+    /"path":/ { path=$4 }
+    /"mode":/ { mode=$4 }
+    /"state":/ { print target "\t" path "\t" mode "\t" $4 }
+  ' <<< "$json")
 }
 
 git_config_mode() {
@@ -191,12 +193,22 @@ expected_value() {
 build_drift() {
   [[ "$AUDIT_CONTEXT" != general ]] || return 0
   local expected current row kind package state target dotstate detail
+  RESOLVED_PRESERVE_PATHS="$(expected_value PRESERVE_PATHS)"
 
   expected="$(expected_value DEVICE_NAME)"
   [[ -z "$expected" ]] || { current="$(hostname -s 2>/dev/null || true)"; [[ "$current" == "$expected" ]] || add_drift system hostname "$current" "$expected"; }
 
   expected="$(expected_value ENABLE_CODE_DIRECTORY)"
   if [[ "$expected" == true && ! -d "$HOME/code" ]]; then add_drift config "$HOME/code" missing present; fi
+
+  local expected_dotfiles expected_packages expected_tools
+  expected_dotfiles="$(expected_value ENABLE_DOTFILES)"
+  expected_packages="$(expected_value ENABLE_PACKAGES)"
+  expected_tools="$(expected_value ENABLE_MISE_TOOLS)"
+  if [[ "$expected_dotfiles" == true || "$expected_packages" == true || "$expected_tools" == true ]]; then
+    paths_same "$HOME/.config/mise" "$BOOTSTRAP_ROOT/mise" \
+      || add_drift config "$HOME/.config/mise" inactive-repository-config repository-symlink
+  fi
 
   expected="$(expected_value ENABLE_DOWNLOADS_LINK)"
   if [[ "$expected" == true ]]; then
@@ -222,9 +234,17 @@ build_drift() {
   if [[ "$expected" == true ]]; then
     for row in "${DOTFILE_ROWS[@]}"; do
       IFS=$'\t' read -r target dotstate detail <<< "$row"
-      [[ "$dotstate" == correct ]] || add_drift config "$target" "$dotstate" correct-symlink
+      path_preserved "$target" && continue
+      [[ "$dotstate" == applied ]] || add_drift config "$target" "$dotstate" applied
     done
   fi
+
+  local shell_target shell_path shell_mode shell_state
+  for row in "${SHELL_ROWS[@]}"; do
+    IFS=$'\t' read -r shell_target shell_path _ shell_state <<< "$row"
+    path_preserved "$shell_path" && continue
+    [[ "$shell_state" == applied ]] || add_drift config "mise-shell:$shell_target" "$shell_state" applied
+  done
 
   expected="$(expected_value ENABLE_PACKAGES)"
   if [[ "$expected" == true ]]; then
@@ -243,18 +263,17 @@ build_drift() {
 
   expected="$(expected_value ENABLE_MISE_TOOLS)"
   if [[ "$expected" == true && -n "$(command -v mise 2>/dev/null || true)" ]]; then
-    local missing_count
-    if [[ "${BOOTSTRAP_WSL_VERSION:-}" == 1 ]]; then
-      missing_count="$(bootstrap_repo_mise ls --missing --json 2>/dev/null | awk '
-        /^  "pipx:(mitmproxy|sqlfluff)"/ { skip=1; next }
-        skip && /^  ]/ { skip=0; next }
-        !skip && /"version"/ { count++ }
-        END { print count+0 }
-      ' || printf 0)"
-    else
-      missing_count="$(bootstrap_repo_mise ls --missing --json 2>/dev/null | awk 'BEGIN{n=0} /"version"/{n++} END{print n}' || printf 0)"
+    local missing_line missing_tool missing_output
+    if ! missing_output="$(bootstrap_repo_mise ls --missing --no-header 2>/dev/null)"; then
+      add_drift tool mise-tool-status inspection-failed readable
+      missing_output=''
     fi
-    [[ "$missing_count" == 0 ]] || add_drift tool mise-tools "$missing_count missing" all-installed
+    while IFS= read -r missing_line; do
+      [[ -n "$missing_line" ]] || continue
+      missing_tool="${missing_line%%[[:space:]]*}"
+      if [[ "${BOOTSTRAP_WSL_VERSION:-}" == 1 && "$missing_tool" =~ ^pipx:(mitmproxy|sqlfluff)$ ]]; then continue; fi
+      add_drift tool "$missing_tool" missing installed
+    done <<< "$missing_output"
   elif [[ "$expected" == true ]]; then add_drift tool mise missing installed; fi
 
   local expected_shell_name
@@ -315,6 +334,8 @@ print_human() {
     printf '  %-28s %s\n' 'Dotfiles checkout' "$BOOTSTRAP_ROOT" 'Mise config' "$(if paths_same "$HOME/.config/mise" "$BOOTSTRAP_ROOT/mise"; then printf 'correct repository symlink'; elif [[ -e "$HOME/.config/mise/config.toml" ]]; then printf 'user/seed config'; else printf missing; fi)" 'Mise .env' "$(if [[ -f "$HOME/.config/mise/.env" ]]; then stat -c '%a %n' "$HOME/.config/mise/.env" 2>/dev/null || printf present; else printf missing; fi)" 'Git config' "$(git_config_mode)" 'Git author' "$(git config --global --includes --get user.name 2>/dev/null || printf unset) <$(git config --global --includes --get user.email 2>/dev/null || printf unset)>" 'Code directory' "$(if [[ -d "$HOME/code" ]]; then printf present; else printf missing; fi)" 'Downloads path' "$(if [[ -L "$HOME/Downloads" ]]; then printf 'symlink -> %s' "$(readlink "$HOME/Downloads")"; elif [[ -e "$HOME/Downloads" ]]; then printf directory; else printf missing; fi)"
     printf '\n  Dotfile targets:\n'
     for row in "${DOTFILE_ROWS[@]}"; do IFS=$'\t' read -r target dotstate detail <<< "$row"; printf '    %-46s %-14s %s\n' "${target/#$HOME/~}" "$dotstate" "$detail"; done
+    printf '\n  Mise shell activation:\n'
+    for row in "${SHELL_ROWS[@]}"; do IFS=$'\t' read -r target detail kind dotstate <<< "$row"; printf '    %-14s %-46s %-10s %s\n' "$target" "$detail" "$kind" "$dotstate"; done
   fi
   if want_section services; then
     printf '\n── Services and desktop defaults ──\n\n'
@@ -353,6 +374,7 @@ print_json() {
   printf '"git":{"mode":"%s","name":"%s","email":"%s"},' "$(git_config_mode)" "$(json_escape "$(git config --global --includes --get user.name 2>/dev/null || true)")" "$(json_escape "$(git config --global --includes --get user.email 2>/dev/null || true)")"
   printf '"packages":'; json_rows PACKAGE_ROWS $'kind\npackage\nstate'; printf ','
   printf '"dotfiles":'; json_rows DOTFILE_ROWS $'target\nstate\ndetail'; printf ','
+  printf '"shell_activation":'; json_rows SHELL_ROWS $'target\npath\nmode\nstate'; printf ','
   printf '"drift":'; json_rows DRIFT $'kind\nitem\ncurrent\nexpected'
   printf '}\n'
 }
@@ -363,6 +385,7 @@ main() {
   [[ "$AUDIT_CONTEXT" != saved-plan || -f "$STATE_FILE_PATH" ]] || fail "Saved-plan audit requested but $STATE_FILE_PATH is absent"
   audit_packages
   audit_dotfiles
+  audit_shell_activation
   build_drift
   if [[ "$JSON" == 1 ]]; then print_json; else print_human; fi
 }

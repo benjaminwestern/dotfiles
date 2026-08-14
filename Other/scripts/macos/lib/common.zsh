@@ -89,6 +89,7 @@ typeset -g NON_INTERACTIVE="${NON_INTERACTIVE:-0}"
 #   - Status output (shows what would pass/fix/skip/fail)
 #   - Resolution previews (the state file is deliberately left unchanged)
 typeset -g DRY_RUN="${DRY_RUN:-0}"
+typeset -g MIN_MISE_VERSION=2026.7.14
 
 # dry_run_active -- Check whether dry-run mode is enabled
 #
@@ -165,6 +166,13 @@ bootstrap_mise() {
   command mise -C "$HOME" "$@"
 }
 
+bootstrap_repo_mise() {
+  MISE_GLOBAL_CONFIG_FILE="$BOOTSTRAP_ROOT/mise/config.toml" \
+  MISE_GLOBAL_CONFIG_ROOT="$HOME" \
+  MISE_AUTO_ENV=true \
+    command mise -C "$HOME" "$@"
+}
+
 # bootstrap_tool_path -- Resolve a command from PATH or the active mise config
 bootstrap_tool_path() {
   local tool="${1:?bootstrap_tool_path requires a tool name}"
@@ -176,7 +184,7 @@ bootstrap_tool_path() {
 # bootstrap_package_status_json -- Return the complete declarative package state
 bootstrap_package_status_json() {
   command_exists mise || return 1
-  bootstrap_mise bootstrap packages status --json 2>/dev/null
+  bootstrap_repo_mise bootstrap packages status --json 2>/dev/null
 }
 
 bootstrap_package_missing_lines() {
@@ -216,6 +224,36 @@ bootstrap_package_counts() {
 #   0 if the command exists, 1 otherwise.
 command_exists() {
   command -v "$1" >/dev/null 2>&1
+}
+
+version_at_least() {
+  awk -v current="$1" -v required="$2" 'BEGIN {
+    split(current, c, "."); split(required, r, ".")
+    for (i = 1; i <= 3; i++) {
+      if ((c[i] + 0) > (r[i] + 0)) exit 0
+      if ((c[i] + 0) < (r[i] + 0)) exit 1
+    }
+    exit 0
+  }'
+}
+
+expand_home_path() {
+  case "$1" in
+    '~') printf '%s' "$HOME" ;;
+    \~/*) printf '%s/%s' "$HOME" "${1#\~/}" ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
+path_preserved() {
+  local candidate="$(expand_home_path "$1")"
+  local entry
+  for entry in "${(@s:|:)${RESOLVED_PRESERVE_PATHS:-}}"; do
+    [[ -n "$entry" ]] || continue
+    entry="$(expand_home_path "$entry")"
+    [[ "$candidate" == "$entry" || "$candidate" == "$entry/"* ]] && return 0
+  done
+  return 1
 }
 
 # fail -- Print an error message to stderr and exit with code 1
@@ -265,11 +303,9 @@ _inventory_line() {
 #   fallback -- the foundation-only managed block is present
 #   none     -- neither configuration path is complete
 detect_zsh_config_mode() {
-  local dotfiles_dir="${DOTFILES_DIR:-$HOME/.dotfiles}"
-
-  if [[ -e "$HOME/.zprofile" && -e "$HOME/.zshrc" \
-    && "$HOME/.zprofile" -ef "$dotfiles_dir/zsh/.zprofile" \
-    && "$HOME/.zshrc" -ef "$dotfiles_dir/zsh/.zshrc" ]]; then
+  if [[ -f "$HOME/.zprofile" && -f "$HOME/.zshrc" \
+    && $(grep -cF '# >>> mise:dotfiles >>>' "$HOME/.zprofile" 2>/dev/null || true) -gt 0 \
+    && $(grep -cF '# >>> mise:dotfiles >>>' "$HOME/.zshrc" 2>/dev/null || true) -gt 0 ]]; then
     printf 'dotfiles\n'
   elif [[ -f "$HOME/.zshrc" ]] \
     && grep -qF "$PROFILE_BEGIN" "$HOME/.zshrc" 2>/dev/null; then
@@ -283,10 +319,8 @@ detect_zsh_config_mode() {
 #
 # Returns the same values as detect_zsh_config_mode.
 detect_fish_config_mode() {
-  local dotfiles_dir="${DOTFILES_DIR:-$HOME/.dotfiles}"
-
-  if [[ -e "$HOME/.config/fish" \
-    && "$HOME/.config/fish" -ef "$dotfiles_dir/fish" ]]; then
+  if [[ -f "$HOME/.config/fish/config.fish" ]] \
+    && grep -qF '# >>> mise:dotfiles >>>' "$HOME/.config/fish/config.fish" 2>/dev/null; then
     printf 'dotfiles\n'
   elif [[ -f "$HOME/.config/fish/conf.d/00-foundation.fish" ]] \
     && grep -qF "$PROFILE_BEGIN" "$HOME/.config/fish/conf.d/00-foundation.fish" 2>/dev/null; then
@@ -623,7 +657,7 @@ status_skip() {
 # Arguments:
 #   $1 -- Short description of what failed.
 #   $2 -- (optional) Detail about the failure.
-status_fail() {
+status_drift() {
   local desc="${1:?status_fail requires a description}"
   local detail="${2:-}"
   (( _STATUS_FAILED++ )) || true
@@ -639,7 +673,12 @@ status_fail() {
   else
     printf '  \033[31m%s\033[0m %-45s %s\n' "$STATUS_SYM_FAIL" "$desc" "$detail_part"
   fi
+}
 
+status_fail() {
+  local desc="${1:?status_fail requires a description}"
+  local detail="${2:-}"
+  status_drift "$desc" "$detail"
   fail "$desc${detail:+: $detail}"
 }
 
@@ -907,7 +946,7 @@ state_get() {
 #   3. Atomically move the temp file over the original.
 state_set() {
   local key="${1:?state_set requires a key}"
-  local value="${2:?state_set requires a value}"
+  local value="${2-}"
 
   state_ensure_dir
 
@@ -942,7 +981,7 @@ bootstrap_state_keys() {
     ENABLE_GIT_IDENTITY DEVICE_NAME GIT_USER_NAME GIT_USER_EMAIL \
     MACOS_HOSTNAME MACOS_DOCK MACOS_DESKTOP MACOS_DEFAULT_APPS \
     MACOS_MENU_BAR MACOS_MOUSE MACOS_POWER MACOS_FINDER MACOS_SCREENSHOTS \
-    MACOS_TOUCH_ID
+    MACOS_TOUCH_ID PRESERVE_PATHS
 }
 
 state_missing_keys() {
@@ -985,6 +1024,7 @@ resolved_value_for_state_key() {
     MACOS_FINDER)          printf '%s' "${RESOLVED_MACOS_FINDER:-}" ;;
     MACOS_SCREENSHOTS)     printf '%s' "${RESOLVED_MACOS_SCREENSHOTS:-}" ;;
     MACOS_TOUCH_ID)        printf '%s' "${RESOLVED_MACOS_TOUCH_ID:-}" ;;
+    PRESERVE_PATHS)        printf '%s' "${RESOLVED_PRESERVE_PATHS:-}" ;;
     *) return 1 ;;
   esac
 }

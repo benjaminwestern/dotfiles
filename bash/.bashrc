@@ -16,11 +16,6 @@ if grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null; then
   esac
 fi
 
-# Initialize mise
-if command -v mise >/dev/null 2>&1; then
-  eval "$(mise -C "$HOME" activate bash)"
-fi
-
 if command -v wt >/dev/null 2>&1; then eval "$(command wt config shell init bash)"; fi
 
 # Initialize zoxide

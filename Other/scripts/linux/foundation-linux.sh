@@ -14,6 +14,7 @@ CLI_DEVICE_NAME="${DEVICE_NAME:-}"
 CLI_DOWNLOADS_TARGET="${DOWNLOADS_TARGET:-}"
 CLI_GIT_USER_NAME="${GIT_USER_NAME:-}"
 CLI_GIT_USER_EMAIL="${GIT_USER_EMAIL:-}"
+CLI_PRESERVE_PATHS="${PRESERVE_PATHS:-}"
 
 usage() {
   cat <<'EOF'
@@ -29,6 +30,8 @@ Options:
   --enable-<flag> / --disable-<flag>
   --non-interactive
   --dry-run
+  --preserve <path> (repeatable)
+  --clear-preserve
 
 Flags:
   packages, applications, mise-tools, dotfiles, code-directory,
@@ -61,6 +64,8 @@ parse_args() {
       --disable-*) set_cli_flag "${1#--disable-}" false; shift ;;
       --non-interactive) NON_INTERACTIVE=1; shift ;;
       --dry-run) DRY_RUN=1; shift ;;
+      --preserve) [[ $# -ge 2 ]] || fail "--preserve requires a path"; [[ "$2" != *'|'* ]] || fail "--preserve paths cannot contain |"; [[ "$CLI_PRESERVE_PATHS" != __CLEAR__ ]] || CLI_PRESERVE_PATHS=''; CLI_PRESERVE_PATHS="${CLI_PRESERVE_PATHS:+${CLI_PRESERVE_PATHS}|}$2"; shift 2 ;;
+      --clear-preserve) CLI_PRESERVE_PATHS=__CLEAR__; shift ;;
       -h|--help|help) usage; exit 0 ;;
       *) fail "Unknown Linux bootstrap argument: $1" ;;
     esac
@@ -102,6 +107,25 @@ ensure_baseline() {
 
 ensure_mise() {
   if command_exists mise; then
+    local current_version
+    current_version="$(mise --version 2>/dev/null | awk 'NR == 1 { print $1 }')"
+    if ! version_at_least "$current_version" "$MIN_MISE_VERSION"; then
+      if dry_run_active; then
+        dry_run_log "mise self-update $MIN_MISE_VERSION --yes --no-plugins"
+        status_fix "Mise" "would update $current_version -> $MIN_MISE_VERSION or newer"
+        fail "update mise before using --dry-run so the repository config can be inspected safely"
+      fi
+      if ! mise self-update "$MIN_MISE_VERSION" --yes --no-plugins; then
+        if command_exists curl; then curl -fsSL https://mise.run | sh
+        elif command_exists wget; then wget -qO- https://mise.run | sh
+        else fail "updating mise requires curl or wget"; fi
+        hash -r
+      fi
+      current_version="$(mise --version 2>/dev/null | awk 'NR == 1 { print $1 }')"
+      version_at_least "$current_version" "$MIN_MISE_VERSION" || fail "mise $MIN_MISE_VERSION or newer is required"
+      status_fix "Mise" "updated to $current_version"
+      return 0
+    fi
     status_pass "Mise" "$(mise --version 2>/dev/null | head -1)"
     return 0
   fi
@@ -119,32 +143,41 @@ ensure_mise() {
   fi
   export PATH="$HOME/.local/bin:$PATH"
   command_exists mise || fail "mise installation completed but mise is unavailable"
+  version_at_least "$(mise --version | awk 'NR == 1 { print $1 }')" "$MIN_MISE_VERSION" \
+    || fail "mise $MIN_MISE_VERSION or newer is required"
   status_fix "Mise" "installed standalone"
 }
 
 ensure_gum() {
   command_exists mise || { status_skip "Gum" "mise unavailable"; return 0; }
   local gum_path=''
-  if command_exists gum; then
-    status_pass "Gum" "$(command -v gum)"
+  gum_path="$(mise -C "$HOME" which gum 2>/dev/null || true)"
+  if [[ -x "$gum_path" ]]; then
+    PATH="$(dirname "$gum_path"):$PATH"
+    export PATH
+    status_pass "Gum" "$gum_path"
     return 0
   fi
   if dry_run_active; then
-    dry_run_log "mise -C $HOME install gum@latest"
-    status_fix "Gum" "would install through mise"
+    dry_run_log "mise -C $HOME use --global --yes gum@latest"
+    status_fix "Gum" "would declare and install through mise"
     return 0
   fi
-  mise -C "$HOME" install gum@latest >/dev/null
-  gum_path="$(mise -C "$HOME" exec gum@latest -- which gum)"
-  [[ -x "$gum_path" ]] || fail "mise installed Gum but did not return an executable"
-  export PATH="$(dirname "$gum_path"):$PATH"
-  status_fix "Gum" "installed through mise"
+  mise -C "$HOME" use --global --yes gum@latest >/dev/null
+  gum_path="$(mise -C "$HOME" which gum 2>/dev/null || true)"
+  [[ -x "$gum_path" ]] || fail "mise declared Gum but did not return an executable"
+  PATH="$(dirname "$gum_path"):$PATH"
+  export PATH
+  status_fix "Gum" "declared and installed through mise"
 }
 
 ensure_persistent_repo() {
   local target="${DOTFILES_DIR:-$HOME/.dotfiles}"
   if [[ "$BOOTSTRAP_ROOT" == "$target" || -d "$target/.git" ]]; then
-    if [[ -d "$target/.git" ]]; then BOOTSTRAP_ROOT="$target"; DOTFILES_DIR="$target"; fi
+    if [[ -d "$target/.git" ]]; then
+      BOOTSTRAP_ROOT="$target" LINK_SOURCE_ROOT="$target" DOTFILES_DIR="$target"
+      export BOOTSTRAP_ROOT LINK_SOURCE_ROOT DOTFILES_DIR
+    fi
     return 0
   fi
   if dry_run_active; then
@@ -227,6 +260,7 @@ Linux bootstrap plan
   Default apps:       $RESOLVED_LINUX_DEFAULT_APPS
   Remote SSH:         $RESOLVED_REMOTE_ACCESS
   Zscaler:            $RESOLVED_ZSCALER
+  Preserve targets:   ${RESOLVED_PRESERVE_PATHS:-none}
 EOF
   if dry_run_active; then printf '  Mode safety:        DRY RUN — no changes will be made\n'; fi
   echo
@@ -250,18 +284,100 @@ gum = "latest"
 EOF
 }
 
+existing_mise_tools() {
+  awk '
+    /^\[tools(\.|\])/ { in_tools=1; print; next }
+    in_tools && /^\[/ { in_tools=0 }
+    in_tools { print }
+  ' "$1"
+}
+
+active_mise_config_files() {
+  local json
+  if json="$(bootstrap_mise config ls --json 2>/dev/null)"; then
+    awk -F'"' '/"path":/ { print $4 }' <<< "$json"
+  elif [[ -f "$HOME/.config/mise/config.toml" ]]; then
+    printf '%s\n' "$HOME/.config/mise/config.toml"
+  fi
+}
+
+restore_mise_config_backup() {
+  local target="$1" backup="$2"
+  [[ -n "$backup" && ( -e "$backup" || -L "$backup" ) ]] || return 0
+  rm -rf "$target"
+  cp -RPp "$backup" "$target"
+}
+
+rollback_mise_config_takeover() {
+  local target="$1" backup="$2" env_path="$3" env_imported="$4" imports="$5" imported
+  while IFS= read -r imported; do
+    [[ -z "$imported" ]] || rm -f "$imported"
+  done <<< "$imports"
+  [[ "$env_imported" != 1 ]] || rm -f "$env_path"
+  restore_mise_config_backup "$target" "$backup"
+}
+
 ensure_mise_config() {
-  local config_dir="$HOME/.config/mise" config="$HOME/.config/mise/config.toml"
-  if [[ "$RESOLVED_DOTFILES" == true && -d "$BOOTSTRAP_ROOT/mise" ]]; then
-    if paths_same "$config_dir" "$LINK_SOURCE_ROOT/mise"; then
+  local config_dir="$HOME/.config/mise" config="$HOME/.config/mise/config.toml" repo_mise="$LINK_SOURCE_ROOT/mise"
+  if [[ "$RESOLVED_DOTFILES" == true || "$RESOLVED_PACKAGES" == true || "$RESOLVED_MISE_TOOLS" == true ]] \
+    && [[ -d "$BOOTSTRAP_ROOT/mise" ]]; then
+    if path_preserved "$config_dir"; then
+      status_skip "Mise config" "preserved by plan: $config_dir"
+    elif ! dry_run_active && ! paths_same "$repo_mise" "$HOME/.dotfiles/mise"; then
+      fail "managed mise config requires the canonical checkout at $HOME/.dotfiles; --dotfiles-dir is not supported for managed profiles"
+    elif paths_same "$config_dir" "$repo_mise"; then
       status_pass "Mise config" "repository symlink correct"
-    elif [[ ! -e "$config_dir" && ! -L "$config_dir" ]]; then
-      if dry_run_active; then dry_run_log "ln -s $LINK_SOURCE_ROOT/mise $config_dir"
-      else mkdir -p "$HOME/.config"; ln -s "$LINK_SOURCE_ROOT/mise" "$config_dir"; fi
-      if dry_run_active; then status_fix "Mise config" "would link repository config"
-      else status_fix "Mise config" "linked repository config"; fi
     else
-      status_skip "Mise config" "existing user-owned path preserved: $config_dir"
+      bootstrap_repo_mise config ls >/dev/null \
+        || fail "repository mise config is invalid; existing $config_dir was not changed"
+      local backup='' stamp old_config tools_block='' import_path='' import_manifest='' import_count=0 env_imported=0
+      local -a old_configs=()
+      stamp="$(date +%Y%m%d%H%M%S)-$$"
+      if [[ -e "$config_dir" || -L "$config_dir" ]]; then
+        backup="$HOME/.config/dotfiles/backups/mise-$stamp"
+        if dry_run_active; then
+          dry_run_log "back up $config_dir to $backup"
+          dry_run_log "import tool declarations from $config_dir/*.toml and $config_dir/conf.d/*.toml"
+        else
+          mkdir -p "$(dirname "$backup")"
+          cp -RPp "$config_dir" "$backup"
+          trap 'trap - ERR INT TERM HUP; rollback_mise_config_takeover "$config_dir" "$backup" "$repo_mise/.env" "$env_imported" "$import_manifest"; exit 1' ERR
+          trap 'trap - ERR INT TERM HUP; rollback_mise_config_takeover "$config_dir" "$backup" "$repo_mise/.env" "$env_imported" "$import_manifest"; exit 130' INT TERM HUP
+          while IFS= read -r old_config; do
+            [[ "$old_config" == "$config_dir/"*.toml || "$old_config" == "$config_dir/conf.d/"*.toml ]] \
+              && old_configs+=("$old_config")
+          done < <(active_mise_config_files)
+          local config_index
+          for ((config_index=${#old_configs[@]} - 1; config_index >= 0; config_index--)); do
+            old_config="${old_configs[$config_index]}"
+            tools_block="$(existing_mise_tools "$old_config")"
+            grep -Eq '^[[:space:]]*[^#[:space:]][^=]*=' <<< "$tools_block" || continue
+            import_count=$((import_count + 1))
+            mkdir -p "$repo_mise/conf.d"
+            import_path="$repo_mise/conf.d/90-imported-$stamp-$import_count.local.toml"
+            import_manifest+="${import_manifest:+$'\n'}$import_path"
+            printf '%s\n' "$tools_block" > "$import_path"
+            chmod 600 "$import_path"
+          done
+          if [[ -f "$config_dir/.env" && ! -e "$repo_mise/.env" ]]; then
+            env_imported=1
+            cp -p "$config_dir/.env" "$repo_mise/.env"
+            chmod 600 "$repo_mise/.env"
+          fi
+        fi
+      fi
+      if dry_run_active; then
+        bootstrap_repo_mise bootstrap dotfiles apply --dry-run --force --yes "$HOME/.config/mise"
+        status_fix "Mise config" "would activate repository config"
+      else
+        if ! bootstrap_repo_mise bootstrap dotfiles apply --force --yes "$HOME/.config/mise"; then
+          trap - ERR INT TERM HUP
+          rollback_mise_config_takeover "$config_dir" "$backup" "$repo_mise/.env" "$env_imported" "$import_manifest"
+          fail "could not activate repository mise config; previous config restored when possible"
+        fi
+        trap - ERR INT TERM HUP
+        status_fix "Mise config" "repository config active${backup:+; previous config backed up at $backup}"
+      fi
     fi
     return 0
   fi
@@ -398,7 +514,7 @@ ensure_mise_tools() {
       status_fix "Ben's mise tools" "would install declared tools after mise"
     fi
   else
-    note "mise may ask for confirmation before installing the declared toolset."
+    note "mise will install the declared toolset without interactive prompts."
     bootstrap_mise trust "$BOOTSTRAP_ROOT/mise/config.toml" 2>/dev/null || true
     if [[ -f "$BOOTSTRAP_ROOT/mise.toml" ]]; then
       # The repository-level task config is discovered whenever a shell enters
@@ -410,33 +526,52 @@ ensure_mise_tools() {
     # pipx backend also invokes uv while the parent mise install is active.
     # Preinstall those Mise-owned runtimes and put uv's real binary ahead of
     # the shims so neither backend recursively re-enters the parent process.
-    bootstrap_repo_mise install python uv pipx
-    uv_bin="$(bootstrap_repo_mise which uv)"
-    [[ -x "$uv_bin" ]] || fail "mise installed uv but did not return an executable"
-    uv_dir="$(dirname "$uv_bin")"
+    bootstrap_repo_mise install --yes python uv pipx || note "Runtime staging failed; the full install will retry it."
+    uv_bin="$(bootstrap_repo_mise which uv 2>/dev/null || true)"
+    if [[ -x "$uv_bin" ]]; then uv_dir="$(dirname "$uv_bin")"; else uv_dir=''; fi
     if [[ "${BOOTSTRAP_WSL_VERSION:-}" == 1 ]]; then
       # WSL 1 repeatedly returns ENOMEM while uv copies SQLFluff/mitmproxy's
       # Python environments, even with free RAM and swap. Keep every portable
       # release/language tool under Mise and exclude only these two apps. WSL 2
       # and ordinary Linux continue to install the complete catalogue.
-      python_bin="$(bootstrap_repo_mise which python)"
-      missing_json="$(bootstrap_repo_mise ls --missing --json)"
-      while IFS= read -r tool; do
-        [[ -z "$tool" ]] || missing_tools+=("$tool")
-      done < <("$python_bin" -c 'import json, sys
+      python_bin="$(bootstrap_repo_mise which python 2>/dev/null || true)"
+      missing_json="$(bootstrap_repo_mise ls --missing --json 2>/dev/null || printf '{}')"
+      if [[ -x "$python_bin" ]]; then
+        while IFS= read -r tool; do
+          [[ -z "$tool" ]] || missing_tools+=("$tool")
+        done < <("$python_bin" -c 'import json, sys
 excluded = {"pipx:mitmproxy", "pipx:sqlfluff"}
 for tool in json.load(sys.stdin):
     if tool not in excluded:
         print(tool)
 ' <<< "$missing_json")
+      fi
       if [[ ${#missing_tools[@]} -gt 0 ]]; then
-        PATH="$uv_dir:$PATH" bootstrap_repo_mise install "${missing_tools[@]}"
+        if ! PATH="${uv_dir:+$uv_dir:}$PATH" bootstrap_repo_mise install --yes "${missing_tools[@]}"; then
+          note "Mise tool install failed; retrying once."
+          PATH="${uv_dir:+$uv_dir:}$PATH" bootstrap_repo_mise install --yes "${missing_tools[@]}" || true
+        fi
       fi
       status_skip "WSL 1 Python applications" "SQLFluff and mitmproxy require WSL 2"
     else
-      PATH="$uv_dir:$PATH" bootstrap_repo_mise install
+      if ! PATH="${uv_dir:+$uv_dir:}$PATH" bootstrap_repo_mise install --yes; then
+        note "Mise tool install failed; retrying once."
+        PATH="${uv_dir:+$uv_dir:}$PATH" bootstrap_repo_mise install --yes || true
+      fi
     fi
-    status_pass "Ben's mise tools" "declarative toolset installed"
+    local missing_lines='' missing_line tool_name missing_count=0
+    if ! missing_lines="$(bootstrap_repo_mise ls --missing --no-header 2>/dev/null)"; then
+      status_fail "Mise tool status" "could not inspect declared tools after retry"
+      return 0
+    fi
+    while IFS= read -r missing_line; do
+      [[ -n "$missing_line" ]] || continue
+      tool_name="${missing_line%%[[:space:]]*}"
+      if [[ "${BOOTSTRAP_WSL_VERSION:-}" == 1 && "$tool_name" =~ ^pipx:(mitmproxy|sqlfluff)$ ]]; then continue; fi
+      missing_count=$((missing_count + 1))
+      status_fail "Mise tool: $tool_name" "missing after retry"
+    done <<< "$missing_lines"
+    [[ "$missing_count" -gt 0 ]] || status_pass "Ben's mise tools" "declarative toolset installed"
   fi
 }
 
@@ -461,62 +596,109 @@ ensure_downloads_link() {
   else status_fix "Downloads link" "linked to $target"; fi
 }
 
-dotfile_pairs() {
-  cat <<EOF
-$LINK_SOURCE_ROOT/bash/.bashrc|$HOME/.bashrc
-$LINK_SOURCE_ROOT/bash/.bash_profile|$HOME/.bash_profile
-$LINK_SOURCE_ROOT/bash/.hushlogin|$HOME/.hushlogin
-$LINK_SOURCE_ROOT/zsh/.zshrc|$HOME/.zshrc
-$LINK_SOURCE_ROOT/zsh/.zprofile|$HOME/.zprofile
-$LINK_SOURCE_ROOT/tmux/.tmux.conf|$HOME/.tmux.conf
-$LINK_SOURCE_ROOT/git/ignore|$HOME/.config/git/ignore
-$LINK_SOURCE_ROOT/ssh/config|$HOME/.ssh/config
-$LINK_SOURCE_ROOT/gh/config.yml|$HOME/.config/gh/config.yml
-$LINK_SOURCE_ROOT/gh/hosts.yml|$HOME/.config/gh/hosts.yml
-$LINK_SOURCE_ROOT/worktrunk/config.toml|$HOME/.config/worktrunk/config.toml
-$LINK_SOURCE_ROOT/fish|$HOME/.config/fish
-$LINK_SOURCE_ROOT/nvim|$HOME/.config/nvim
-$LINK_SOURCE_ROOT/opencode/opencode.json|$HOME/.config/opencode/opencode.json
-$LINK_SOURCE_ROOT/opencode/plugins|$HOME/.config/opencode/plugins
-$LINK_SOURCE_ROOT/pi/APPEND_SYSTEM.md|$HOME/.pi/agent/APPEND_SYSTEM.md
-$LINK_SOURCE_ROOT/pi/extensions|$HOME/.pi/agent/extensions
-$LINK_SOURCE_ROOT/pi/mcp.json|$HOME/.pi/agent/mcp.json
-$LINK_SOURCE_ROOT/pi/model-system|$HOME/.pi/agent/model-system
-$LINK_SOURCE_ROOT/pi/settings.json|$HOME/.pi/agent/settings.json
-EOF
+fish_dotfiles_managed() {
+  grep -Fq '# >>> mise:dotfiles >>>' "$HOME/.config/fish/config.fish" 2>/dev/null && return 0
+  local source relative target
+  for source in "$LINK_SOURCE_ROOT/fish"/{conf.d,completions,functions}/*; do
+    [[ -e "$source" ]] || continue
+    relative="${source#"$LINK_SOURCE_ROOT/fish/"}"
+    target="$HOME/.config/fish/$relative"
+    [[ -L "$target" && -e "$target" && "$target" -ef "$source" ]] && return 0
+  done
+  return 1
+}
+
+restore_fish_config_backup() {
+  local backup="$1"
+  [[ -n "$backup" && -e "$backup" ]] || return 0
+  rm -rf "$HOME/.config/fish"
+  mv "$backup" "$HOME/.config/fish"
 }
 
 ensure_dotfiles() {
   if [[ "$RESOLVED_DOTFILES" != true ]]; then status_skip "Ben's dotfiles" "disabled by plan"; return 0; fi
-  local source target changed=0 preserved=0 replaced_stock=0
-  while IFS='|' read -r source target; do
-    source_available "$source" || continue
-    if paths_same "$target" "$source"; then continue; fi
-    if [[ -e "$target" || -L "$target" ]]; then
-      if stock_skeleton_file "$target"; then
-        if dry_run_active; then
-          dry_run_log "replace untouched /etc/skel file $target with symlink to $source"
-        else
-          rm -f "$target"
-          mkdir -p "$(dirname "$target")"
-          ln -s "$source" "$target"
-        fi
-        changed=$((changed + 1))
-        replaced_stock=$((replaced_stock + 1))
-        continue
-      fi
-      preserved=$((preserved + 1)); continue
+  local target state absolute json ssh_mode=absent fish_state=missing fish_backup=''
+  local -a targets=() drift_targets=()
+  if ! json="$(bootstrap_repo_mise bootstrap dotfiles status --json 2>/dev/null)"; then
+    status_fail "Ben's dotfiles" "could not read declarative status"
+    return 0
+  fi
+  while IFS=$'\t' read -r target state; do
+    [[ -n "$target" ]] || continue
+    [[ "$(expand_home_path "$target")" != "$HOME/.config/fish" ]] || fish_state="$state"
+    absolute="$(expand_home_path "$target")"
+    if ! path_preserved "$absolute"; then
+      targets+=("$target")
+      [[ "$state" == applied ]] || drift_targets+=("$target")
     fi
-    if dry_run_active; then dry_run_log "ln -s $source $target"
-    else mkdir -p "$(dirname "$target")"; ln -s "$source" "$target"; fi
-    changed=$((changed + 1))
-  done < <(dotfile_pairs)
-  if ! dry_run_active && [[ -d "$HOME/.ssh" ]]; then chmod 700 "$HOME/.ssh"; fi
-  if [[ "$changed" -eq 0 ]]; then status_pass "Ben's dotfiles" "all selected links already correct"
-  elif dry_run_active; then status_fix "Ben's dotfiles" "${changed} link(s) would be created"
-  else status_fix "Ben's dotfiles" "created ${changed} link(s)"; fi
-  [[ "$replaced_stock" -eq 0 ]] || status_pass "Stock shell files" "replaced ${replaced_stock} untouched /etc/skel file(s)"
-  [[ "$preserved" -eq 0 ]] || status_skip "Existing dotfile targets" "preserved ${preserved}; replace explicitly if desired"
+  done < <(awk -F'"' '/"(target|path)":/ { target=$4 } /"state":/ { print target "\t" $4 }' <<< "$json")
+  [[ ${#targets[@]} -gt 0 ]] || { status_skip "Ben's dotfiles" "all targets preserved by plan"; return 0; }
+  [[ -d "$HOME/.ssh" ]] && ssh_mode="$(stat -c '%a' "$HOME/.ssh" 2>/dev/null || printf unknown)"
+
+  # Older releases linked complete shell files. Remove only those known links
+  # so mise can replace them with independently owned edit blocks.
+  local legacy_target legacy_count=0
+  while IFS='|' read -r _ legacy_target; do
+    if [[ -L "$legacy_target" ]] && ! path_preserved "$legacy_target"; then
+      if dry_run_active; then dry_run_log "remove legacy shell symlink $legacy_target"
+      else rm "$legacy_target"; fi
+      legacy_count=$((legacy_count + 1))
+    fi
+  done <<EOF
+$LINK_SOURCE_ROOT/bash/.bashrc|$HOME/.bashrc
+$LINK_SOURCE_ROOT/bash/.bash_profile|$HOME/.bash_profile
+$LINK_SOURCE_ROOT/zsh/.zshrc|$HOME/.zshrc
+$LINK_SOURCE_ROOT/zsh/.zprofile|$HOME/.zprofile
+$LINK_SOURCE_ROOT/fish|$HOME/.config/fish
+EOF
+
+  if [[ -d "$HOME/.config/fish" && ! -L "$HOME/.config/fish" && "$fish_state" != applied ]] \
+    && ! fish_dotfiles_managed && ! path_preserved "$HOME/.config/fish"; then
+    fish_backup="$HOME/.config/dotfiles/backups/fish-$(date +%Y%m%d%H%M%S)-$$"
+    if dry_run_active; then
+      dry_run_log "move conflicting $HOME/.config/fish to $fish_backup"
+    else
+      mkdir -p "$(dirname "$fish_backup")"
+      mv "$HOME/.config/fish" "$fish_backup"
+      trap 'trap - INT TERM HUP; restore_fish_config_backup "$fish_backup"; exit 130' INT TERM HUP
+    fi
+  fi
+
+  if dry_run_active; then
+    if [[ ${#drift_targets[@]} -eq 0 && "$legacy_count" -eq 0 && "$ssh_mode" == 700 ]]; then
+      status_pass "Ben's dotfiles" "${#targets[@]} selected target(s) applied"
+      return 0
+    fi
+    [[ "$ssh_mode" == 700 ]] || dry_run_log "chmod 700 $HOME/.ssh"
+    if [[ ${#drift_targets[@]} -gt 0 && "$legacy_count" -eq 0 ]]; then
+      bootstrap_repo_mise bootstrap dotfiles apply --dry-run --force --yes "${drift_targets[@]}"
+    else
+      [[ ${#drift_targets[@]} -eq 0 ]] || dry_run_log "mise bootstrap dotfiles apply --force --yes (${#drift_targets[@]} drifted targets)"
+    fi
+    status_fix "Ben's dotfiles" "mise would reconcile ${#drift_targets[@]} target(s) plus required link/permission drift"
+  else
+    if ! mkdir -p "$HOME/.ssh" || ! chmod 700 "$HOME/.ssh"; then
+      trap - INT TERM HUP
+      restore_fish_config_backup "$fish_backup"
+      status_fail "Ben's dotfiles" "could not prepare ~/.ssh; Fish config restored"
+      return 0
+    fi
+    if [[ ${#drift_targets[@]} -gt 0 || "$legacy_count" -gt 0 ]]; then
+      if ! bootstrap_repo_mise bootstrap dotfiles apply --force --yes "${targets[@]}"; then
+        trap - INT TERM HUP
+        restore_fish_config_backup "$fish_backup"
+        status_fail "Ben's dotfiles" "mise apply failed; Fish config restored"
+        return 0
+      fi
+    fi
+    trap - INT TERM HUP
+    if bootstrap_repo_mise bootstrap dotfiles status --missing "${targets[@]}" >/dev/null; then
+      status_pass "Ben's dotfiles" "${#targets[@]} mise target(s) applied"
+    else
+      status_fail "Ben's dotfiles" "mise reports remaining drift"
+    fi
+    [[ -z "$fish_backup" ]] || status_fix "Fish config takeover" "previous directory backed up at $fish_backup"
+  fi
 }
 
 git_generated_content() {
@@ -662,20 +844,61 @@ ensure_shell_profile() {
   case "$RESOLVED_SHELL" in
     fish)
       path="$HOME/.config/fish/conf.d/00-foundation.fish"
-      content=$'# >>> foundation-bootstrap >>>\nif test -r /proc/sys/kernel/osrelease; and string match -qi "*microsoft*" (cat /proc/sys/kernel/osrelease); and string match -q "/mnt/*/Users/$USER" "$PWD"; cd "$HOME"; end\nif test -x "$HOME/.local/bin/mise"; $HOME/.local/bin/mise -C "$HOME" activate fish | source; end\nif type -q zoxide; zoxide init fish | source; end\n# <<< foundation-bootstrap <<<'
+      content=$'# >>> foundation-bootstrap >>>\nif test -r /proc/sys/kernel/osrelease; and string match -qi "*microsoft*" (cat /proc/sys/kernel/osrelease); and string match -q "/mnt/*/Users/$USER" "$PWD"; cd "$HOME"; end\nif type -q zoxide; zoxide init fish | source; end\n# <<< foundation-bootstrap <<<'
       ;;
     zsh)
       path="$HOME/.zshrc"
-      content=$'# >>> foundation-bootstrap >>>\nif grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null; then case "$PWD" in /mnt/?/Users/"${USER:-${HOME:t}}") cd "$HOME" || true ;; esac; fi\nif [[ -x "$HOME/.local/bin/mise" ]]; then eval "$("$HOME/.local/bin/mise" -C "$HOME" activate zsh)"; fi\nif command -v zoxide >/dev/null 2>&1; then eval "$(zoxide init zsh)"; fi\n# <<< foundation-bootstrap <<<'
+      content=$'# >>> foundation-bootstrap >>>\nif grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null; then case "$PWD" in /mnt/?/Users/"${USER:-${HOME:t}}") cd "$HOME" || true ;; esac; fi\nif command -v zoxide >/dev/null 2>&1; then eval "$(zoxide init zsh)"; fi\n# <<< foundation-bootstrap <<<'
       ;;
     bash)
       path="$HOME/.bashrc"
-      content=$'# >>> foundation-bootstrap >>>\nif grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null; then case "$PWD" in /mnt/?/Users/"${USER:-$(basename "$HOME")}") cd "$HOME" || true ;; esac; fi\nif [[ -x "$HOME/.local/bin/mise" ]]; then eval "$("$HOME/.local/bin/mise" -C "$HOME" activate bash)"; fi\nif command -v zoxide >/dev/null 2>&1; then eval "$(zoxide init bash)"; fi\n# <<< foundation-bootstrap <<<'
+      content=$'# >>> foundation-bootstrap >>>\nif grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null; then case "$PWD" in /mnt/?/Users/"${USER:-$(basename "$HOME")}") cd "$HOME" || true ;; esac; fi\nif command -v zoxide >/dev/null 2>&1; then eval "$(zoxide init bash)"; fi\n# <<< foundation-bootstrap <<<'
       ;;
   esac
+  if path_preserved "$path"; then status_skip "Shell fallback block" "preserved by plan: $path"; return 0; fi
   write_managed_block "$path" "$PROFILE_BEGIN" "$PROFILE_END" "$content"
   if dry_run_active; then status_fix "Shell fallback block" "would ensure $path"
   else status_fix "Shell fallback block" "ensured $path"; fi
+}
+
+ensure_shell_activation() {
+  local target path state json selected=0 drift=0
+  if dry_run_active; then
+    if ! json="$(MISE_IGNORED_CONFIG_PATHS="$LINK_SOURCE_ROOT/mise/config.local.toml" \
+      bootstrap_repo_mise bootstrap mise-shell-activate status --json 2>/dev/null)"; then
+      status_fail "Mise shell activation" "could not read declarative status"
+      return 0
+    fi
+    while IFS=$'\t' read -r target path state; do
+      [[ -n "$target" ]] || continue
+      path_preserved "$path" && continue
+      selected=$((selected + 1))
+      [[ "$state" == applied ]] || drift=$((drift + 1))
+    done < <(awk -F'"' '/"target":/ { target=$4 } /"path":/ { path=$4 } /"state":/ { print target "\t" path "\t" $4 }' <<< "$json")
+    if [[ "$drift" -eq 0 ]]; then
+      status_pass "Mise shell activation" "$selected selected startup file(s) applied"
+    else
+      dry_run_log "mise bootstrap mise-shell-activate apply --yes"
+      status_fix "Mise shell activation" "would reconcile $drift startup file(s)"
+    fi
+    return 0
+  fi
+
+  local override="$LINK_SOURCE_ROOT/mise/config.local.toml"
+  local begin='# >>> foundation-shell-preserve >>>' end='# <<< foundation-shell-preserve <<<' entries=''
+  path_preserved "$HOME/.zprofile" && entries+=$'zprofile = false\n'
+  path_preserved "$HOME/.zshrc" && entries+=$'zshrc = false\n'
+  path_preserved "$HOME/.bash_profile" && entries+=$'bash_profile = false\n'
+  path_preserved "$HOME/.bashrc" && entries+=$'bashrc = false\n'
+  path_preserved "$HOME/.config/fish/config.fish" && entries+=$'fish = false\n'
+  write_managed_block "$override" "$begin" "$end" "$begin"$'\n[bootstrap.mise_shell_activate]\n'"$entries$end"
+
+  bootstrap_repo_mise bootstrap mise-shell-activate apply --yes
+  if bootstrap_repo_mise bootstrap mise-shell-activate status --missing >/dev/null; then
+    status_pass "Mise shell activation" "all selected startup files applied"
+  else
+    status_fail "Mise shell activation" "mise reports remaining drift"
+  fi
 }
 
 ensure_default_shell() {
@@ -806,14 +1029,14 @@ validate_linux() {
     elif dry_run_active; then status_fix "Validate: $tool" "would be available after apply"
     else status_fail "Validate: $tool" "missing"; fi
   done
-  if [[ "$RESOLVED_DOTFILES" == true ]]; then
-    local source target wrong=0
-    while IFS='|' read -r source target; do
-      source_available "$source" || continue
-      paths_same "$target" "$source" || wrong=$((wrong + 1))
-    done < <(dotfile_pairs)
-    if [[ "$wrong" -eq 0 ]]; then status_pass "Validate: dotfile links" "all correct"
-    else status_skip "Validate: dotfile links" "$wrong preserved/missing"; fi
+  if [[ "$RESOLVED_DOTFILES" == true && -z "${RESOLVED_PRESERVE_PATHS:-}" ]]; then
+    if dry_run_active; then
+      status_skip "Validate: mise dotfiles" "dry-run does not apply repairs"
+    elif bootstrap_repo_mise bootstrap dotfiles status --missing >/dev/null; then
+      status_pass "Validate: mise dotfiles" "all targets applied"
+    else
+      status_fail "Validate: mise dotfiles" "drift remains"
+    fi
   fi
 }
 
@@ -845,12 +1068,13 @@ main() {
   ensure_tpm
   ensure_fisher
   ensure_shell_profile
-  ensure_mise_tools
   ensure_zscaler
   ensure_hostname
   ensure_remote_access
   ensure_default_apps
   ensure_default_shell
+  ensure_shell_activation
+  ensure_mise_tools
   validate_linux
   status_summary "Linux bootstrap"
   [[ "$FAIL_COUNT" -eq 0 ]] || exit 1

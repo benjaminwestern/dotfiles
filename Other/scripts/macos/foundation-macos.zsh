@@ -98,6 +98,7 @@ typeset -g CLI_MACOS_POWER=""
 typeset -g CLI_MACOS_FINDER=""
 typeset -g CLI_MACOS_SCREENSHOTS=""
 typeset -g CLI_MACOS_TOUCH_ID=""
+typeset -g CLI_PRESERVE_PATHS=""
 
 foundation_usage() {
   cat <<'EOF'
@@ -120,6 +121,8 @@ Options:
   --dry-run                Inspect drift and print only required repairs; do not apply them
   --dotfiles-repo <url>    Override dotfiles repository URL
   --personal-script <path> Override the personal bootstrap script path
+  --preserve <path>        Keep a conflicting dotfile target (repeatable)
+  --clear-preserve         Clear saved preserve exceptions
 
 Feature flags:
   packages, applications, mise-tools, dotfiles, code-directory,
@@ -198,6 +201,7 @@ parse_foundation_args() {
   CLI_MACOS_FINDER="${MACOS_FINDER:-}"
   CLI_MACOS_SCREENSHOTS="${MACOS_SCREENSHOTS:-}"
   CLI_MACOS_TOUCH_ID="${MACOS_TOUCH_ID:-}"
+  CLI_PRESERVE_PATHS="${PRESERVE_PATHS:-}"
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -300,6 +304,17 @@ parse_foundation_args() {
         [[ $# -ge 2 ]] || fail "--personal-script requires a value"
         PERSONAL_SCRIPT="$2"
         shift 2
+        ;;
+      --preserve)
+        [[ $# -ge 2 ]] || fail "--preserve requires a path"
+        [[ "$2" != *'|'* ]] || fail "--preserve paths cannot contain |"
+        [[ "$CLI_PRESERVE_PATHS" != __CLEAR__ ]] || CLI_PRESERVE_PATHS=""
+        CLI_PRESERVE_PATHS="${CLI_PRESERVE_PATHS:+${CLI_PRESERVE_PATHS}|}$2"
+        shift 2
+        ;;
+      --clear-preserve)
+        CLI_PRESERVE_PATHS="__CLEAR__"
+        shift
         ;;
       -h|--help)
         foundation_usage
@@ -429,14 +444,13 @@ ensure_mise_bootstrap_packages() {
       dry_run_log "INSTALL $package ($state)"
     done <<< "$missing_lines"
     local manager_plan=""
-    manager_plan="$(bootstrap_mise bootstrap packages apply --dry-run 2>&1 || true)"
+    manager_plan="$(bootstrap_repo_mise bootstrap packages apply --dry-run 2>&1 || true)"
     [[ -n "$manager_plan" ]] && printf '%s\n' "$manager_plan"
     status_fix "Mise bootstrap packages" "would install $missing_count missing package(s)"
     return 0
   fi
 
-  note "Mise may show the Homebrew package plan with Yes highlighted; press Return to begin installation."
-  bootstrap_mise bootstrap packages install
+  bootstrap_repo_mise bootstrap packages apply --yes
   status_pass "Mise bootstrap packages" "installed"
 }
 
@@ -464,11 +478,35 @@ ensure_mise() {
   if command_exists mise; then
     local ver
     ver="$(mise --version 2>/dev/null || echo "unknown")"
+    local current_version="${ver%% *}"
     local method="unknown"
     if brew list mise >/dev/null 2>&1; then
       method="homebrew"
     elif [[ -x "$HOME/.local/bin/mise" ]]; then
       method="shell installer"
+    fi
+    if ! version_at_least "$current_version" "$MIN_MISE_VERSION"; then
+      if dry_run_active; then
+        dry_run_log "update mise $current_version to $MIN_MISE_VERSION or newer"
+        status_fix "Mise" "would update ($method)"
+        fail "update mise before using --dry-run so the repository config can be inspected safely"
+      fi
+      if [[ "$method" == "homebrew" ]]; then
+        brew upgrade mise || true
+      else
+        mise self-update "$MIN_MISE_VERSION" --yes --no-plugins || true
+      fi
+      current_version="$(mise --version 2>/dev/null | awk 'NR == 1 { print $1 }')"
+      if ! version_at_least "$current_version" "$MIN_MISE_VERSION"; then
+        curl -fsSL https://mise.run | sh
+        export PATH="$HOME/.local/bin:$PATH"
+        rehash
+      fi
+      current_version="$(mise --version 2>/dev/null | awk 'NR == 1 { print $1 }')"
+      version_at_least "$current_version" "$MIN_MISE_VERSION" \
+        || fail "mise $MIN_MISE_VERSION or newer is required"
+      status_fix "Mise" "updated to $current_version"
+      return 0
     fi
     status_pass "Mise" "$ver ($method)"
     return 0
@@ -484,6 +522,8 @@ ensure_mise() {
   export PATH="$HOME/.local/bin:$PATH"
 
   if command_exists mise; then
+    version_at_least "$(mise --version 2>/dev/null | awk 'NR == 1 { print $1 }')" "$MIN_MISE_VERSION" \
+      || fail "mise $MIN_MISE_VERSION or newer is required"
     status_fix "Mise" "installed via shell installer (~/.local/bin/mise)"
   else
     status_fail "Mise" "standalone installation failed"
@@ -494,9 +534,6 @@ ensure_mise() {
 ensure_gum() {
   local gum_path=""
   gum_path="$(bootstrap_mise which gum 2>/dev/null || true)"
-  if [[ ! -x "$gum_path" ]]; then
-    gum_path="$(mise -C "$HOME" exec gum@latest -- command -v gum 2>/dev/null || true)"
-  fi
 
   if [[ -x "$gum_path" ]]; then
     export PATH="$(dirname "$gum_path"):$PATH"
@@ -505,19 +542,20 @@ ensure_gum() {
   fi
 
   if dry_run_active; then
-    status_fail "Gum" "not installed; interactive dry-run needs mise-managed gum"
+    dry_run_log "mise -C $HOME use --global --yes gum@latest"
+    status_fix "Gum" "would declare and install through mise"
     return 0
   fi
 
-  note "Installing the gum interface as a single mise tool before showing the bootstrap menu."
-  mise -C "$HOME" install gum@latest
-  gum_path="$(mise -C "$HOME" exec gum@latest -- command -v gum 2>/dev/null || true)"
+  note "Declaring the gum interface in the global mise config before showing the bootstrap menu."
+  mise -C "$HOME" use --global --yes gum@latest
+  gum_path="$(mise -C "$HOME" which gum 2>/dev/null || true)"
   if [[ ! -x "$gum_path" ]]; then
-    status_fail "Gum" "mise installation completed but gum is unavailable"
+    status_fail "Gum" "mise declaration completed but gum is unavailable"
     return 0
   fi
   export PATH="$(dirname "$gum_path"):$PATH"
-  status_fix "Gum" "installed through mise"
+  status_fix "Gum" "declared and installed through mise"
 }
 
 ensure_selected_mise_config() {
@@ -575,7 +613,6 @@ profile_block_zsh() {
   cat <<'EOF'
 # >>> foundation-bootstrap >>>
 if command -v brew >/dev/null 2>&1; then eval "$(brew shellenv)"; fi
-if command -v mise >/dev/null 2>&1; then eval "$(mise -C "$HOME" activate zsh)"; fi
 if command -v zoxide >/dev/null 2>&1; then eval "$(zoxide init zsh)"; fi
 # <<< foundation-bootstrap <<<
 EOF
@@ -595,7 +632,6 @@ profile_block_fish() {
   cat <<'EOF'
 # >>> foundation-bootstrap >>>
 if type -q brew; eval (brew shellenv); end
-if type -q mise; mise -C "$HOME" activate fish | source; end
 if type -q zoxide; zoxide init fish | source; end
 # <<< foundation-bootstrap <<<
 EOF
@@ -632,6 +668,11 @@ ensure_profile_block() {
     block_content="$(profile_block_zsh)"
   fi
 
+  if path_preserved "$target_file"; then
+    status_skip "Shell profile block" "preserved by plan: $target_file"
+    return 0
+  fi
+
   # Check if block already exists and matches
   if [[ -f "$target_file" ]] && grep -qF "$PROFILE_BEGIN" "$target_file"; then
     # Extract current block and compare
@@ -648,6 +689,46 @@ ensure_profile_block() {
     status_fix "Shell profile block" "would write $RESOLVED_SHELL profile to $target_file"
   else
     status_fix "Shell profile block" "wrote $RESOLVED_SHELL profile to $target_file"
+  fi
+}
+
+ensure_shell_activation() {
+  local target path state json selected=0 drift=0
+  if dry_run_active; then
+    if ! json="$(MISE_IGNORED_CONFIG_PATHS="$BOOTSTRAP_ROOT/mise/config.local.toml" \
+      bootstrap_repo_mise bootstrap mise-shell-activate status --json 2>/dev/null)"; then
+      status_drift "Mise shell activation" "could not read declarative status"
+      return 0
+    fi
+    while IFS=$'\t' read -r target path state; do
+      [[ -n "$target" ]] || continue
+      path_preserved "$path" && continue
+      selected=$((selected + 1))
+      [[ "$state" == applied ]] || drift=$((drift + 1))
+    done <<< "$(printf '%s\n' "$json" | awk -F'"' '/"target":/ { target=$4 } /"path":/ { path=$4 } /"state":/ { print target "\t" path "\t" $4 }')"
+    if [[ "$drift" -eq 0 ]]; then
+      status_pass "Mise shell activation" "$selected selected startup file(s) applied"
+    else
+      dry_run_log "mise bootstrap mise-shell-activate apply --yes"
+      status_fix "Mise shell activation" "would reconcile $drift startup file(s)"
+    fi
+    return 0
+  fi
+
+  local override="$BOOTSTRAP_ROOT/mise/config.local.toml"
+  local begin='# >>> foundation-shell-preserve >>>' end='# <<< foundation-shell-preserve <<<' entries=''
+  path_preserved "$HOME/.zprofile" && entries+=$'zprofile = false\n'
+  path_preserved "$HOME/.zshrc" && entries+=$'zshrc = false\n'
+  path_preserved "$HOME/.bash_profile" && entries+=$'bash_profile = false\n'
+  path_preserved "$HOME/.bashrc" && entries+=$'bashrc = false\n'
+  path_preserved "$HOME/.config/fish/config.fish" && entries+=$'fish = false\n'
+  write_managed_block "$override" "$begin" "$end" "$begin"$'\n[bootstrap.mise_shell_activate]\n'"$entries$end"
+
+  bootstrap_repo_mise bootstrap mise-shell-activate apply --yes
+  if bootstrap_repo_mise bootstrap mise-shell-activate status --missing >/dev/null; then
+    status_pass "Mise shell activation" "bash, zsh, and fish applied"
+  else
+    status_drift "Mise shell activation" "mise reports remaining drift"
   fi
 }
 
@@ -700,6 +781,7 @@ experimental = true
 _.file = "~/.config/mise/.env"
 
 [tools]
+gum = "latest"
 go = "latest"
 node = "latest"
 bun = "latest"
@@ -720,6 +802,39 @@ fnox = "latest"
 "npm:@playwright/cli" = "latest"
 # <<< foundation-seed <<<
 EOF
+}
+
+existing_mise_tools() {
+  awk '
+    /^\[tools(\.|\])/ { in_tools=1; print; next }
+    in_tools && /^\[/ { in_tools=0 }
+    in_tools { print }
+  ' "$1"
+}
+
+active_mise_config_files() {
+  local json=""
+  if json="$(bootstrap_mise config ls --json 2>/dev/null)"; then
+    awk -F'"' '/"path":/ { print $4 }' <<< "$json"
+  elif [[ -f "$HOME/.config/mise/config.toml" ]]; then
+    printf '%s\n' "$HOME/.config/mise/config.toml"
+  fi
+}
+
+restore_mise_config_backup() {
+  local target="$1" backup="$2"
+  [[ -n "$backup" && ( -e "$backup" || -L "$backup" ) ]] || return 0
+  rm -rf "$target"
+  cp -RPp "$backup" "$target"
+}
+
+rollback_mise_config_takeover() {
+  local target="$1" backup="$2" env_path="$3" env_imported="$4" imports="$5" imported
+  while IFS= read -r imported; do
+    [[ -z "$imported" ]] || rm -f "$imported"
+  done <<< "$imports"
+  [[ "$env_imported" != 1 ]] || rm -f "$env_path"
+  restore_mise_config_backup "$target" "$backup"
 }
 
 # ensure_seed_mise_config -- Create or update the mise seed configuration
@@ -745,23 +860,69 @@ ensure_seed_mise_config() {
   # declaration. Prefer it to the fallback seed so the first run installs the
   # same state that subsequent mise dotfile runs will manage.
   if [[ -f "$repo_mise_dir/config.toml" ]]; then
-    if [[ -L "$MISE_CONFIG_DIR" \
-      && "$(/usr/bin/readlink "$MISE_CONFIG_DIR")" == "$repo_mise_dir" ]]; then
+    if path_preserved "$MISE_CONFIG_DIR"; then
+      status_skip "Mise config" "preserved by plan: $MISE_CONFIG_DIR"
+      return 0
+    fi
+    if ! dry_run_active && ! [[ "$repo_mise_dir" -ef "$HOME/.dotfiles/mise" ]]; then
+      fail "managed mise config requires the canonical checkout at $HOME/.dotfiles; --dotfiles-dir is not supported for managed profiles"
+    fi
+    if [[ -L "$MISE_CONFIG_DIR" && -e "$MISE_CONFIG_DIR" \
+      && "$MISE_CONFIG_DIR" -ef "$repo_mise_dir" ]]; then
       status_pass "Mise config" "managed repository symlink already applied"
       return 0
     fi
 
-    if [[ ! -e "$MISE_CONFIG_DIR" && ! -L "$MISE_CONFIG_DIR" ]]; then
+    bootstrap_repo_mise config ls >/dev/null \
+      || fail "repository mise config is invalid; existing $MISE_CONFIG_DIR was not changed"
+    local backup="" stamp="$(date +%Y%m%d%H%M%S)-$$" old_config="" tools_block="" import_path="" import_manifest="" import_count=0 env_imported=0
+    local -a old_configs=()
+    if [[ -e "$MISE_CONFIG_DIR" || -L "$MISE_CONFIG_DIR" ]]; then
+      backup="$HOME/.config/dotfiles/backups/mise-$stamp"
       if dry_run_active; then
-        dry_run_log "mkdir -p $HOME/.config && ln -s $repo_mise_dir $MISE_CONFIG_DIR"
-        status_fix "Mise config" "would link the complete repository config"
+        dry_run_log "back up $MISE_CONFIG_DIR to $backup"
+        dry_run_log "import tool declarations from $MISE_CONFIG_DIR/*.toml and $MISE_CONFIG_DIR/conf.d/*.toml"
       else
-        mkdir -p "$HOME/.config"
-        ln -s "$repo_mise_dir" "$MISE_CONFIG_DIR"
-        status_fix "Mise config" "linked the complete repository config"
+        mkdir -p "${backup:h}"
+        cp -RPp "$MISE_CONFIG_DIR" "$backup"
+        trap 'trap - ZERR INT TERM HUP; rollback_mise_config_takeover "$MISE_CONFIG_DIR" "$backup" "$repo_mise_dir/.env" "$env_imported" "$import_manifest"; exit 1' ZERR
+        trap 'trap - ZERR INT TERM HUP; rollback_mise_config_takeover "$MISE_CONFIG_DIR" "$backup" "$repo_mise_dir/.env" "$env_imported" "$import_manifest"; exit 130' INT TERM HUP
+        while IFS= read -r old_config; do
+          [[ "$old_config" == "$MISE_CONFIG_DIR/"*.toml || "$old_config" == "$MISE_CONFIG_DIR/conf.d/"*.toml ]] \
+            && old_configs+=("$old_config")
+        done <<< "$(active_mise_config_files)"
+        local config_index
+        for ((config_index=${#old_configs[@]}; config_index >= 1; config_index--)); do
+          old_config="${old_configs[$config_index]}"
+          tools_block="$(existing_mise_tools "$old_config")"
+          grep -Eq '^[[:space:]]*[^#[:space:]][^=]*=' <<< "$tools_block" || continue
+          import_count=$((import_count + 1))
+          mkdir -p "$repo_mise_dir/conf.d"
+          import_path="$repo_mise_dir/conf.d/90-imported-$stamp-$import_count.local.toml"
+          import_manifest+="${import_manifest:+$'\n'}$import_path"
+          printf '%s\n' "$tools_block" > "$import_path"
+          chmod 600 "$import_path"
+        done
+        if [[ -f "$MISE_CONFIG_DIR/.env" && ! -e "$repo_mise_dir/.env" ]]; then
+          env_imported=1
+          cp -p "$MISE_CONFIG_DIR/.env" "$repo_mise_dir/.env"
+          chmod 600 "$repo_mise_dir/.env"
+        fi
       fi
-      return 0
     fi
+    if dry_run_active; then
+      bootstrap_repo_mise bootstrap dotfiles apply --dry-run --force --yes "$HOME/.config/mise"
+      status_fix "Mise config" "would activate repository config"
+    else
+      if ! bootstrap_repo_mise bootstrap dotfiles apply --force --yes "$HOME/.config/mise"; then
+        trap - ZERR INT TERM HUP
+        rollback_mise_config_takeover "$MISE_CONFIG_DIR" "$backup" "$repo_mise_dir/.env" "$env_imported" "$import_manifest"
+        fail "could not activate repository mise config; previous config restored when possible"
+      fi
+      trap - ZERR INT TERM HUP
+      status_fix "Mise config" "repository config active${backup:+; previous config backed up at $backup}"
+    fi
+    return 0
   fi
 
   if dry_run_active && [[ ! -f "$MISE_CONFIG_PATH" ]]; then
@@ -820,24 +981,42 @@ ensure_mise_tools() {
 
   if dry_run_active; then
     local missing_json="{}" missing_count=0
-    missing_json="$(bootstrap_mise ls --missing --json 2>/dev/null || printf '{}')"
+    missing_json="$(bootstrap_repo_mise ls --missing --json 2>/dev/null || printf '{}')"
     if command_exists jq; then
       missing_count="$(printf '%s\n' "$missing_json" | jq '[to_entries[].value[]?] | length' 2>/dev/null || printf 0)"
     else
-      missing_count="$(bootstrap_mise ls --missing --no-header 2>/dev/null | sed '/^$/d' | wc -l | tr -d ' ')"
+      missing_count="$(bootstrap_repo_mise ls --missing --no-header 2>/dev/null | sed '/^$/d' | wc -l | tr -d ' ')"
     fi
     if [[ "$missing_count" == "0" ]]; then
       status_pass "Mise tools install" "all declared tools installed"
       return 0
     fi
-    bootstrap_mise install --dry-run 2>&1 || true
+    bootstrap_repo_mise install --dry-run --yes 2>&1 || true
     status_fix "Mise tools install" "would install $missing_count missing tool(s)"
     return 0
   fi
 
-  note "Mise may show a proposed installation with Yes selected; press Return to begin."
-  bootstrap_mise install
-  status_pass "Mise tools install" "complete"
+  if ! bootstrap_repo_mise install --yes; then
+    note "Mise tool install failed; retrying once."
+    bootstrap_repo_mise install --yes || true
+  fi
+  local missing_lines="" missing_line="" tool_name=""
+  if ! missing_lines="$(bootstrap_repo_mise ls --missing --no-header 2>/dev/null)"; then
+    typeset -g MISE_TOOLS_INCOMPLETE=1
+    status_drift "Mise tool status" "could not inspect declared tools after retry"
+    return 0
+  fi
+  if [[ -z "$missing_lines" ]]; then
+    typeset -g MISE_TOOLS_INCOMPLETE=0
+    status_pass "Mise tools install" "complete"
+    return 0
+  fi
+  typeset -g MISE_TOOLS_INCOMPLETE=1
+  while IFS= read -r missing_line; do
+    [[ -n "$missing_line" ]] || continue
+    tool_name="${missing_line%%[[:space:]]*}"
+    status_drift "Mise tool: $tool_name" "missing after retry"
+  done <<< "$missing_lines"
 }
 
 # ensure_mise_python -- Stage Python before Zscaler and gcloud setup
@@ -849,18 +1028,25 @@ ensure_mise_python() {
   fi
 
   local python_path=""
-  python_path="$(bootstrap_mise which python 2>/dev/null || true)"
+  python_path="$(bootstrap_repo_mise which python 2>/dev/null || true)"
   if [[ -n "$python_path" && -x "$python_path" ]]; then
     status_pass "Mise Python prerequisite" "$($python_path --version 2>&1 | head -1)"
     return 0
   fi
   if dry_run_active; then
-    bootstrap_mise install python@latest --dry-run 2>&1 || true
+    bootstrap_repo_mise install --yes python@latest --dry-run 2>&1 || true
     status_fix "Mise Python prerequisite" "would install Python first"
     return 0
   fi
   note "Staging mise Python before Zscaler trust and the vfox gcloud installer."
-  bootstrap_mise install python@latest
+  if ! bootstrap_repo_mise install --yes python@latest; then
+    note "Mise Python install failed; retrying once."
+    if ! bootstrap_repo_mise install --yes python@latest; then
+      status_skip "Mise Python prerequisite" "staging failed; full tool install will retry"
+      typeset -g MISE_TOOLS_INCOMPLETE=1
+      return 0
+    fi
+  fi
   status_pass "Mise Python prerequisite" "ready"
 }
 
@@ -868,6 +1054,10 @@ ensure_mise_python() {
 ensure_mise_post_bootstrap() {
   if [[ "${RESOLVED_MISE_TOOLS:-true}" != "true" ]]; then
     status_skip "Mise post-bootstrap" "developer tools disabled"
+    return 0
+  fi
+  if [[ "${MISE_TOOLS_INCOMPLETE:-0}" == "1" ]]; then
+    status_skip "Mise post-bootstrap" "waiting for missing tools to converge"
     return 0
   fi
 
@@ -885,8 +1075,11 @@ ensure_mise_post_bootstrap() {
     status_fix "Mise post-bootstrap" "would install: ${missing_plugins[*]:-post-bootstrap directories}"
     return 0
   fi
-  bootstrap_mise run bootstrap
-  status_pass "Mise post-bootstrap" "TPM and declared plugins converged"
+  if bootstrap_repo_mise run bootstrap; then
+    status_pass "Mise post-bootstrap" "TPM and declared plugins converged"
+  else
+    status_drift "Mise post-bootstrap" "will retry after tool convergence"
+  fi
 }
 
 # update_mise -- Upgrade mise binary and all managed tools
@@ -915,12 +1108,11 @@ update_mise() {
     run_or_dry mise -C "$HOME" self-update || true
   fi
 
-  run_or_dry mise -C "$HOME" upgrade || true
-  run_or_dry mise -C "$HOME" install
+  run_or_dry bootstrap_repo_mise upgrade || true
   if dry_run_active; then
-    status_fix "Mise update" "would upgrade binary + tools"
+    status_fix "Mise update" "would upgrade the binary and installed tool versions"
   else
-    status_pass "Mise update" "binary + tools upgraded"
+    status_pass "Mise update" "binary and installed tool versions upgraded"
   fi
 }
 
@@ -1161,6 +1353,12 @@ handle_zscaler() {
     return 0
   fi
 
+  if [[ "${MISE_TOOLS_INCOMPLETE:-0}" == "1" ]] \
+    && [[ -z "$(bootstrap_repo_mise which python 2>/dev/null || true)" ]]; then
+    status_drift "Zscaler trust" "deferred until mise Python converges"
+    return 0
+  fi
+
   # Gate: auto-detect
   if [[ "${RESOLVED_ZSCALER:-false}" == "auto" ]]; then
     if [[ -f "$GOLDEN_BUNDLE_PATH" ]] && [[ -f "$MISE_ENV_PATH" ]]; then
@@ -1249,13 +1447,13 @@ validate_foundation() {
     if command_exists node && node --version >/dev/null 2>&1; then
       status_pass "Validate: node" "$(node --version 2>/dev/null)"
     else
-      status_fail "Validate: node" "not found or not working"
+      status_drift "Validate: node" "not found or not working"
     fi
 
     if command_exists python && python --version >/dev/null 2>&1; then
       status_pass "Validate: python" "$(python --version 2>/dev/null)"
     else
-      status_fail "Validate: python" "not found or not working"
+      status_drift "Validate: python" "not found or not working"
     fi
   else
     status_skip "Validate: node" "mise-tools disabled"
@@ -1355,6 +1553,7 @@ run_personal_layer() {
     RESOLVED_MACOS_FINDER="$RESOLVED_MACOS_FINDER" \
     RESOLVED_MACOS_SCREENSHOTS="$RESOLVED_MACOS_SCREENSHOTS" \
     RESOLVED_MACOS_TOUCH_ID="$RESOLVED_MACOS_TOUCH_ID" \
+    RESOLVED_PRESERVE_PATHS="$RESOLVED_PRESERVE_PATHS" \
     DRY_RUN="$DRY_RUN" \
     NON_INTERACTIVE="$NON_INTERACTIVE" \
     /bin/zsh "$script_path"
@@ -1388,6 +1587,7 @@ ensure_foundation() {
   ensure_mise_post_bootstrap
   validate_foundation
   run_personal_layer
+  ensure_shell_activation
 }
 
 # update_foundation -- Run all foundation steps in update mode
@@ -1411,9 +1611,11 @@ update_foundation() {
   ensure_mise_python
   handle_zscaler
   update_mise
+  ensure_mise_tools
   ensure_mise_post_bootstrap
   validate_foundation
   run_personal_layer
+  ensure_shell_activation
 }
 
 
@@ -1669,7 +1871,7 @@ confirm_interactive_plan() {
   if [[ "$RESOLVED_GIT_IDENTITY" == "true" ]]; then
     git_author_line="\nGit author: $RESOLVED_GIT_USER_NAME <$RESOLVED_GIT_USER_EMAIL>"
   fi
-  panel "Bootstrap plan\n\nAction: $MODE\nProfile: $RESOLVED_PROFILE\nDetected account: $(id -un) (never renamed)\nDevice name: $RESOLVED_DEVICE_NAME\nShell: $RESOLVED_SHELL\nBen's CLI packages: $RESOLVED_PACKAGES\nBen's Brewfile apps/fonts: $RESOLVED_APPLICATIONS\nBen's dotfiles: $RESOLVED_DOTFILES\nBen's mise tools: $RESOLVED_MISE_TOOLS\nCreate ~/code: $RESOLVED_CODE_DIRECTORY\nLink Downloads to iCloud: $RESOLVED_DOWNLOADS_LINK\nSeed Git identity: $RESOLVED_GIT_IDENTITY${git_author_line}\nmacOS preferences: $RESOLVED_MACOS_DEFAULTS\n  hostname=$RESOLVED_MACOS_HOSTNAME dock=$RESOLVED_MACOS_DOCK desktop=$RESOLVED_MACOS_DESKTOP\n  default-apps=$RESOLVED_MACOS_DEFAULT_APPS menu-bar=$RESOLVED_MACOS_MENU_BAR mouse=$RESOLVED_MACOS_MOUSE\n  power=$RESOLVED_MACOS_POWER finder=$RESOLVED_MACOS_FINDER screenshots=$RESOLVED_MACOS_SCREENSHOTS touch-id=$RESOLVED_MACOS_TOUCH_ID\nRemote access: $RESOLVED_REMOTE_ACCESS\nRosetta: $RESOLVED_ROSETTA\nSet login shell: $RESOLVED_SHELL_DEFAULT\nZscaler: $RESOLVED_ZSCALER\n\nFull Xcode and App Store applications remain manual. Administrator and licence prompts stay attached to this terminal."
+  panel "Bootstrap plan\n\nAction: $MODE\nProfile: $RESOLVED_PROFILE\nDetected account: $(id -un) (never renamed)\nDevice name: $RESOLVED_DEVICE_NAME\nShell: $RESOLVED_SHELL\nBen's CLI packages: $RESOLVED_PACKAGES\nBen's Brewfile apps/fonts: $RESOLVED_APPLICATIONS\nBen's dotfiles: $RESOLVED_DOTFILES (conflicts are replaced)\nPreserve targets: ${RESOLVED_PRESERVE_PATHS:-none}\nBen's mise tools: $RESOLVED_MISE_TOOLS\nCreate ~/code: $RESOLVED_CODE_DIRECTORY\nLink Downloads to iCloud: $RESOLVED_DOWNLOADS_LINK\nSeed Git identity: $RESOLVED_GIT_IDENTITY${git_author_line}\nmacOS preferences: $RESOLVED_MACOS_DEFAULTS\n  hostname=$RESOLVED_MACOS_HOSTNAME dock=$RESOLVED_MACOS_DOCK desktop=$RESOLVED_MACOS_DESKTOP\n  default-apps=$RESOLVED_MACOS_DEFAULT_APPS menu-bar=$RESOLVED_MACOS_MENU_BAR mouse=$RESOLVED_MACOS_MOUSE\n  power=$RESOLVED_MACOS_POWER finder=$RESOLVED_MACOS_FINDER screenshots=$RESOLVED_MACOS_SCREENSHOTS touch-id=$RESOLVED_MACOS_TOUCH_ID\nRemote access: $RESOLVED_REMOTE_ACCESS\nRosetta: $RESOLVED_ROSETTA\nSet login shell: $RESOLVED_SHELL_DEFAULT\nZscaler: $RESOLVED_ZSCALER\n\nFull Xcode and App Store applications remain manual. Administrator and licence prompts stay attached to this terminal."
 
   local affirmative="Apply plan"
   dry_run_active && affirmative="Preview plan"
@@ -1718,9 +1920,7 @@ main() {
   ensure_homebrew
   brew_shellenv
   ensure_mise
-  if [[ "$NON_INTERACTIVE" != "1" && -t 1 ]]; then
-    ensure_gum
-  fi
+  ensure_gum
 
   # Phase 3: Set up UI
   setup_gum_theme
@@ -1763,6 +1963,8 @@ main() {
     "$CLI_ENABLE_GIT_IDENTITY"
   resolve_macos_components
   resolve_adoption_values
+  typeset -g RESOLVED_PRESERVE_PATHS="${CLI_PRESERVE_PATHS:-$(state_get PRESERVE_PATHS)}"
+  [[ "$RESOLVED_PRESERVE_PATHS" != __CLEAR__ ]] || RESOLVED_PRESERVE_PATHS=""
 
   if [[ "$MODE" == "personal" \
     || "$RESOLVED_APPLICATIONS" == "true" \
@@ -1813,6 +2015,7 @@ main() {
   # Phase 8: Summary
   status_summary "Foundation"
   success "Done."
+  (( _STATUS_FAILED == 0 )) || exit 1
 }
 
 main "$@"

@@ -112,7 +112,8 @@ Routine maintenance:
 ~/.dotfiles/install.sh update
 mise doctor
 mise up
-mise dotfiles status
+mise bootstrap dotfiles status --missing
+mise bootstrap mise-shell-activate status --missing
 ```
 
 ## Linux bootstrap
@@ -414,17 +415,20 @@ If upgrading from the old layout, symlinks still point to `~/.dotfiles/Configs/.
 
 ```bash
 rm -rf ~/.dotfiles/Configs
-mise dotfiles apply
+mise bootstrap dotfiles apply --force --yes
 ```
 
-### 6. Real files can block dotfiles apply
+### 6. Real files are takeover candidates
 
-If a target path exists as a real file or directory, mise refuses to overwrite it. We hit this with:
+The bootstrap applies declared dotfiles with mise's force mode after the plan is
+confirmed. Use `--preserve <path>` before the run for a target that must remain
+user-owned, and `--clear-preserve` to clear saved exceptions. Common historical
+conflicts include:
 
 - `~/.config/ghostty/config`
 - `~/.config/opencode/plugins`
 
-Remove or back them up, then rerun `mise dotfiles apply`.
+Direct recovery uses `mise bootstrap dotfiles apply --force --yes`.
 
 ### 7. `~/.pi` was a stale directory symlink
 
@@ -433,7 +437,7 @@ In the old layout `~/.pi` symlinked to `~/.dotfiles/Configs/pi/.pi`. The new lay
 ```bash
 rm ~/.pi
 mkdir -p ~/.pi/agent
-mise dotfiles apply
+mise bootstrap dotfiles apply --force --yes
 ```
 
 ### 8. TPM clone fails without `GIT_CONFIG_GLOBAL=/dev/null`
@@ -593,7 +597,8 @@ mise version
 mise doctor
 
 # all dotfiles are symlinks to the flat repo layout
-mise dotfiles status
+mise bootstrap dotfiles status --missing
+mise bootstrap mise-shell-activate status --missing
 
 # env vars are present
 mise env | grep -E 'EDITOR|PITCHFORK|OPENCODE'
@@ -875,9 +880,10 @@ The bootstrap is idempotent. If something fails partway through, fix the blocker
 
 ```bash
 mise bootstrap          # system packages + dotfiles + shell
-mise install            # tools
+mise install --yes      # tools
 mise run bootstrap      # TPM + declared post-bootstrap extras
-mise dotfiles apply     # re-converge symlinks
+mise bootstrap dotfiles apply --force --yes
+mise bootstrap mise-shell-activate apply --yes
 ```
 
 For any git operation that must use HTTPS before the SSH key is registered, prefix with `GIT_CONFIG_GLOBAL=/dev/null`.

@@ -35,6 +35,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib/common.zsh"
 
 DOTFILES_DIR="${DOTFILES_DIR:-$HOME/.dotfiles}"
+BOOTSTRAP_ROOT="${BOOTSTRAP_ROOT:-$DOTFILES_DIR}"
 MISE_CONFIG_PATH="$HOME/.config/mise/config.toml"
 MISE_ENV_PATH="$HOME/.config/mise/.env"
 CERTS_DIR="$HOME/certs"
@@ -46,6 +47,15 @@ GOLDEN_BUNDLE_PATH="$CERTS_DIR/golden_pem.pem"
 audit_tool_path() {
   local tool="${1:?audit_tool_path requires a tool name}"
   bootstrap_tool_path "$tool"
+}
+
+audit_shell_activation_json() {
+  if [[ "$AUDIT_CONTEXT" == "state" ]]; then
+    bootstrap_repo_mise bootstrap mise-shell-activate status --json 2>/dev/null
+  else
+    MISE_IGNORED_CONFIG_PATHS="$BOOTSTRAP_ROOT/mise/config.local.toml" \
+      bootstrap_repo_mise bootstrap mise-shell-activate status --json 2>/dev/null
+  fi
 }
 
 # Query effective handlers from LaunchServices rather than trusting preference
@@ -88,6 +98,8 @@ audit_load_expectations() {
     profile="minimal"
   fi
   typeset -g RESOLVED_PROFILE="$profile"
+  typeset -g RESOLVED_PRESERVE_PATHS=""
+  [[ "$use_state" == true ]] && RESOLVED_PRESERVE_PATHS="$(state_get PRESERVE_PATHS)"
   if [[ "$use_state" == true ]]; then
     typeset -g RESOLVED_SHELL="$(state_get PREFERRED_SHELL)"
     [[ -n "$RESOLVED_SHELL" ]] || RESOLVED_SHELL="fish"
@@ -249,25 +261,31 @@ audit_tools() {
       mise_method="unknown method"
     fi
     _inventory_line "Mise:" "$mise_ver ($mise_method)"
-    local mise_tools_json="{}" mise_tool_counts="" mise_missing=""
-    mise_tools_json="$(bootstrap_mise ls --json 2>/dev/null || printf '{}')"
-    mise_tool_counts="$(printf '%s\n' "$mise_tools_json" | jq -r '
-      [to_entries[].value[]?] as $tools
-      | [($tools | map(select(.installed == true)) | length), ($tools | length)] | @tsv
-    ' 2>/dev/null || true)"
-    if [[ -n "$mise_tool_counts" ]]; then
+    local mise_tools_json="" mise_tool_counts="" missing_lines=""
+    if ! mise_tools_json="$(bootstrap_repo_mise ls --json 2>/dev/null)"; then
+      _inventory_line "  Configured tools:" "inspection-failed"
+    else
+      mise_tool_counts="$(printf '%s\n' "$mise_tools_json" | jq -r '
+        [to_entries[].value[]?] as $tools
+        | [($tools | map(select(.installed == true)) | length), ($tools | length)] | @tsv
+      ' 2>/dev/null || true)"
       local installed_tools total_tools
       IFS=$'\t' read -r installed_tools total_tools <<< "$mise_tool_counts"
-      _inventory_line "  Configured tools:" "$installed_tools/$total_tools installed"
-      mise_missing="$(printf '%s\n' "$mise_tools_json" | jq -r '
-        to_entries[] as $tool | $tool.value[]? | select(.installed != true)
-        | "\($tool.key)@\(.version)"
-      ')"
-      while IFS= read -r tool; do
-        [[ -n "$tool" ]] && _inventory_line "    Missing:" "$tool"
-      done <<< "$mise_missing"
+      if [[ -n "$mise_tool_counts" ]]; then
+        _inventory_line "  Configured tools:" "$installed_tools/$total_tools installed"
+      else
+        _inventory_line "  Configured tools:" "inspection-failed"
+      fi
+    fi
+    local missing_line missing_tool
+    if ! missing_lines="$(bootstrap_repo_mise ls --missing --no-header 2>/dev/null)"; then
+      _inventory_line "  Missing tools:" "inspection-failed"
     else
-      _inventory_line "  Configured tools:" "could not read status"
+      while IFS= read -r missing_line; do
+        [[ -n "$missing_line" ]] || continue
+        missing_tool="${missing_line%%[[:space:]]*}"
+        _inventory_line "    Missing:" "$missing_tool"
+      done <<< "$missing_lines"
     fi
   else
     _inventory_line "Mise:" "NOT INSTALLED"
@@ -389,7 +407,7 @@ audit_shell() {
 
   case "$fish_config_mode" in
     dotfiles)
-      _inventory_line "Fish configuration:" "managed by dotfiles → $(/usr/bin/readlink "$HOME/.config/fish" 2>/dev/null || printf '%s' "$DOTFILES_DIR/fish")"
+      _inventory_line "Fish configuration:" "managed by mise dotfiles edits and per-file links"
       ;;
     fallback)
       _inventory_line "Fish configuration:" "foundation fallback block"
@@ -399,9 +417,30 @@ audit_shell() {
       ;;
   esac
 
+  local activation_json="" activation_target="" activation_path="" activation_mode="" activation_state=""
+  if ! activation_json="$(audit_shell_activation_json)"; then
+    _inventory_line "Mise shell activation:" "inspection-failed"
+    activation_json=""
+  fi
+  while IFS=$'\t' read -r activation_target activation_path activation_mode activation_state; do
+    [[ -n "$activation_target" ]] || continue
+    if path_preserved "$activation_path"; then
+      _inventory_line "Mise activation $activation_target:" "preserved by saved plan ($activation_state)"
+    elif [[ "$AUDIT_CONTEXT" != "general" && "$activation_state" != "applied" ]]; then
+      _inventory_line "Mise activation $activation_target:" "$activation_state (expected applied; $activation_mode in $activation_path)"
+    else
+      _inventory_line "Mise activation $activation_target:" "$activation_state ($activation_mode in $activation_path)"
+    fi
+  done <<< "$(printf '%s\n' "$activation_json" | awk -F'"' '
+    /"target":/ { target=$4 }
+    /"path":/ { path=$4 }
+    /"mode":/ { mode=$4 }
+    /"state":/ { print target "\t" path "\t" mode "\t" $4 }
+  ')"
+
   # Fisher may be a user function or a package-manager vendor function. Inspect
   # both locations without starting Fish: launching it can write universal
-  # variable state beneath the managed ~/.config/fish symlink.
+  # variable state beneath the managed Fish config directory.
   local fisher_path="" fisher_version=""
   local fisher_candidate
   for fisher_candidate in \
@@ -496,8 +535,10 @@ audit_configs() {
   fi
 
   # Mise config
-  if [[ -f "$MISE_CONFIG_PATH" ]]; then
-    _inventory_line "Mise config:" "present"
+  if [[ -e "$HOME/.config/mise" && "$HOME/.config/mise" -ef "$DOTFILES_DIR/mise" ]]; then
+    _inventory_line "Mise config:" "active repository symlink"
+  elif [[ -f "$MISE_CONFIG_PATH" ]]; then
+    _inventory_line "Mise config:" "present but repository config is inactive"
   else
     _inventory_line "Mise config:" "absent"
   fi
@@ -565,9 +606,11 @@ audit_personal() {
   fi
 
   # mise dotfiles
-  if command_exists mise; then
+  if [[ "$AUDIT_CONTEXT" != "general" && "$RESOLVED_DOTFILES" != "true" ]]; then
+    _inventory_line "Mise dotfiles:" "comparison disabled by resolved plan"
+  elif command_exists mise; then
     local dotfiles_json="" dotfiles_counts=""
-    dotfiles_json="$(bootstrap_mise dotfiles status --json 2>/dev/null || true)"
+    dotfiles_json="$(bootstrap_repo_mise bootstrap dotfiles status --json 2>/dev/null || true)"
     dotfiles_counts="$(printf '%s\n' "$dotfiles_json" | jq -r '
       [.files[], .edits[]?] as $items
       | [($items | map(select(.state == "applied")) | length), ($items | length)]
@@ -578,9 +621,10 @@ audit_personal() {
       IFS=$'\t' read -r applied_count total_count <<< "$dotfiles_counts"
       _inventory_line "Mise dotfiles:" "$applied_count/$total_count applied"
       while IFS=$'\t' read -r target state; do
-        [[ -n "$target" ]] && _inventory_line "  Drift:" "$target ($state)"
+        [[ -n "$target" ]] || continue
+        path_preserved "$target" || _inventory_line "  Drift:" "$target ($state)"
       done <<< "$(printf '%s\n' "$dotfiles_json" | jq -r '
-        [.files[], .edits[]?][] | select(.state != "applied") | "\(.target)\t\(.state)"
+        [.files[], .edits[]?][] | select(.state != "applied") | "\(.target // .path)\t\(.state)"
       ')"
     else
       _inventory_line "Mise dotfiles:" "could not read status"
@@ -591,7 +635,9 @@ audit_personal() {
 
   # Brew bundle check
   local brewfile="$DOTFILES_DIR/brew/Brewfile"
-  if [[ -f "$brewfile" ]] && command_exists brew; then
+  if [[ "$AUDIT_CONTEXT" != "general" && "$RESOLVED_APPLICATIONS" != "true" ]]; then
+    _inventory_line "Brewfile:" "comparison disabled by resolved plan"
+  elif [[ -f "$brewfile" ]] && command_exists brew; then
     _inventory_line "Brewfile:" "present"
     local bundle_check
     bundle_check="$(HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_UPGRADE_AUTO_UPDATES_CASKS=1 \
@@ -641,24 +687,6 @@ audit_personal() {
     _inventory_line "Google Chrome:" "not installed"
   fi
 
-  # Key config file symlinks
-  _check_config_link() {
-    local path="$1" label="$2" expected="$3"
-    if [[ -L "$path" ]]; then
-      local target=""
-      target="$(/usr/bin/readlink "$path" 2>/dev/null || true)"
-      [[ -z "$target" ]] && target="unknown"
-      if [[ "$path" -ef "$expected" ]]; then
-        _inventory_line "$label:" "correct symlink → $expected"
-      else
-        _inventory_line "$label:" "WRONG symlink → $target (expected $expected)"
-      fi
-    elif [[ -e "$path" ]]; then
-      _inventory_line "$label:" "WRONG type — present but not a symlink (expected $expected)"
-    else
-      _inventory_line "$label:" "MISSING — expected symlink → $expected"
-    fi
-  }
   local git_config_path="$HOME/.gitconfig"
   local git_config_mode="absent"
   if [[ -L "$git_config_path" ]]; then
@@ -685,12 +713,6 @@ audit_personal() {
   else
     _inventory_line "Git config:" "absent"
   fi
-  _check_config_link "$HOME/.config/nvim"            "Neovim config"  "$DOTFILES_DIR/nvim"
-  _check_config_link "$HOME/.tmux.conf"              "Tmux config"    "$DOTFILES_DIR/tmux/.tmux.conf"
-  _check_config_link "$HOME/.config/fish"            "Fish config"    "$DOTFILES_DIR/fish"
-  _check_config_link "$HOME/.config/ghostty/config"  "Ghostty config" "$DOTFILES_DIR/ghostty/config"
-  _check_config_link "$HOME/.ssh/config"             "SSH config"     "$DOTFILES_DIR/ssh/config"
-
   _inventory_line "macOS account:" "$(id -un) (bootstrap never renames it)"
   _inventory_line "ComputerName:" "$(scutil --get ComputerName 2>/dev/null || echo unset)"
   _inventory_line "LocalHostName:" "$(scutil --get LocalHostName 2>/dev/null || echo unset)"
@@ -917,12 +939,61 @@ audit_json() {
   remote_login_enabled="$(printf '%s\n' "$remote_overrides" | grep -Eq '"com\.openssh\.sshd"[[:space:]]*=>[[:space:]]*(enabled|false)' && echo true || echo false)"
   screen_sharing_enabled="$(printf '%s\n' "$remote_overrides" | grep -Eq '"com\.apple\.screensharing"[[:space:]]*=>[[:space:]]*(enabled|false)' && echo true || echo false)"
 
-  local pkg_json="{}" dotfiles_applied=false
+  local pkg_json="{}" dotfiles_applied=false shell_activation_applied=false
+  local dotfiles_status_json="" shell_status_json="" missing_tools=""
+  local tool_drift_json='[]' dotfile_drift_json='[]' shell_drift_json='[]'
+  local config_drift_json='[]'
   pkg_json="$(bootstrap_package_status_json 2>/dev/null || printf '{}')"
   if command_exists mise; then
-    dotfiles_applied="$(bootstrap_mise dotfiles status --json 2>/dev/null | jq -r '
-      [.files[], .edits[]?] | all(.state == "applied")
-    ' 2>/dev/null || printf false)"
+    if dotfiles_status_json="$(bootstrap_repo_mise bootstrap dotfiles status --json 2>/dev/null)"; then
+      dotfiles_applied="$(printf '%s\n' "$dotfiles_status_json" | jq -r '
+        [.files[], .edits[]?] | all(.state == "applied")
+      ' 2>/dev/null || printf false)"
+      dotfile_drift_json="$(
+        printf '%s\n' "$dotfiles_status_json" | jq -r '
+          [.files[], .edits[]?][]
+          | select(.state != "applied")
+          | [(.target // .path), .state] | @tsv
+        ' | while IFS=$'\t' read -r target state; do
+          path_preserved "$target" || printf '%s\t%s\n' "$target" "$state"
+        done | jq -Rn '[inputs | split("\t") | {target: .[0], state: .[1]}]'
+      )"
+    else
+      dotfile_drift_json='[{"target":"mise-dotfiles-status","state":"inspection-failed"}]'
+    fi
+    if shell_status_json="$(audit_shell_activation_json)"; then
+      shell_activation_applied="$(printf '%s\n' "$shell_status_json" | jq -r '
+        .mise_shell_activate | all(.state == "applied")
+      ' 2>/dev/null || printf false)"
+      shell_drift_json="$(
+        printf '%s\n' "$shell_status_json" | jq -r '
+          .mise_shell_activate[] | select(.state != "applied")
+          | [.target, .path, .state] | @tsv
+        ' | while IFS=$'\t' read -r target path state; do
+          path_preserved "$path" || printf '%s\t%s\t%s\n' "$target" "$path" "$state"
+        done | jq -Rn '[inputs | split("\t") | {target: .[0], path: .[1], state: .[2]}]'
+      )"
+    else
+      shell_drift_json='[{"target":"mise-shell-activate-status","path":"","state":"inspection-failed"}]'
+    fi
+    if missing_tools="$(bootstrap_repo_mise ls --missing --no-header 2>/dev/null)"; then
+      tool_drift_json="$(printf '%s\n' "$missing_tools" | awk 'NF { print $1 }' | jq -Rn '[inputs | {tool: ., state: "missing"}]')"
+    else
+      tool_drift_json='[{"tool":"mise-tool-status","state":"inspection-failed"}]'
+    fi
+  fi
+  if [[ "$AUDIT_CONTEXT" == "general" ]]; then
+    tool_drift_json='[]'
+    dotfile_drift_json='[]'
+    shell_drift_json='[]'
+  else
+    [[ "$RESOLVED_MISE_TOOLS" == "true" ]] || tool_drift_json='[]'
+    [[ "$RESOLVED_DOTFILES" == "true" ]] || dotfile_drift_json='[]'
+    if [[ "$RESOLVED_MISE_TOOLS" == "true" || "$RESOLVED_DOTFILES" == "true" || "$RESOLVED_PACKAGES" == "true" ]]; then
+      if [[ ! -e "$HOME/.config/mise" || ! "$HOME/.config/mise" -ef "$DOTFILES_DIR/mise" ]]; then
+        config_drift_json='[{"target":"~/.config/mise","state":"inactive-repository-config"}]'
+      fi
+    fi
   fi
 
   local current_macos_json='[]' macos_drift_json='[]'
@@ -980,6 +1051,7 @@ audit_json() {
     "mise": "${mise_version:-null}",
     "declarative_packages": $pkg_json,
     "mise_dotfiles_applied": $dotfiles_applied,
+    "mise_shell_activation_applied": $shell_activation_applied,
     "gum": $(audit_tool_path gum >/dev/null 2>&1 && echo "true" || echo "false")
   },
   "configs": {
@@ -1001,6 +1073,10 @@ audit_json() {
   },
   "drift": {
     "profile": $drift_profile_json,
+    "tools": $tool_drift_json,
+    "configs": $config_drift_json,
+    "dotfiles": $dotfile_drift_json,
+    "shell_activation": $shell_drift_json,
     "macos_preferences": $macos_drift_json,
     "remote_access": $remote_drift_json
   }
