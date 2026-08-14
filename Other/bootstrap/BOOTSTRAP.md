@@ -362,8 +362,12 @@ The Linux orchestrator uses mise's bootstrap capabilities in bounded stages:
 4. `mise install` reconciles the shared and Linux-specific `[tools]` set.
 5. `mise bootstrap user apply` owns Fish registration and the login-shell
    change when Fish is selected.
+6. The platform bootstrap ensures Fisher is available and runs `fisher update`
+   after deploying dotfiles, making `fish_plugins` the cross-platform plugin
+   manifest. On CachyOS it also removes the distro Pure prompt packages without
+   recursively removing their utility dependencies.
 
-Dotfile collision policy, Git identity, Fisher, TPM, host settings, services,
+Dotfile collision policy, Git identity, Fisher plugins, TPM, host settings, services,
 and desktop defaults remain explicit script stages so they can be audited and
 enabled independently.
 

@@ -778,29 +778,88 @@ ensure_tpm() {
   else bootstrap_git clone https://github.com/tmux-plugins/tpm "$path"; status_fix "Tmux plugin manager" "cloned"; fi
 }
 
+remove_conflicting_fish_prompt() {
+  [[ "$RESOLVED_SHELL" == fish ]] || { status_skip "Pure prompt" "Fish is not the selected shell"; return 0; }
+  [[ "$PACKAGE_MANAGER" == pacman ]] || { status_pass "Pure prompt" "no CachyOS package integration on $PACKAGE_MANAGER"; return 0; }
+
+  local packages=() package
+  for package in cachyos-fish-config fish-pure-prompt; do
+    package_installed "$package" && packages+=("$package")
+  done
+  if (( ${#packages[@]} > 0 )); then
+    run_elevated_or_dry pacman -R --noconfirm "${packages[@]}"
+    if package_installed fisher; then
+      run_elevated_or_dry pacman -D --asexplicit fisher
+    fi
+    if dry_run_active; then
+      status_fix "Pure prompt" "would remove ${packages[*]} and retain dependencies"
+    else
+      status_fix "Pure prompt" "removed ${packages[*]} and retained dependencies"
+    fi
+  else
+    status_pass "Pure prompt" "CachyOS prompt packages absent"
+  fi
+
+  command_exists fish || return 0
+  local pure_variable_count
+  pure_variable_count="$(fish -c 'count (set --names --universal | string match "pure_*"); exit 0')"
+  if (( pure_variable_count > 0 )); then
+    if dry_run_active; then
+      dry_run_log "erase persistent pure_* Fish variables"
+      status_fix "Pure prompt state" "would erase $pure_variable_count variable(s)"
+    else
+      fish -c 'for name in (set --names --universal | string match "pure_*"); set --erase --universal $name; end'
+      status_fix "Pure prompt state" "erased $pure_variable_count variable(s)"
+    fi
+  else
+    status_pass "Pure prompt state" "no persistent variables"
+  fi
+}
+
 ensure_fisher() {
   [[ "$RESOLVED_SHELL" == fish ]] || { status_skip "Fisher" "Fish is not the selected shell"; return 0; }
-  command_exists fish || { status_skip "Fisher" "Fish is not installed"; return 0; }
-  if fish -c 'type -q fisher' >/dev/null 2>&1; then
-    status_pass "Fisher" "$(fish -c 'fisher --version' 2>/dev/null || printf installed)"
-    return 0
+  if ! command_exists fish; then
+    local fish_spec="$PACKAGE_MANAGER:fish"
+    if dry_run_active; then
+      dry_run_log "mise bootstrap packages apply --yes $fish_spec"
+      status_fix "Fisher" "would install Fish before Fisher"
+      return 0
+    fi
+    bootstrap_mise bootstrap packages apply --yes "$fish_spec"
   fi
 
   local version=4.4.8 base function_path completion_path
-  base="https://raw.githubusercontent.com/jorgebucaran/fisher/$version"
-  function_path="$HOME/.local/share/fish/vendor_functions.d/fisher.fish"
-  completion_path="$HOME/.local/share/fish/vendor_completions.d/fisher.fish"
+  if ! fish -c 'type -q fisher' >/dev/null 2>&1; then
+    base="https://raw.githubusercontent.com/jorgebucaran/fisher/$version"
+    function_path="$HOME/.local/share/fish/vendor_functions.d/fisher.fish"
+    completion_path="$HOME/.local/share/fish/vendor_completions.d/fisher.fish"
+    if dry_run_active; then
+      dry_run_log "install Fisher $version to user Fish vendor directories"
+      status_fix "Fisher" "would install $version from the official tagged release"
+      return 0
+    fi
+    mkdir -p "$(dirname "$function_path")" "$(dirname "$completion_path")"
+    curl -fsSL "$base/functions/fisher.fish" -o "$function_path"
+    curl -fsSL "$base/completions/fisher.fish" -o "$completion_path"
+    chmod 644 "$function_path" "$completion_path"
+    fish -c 'type -q fisher' || fail "Fisher installation did not become visible to Fish"
+    status_fix "Fisher" "installed $(fish -c 'fisher --version' 2>/dev/null || printf '%s' "$version")"
+  else
+    status_pass "Fisher" "$(fish -c 'fisher --version' 2>/dev/null || printf installed)"
+  fi
+
+  [[ "$RESOLVED_DOTFILES" == true ]] || { status_skip "Fisher plugins" "dotfiles disabled"; return 0; }
+  local legacy_theme="$HOME/.config/fish/themes/Dracula Official.theme"
+  if [[ -L "$legacy_theme" && "$(readlink "$legacy_theme")" == "$BOOTSTRAP_ROOT/fish/themes/Dracula Official.theme" ]]; then
+    run_or_dry rm "$legacy_theme"
+  fi
   if dry_run_active; then
-    dry_run_log "install Fisher $version to user Fish vendor directories"
-    status_fix "Fisher" "would install $version from the official tagged release"
+    dry_run_log "fish -c 'fisher update'"
+    status_fix "Fisher plugins" "would reconcile fish_plugins"
     return 0
   fi
-  mkdir -p "$(dirname "$function_path")" "$(dirname "$completion_path")"
-  curl -fsSL "$base/functions/fisher.fish" -o "$function_path"
-  curl -fsSL "$base/completions/fisher.fish" -o "$completion_path"
-  chmod 644 "$function_path" "$completion_path"
-  fish -c 'type -q fisher' || fail "Fisher installation did not become visible to Fish"
-  status_fix "Fisher" "installed $(fish -c 'fisher --version' 2>/dev/null || printf '%s' "$version")"
+  fish -c 'fisher update' || fail "Fisher could not reconcile ~/.config/fish/fish_plugins"
+  status_pass "Fisher plugins" "reconciled from fish_plugins"
 }
 
 ensure_hostname() {
@@ -1072,6 +1131,7 @@ main() {
   ensure_dotfiles
   ensure_git_identity
   ensure_tpm
+  remove_conflicting_fish_prompt
   ensure_fisher
   ensure_shell_profile
   ensure_zscaler

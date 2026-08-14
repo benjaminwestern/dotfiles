@@ -1469,6 +1469,58 @@ validate_foundation() {
 }
 
 
+ensure_fisher() {
+  if [[ "$RESOLVED_SHELL" != "fish" ]]; then
+    status_skip "Fisher" "Fish is not the selected shell"
+    return 0
+  fi
+  if ! command_exists fish; then
+    if dry_run_active; then
+      dry_run_log "brew install fish"
+      status_fix "Fisher" "would install Fish before Fisher"
+      return 0
+    fi
+    brew install fish
+  fi
+
+  local version="4.4.8"
+  if ! fish -c 'type -q fisher' >/dev/null 2>&1; then
+    local base="https://raw.githubusercontent.com/jorgebucaran/fisher/$version"
+    local function_path="$HOME/.local/share/fish/vendor_functions.d/fisher.fish"
+    local completion_path="$HOME/.local/share/fish/vendor_completions.d/fisher.fish"
+    if dry_run_active; then
+      dry_run_log "install Fisher $version to user Fish vendor directories"
+      status_fix "Fisher" "would install $version from the official tagged release"
+      return 0
+    fi
+    mkdir -p "${function_path:h}" "${completion_path:h}"
+    curl -fsSL "$base/functions/fisher.fish" -o "$function_path"
+    curl -fsSL "$base/completions/fisher.fish" -o "$completion_path"
+    chmod 644 "$function_path" "$completion_path"
+    fish -c 'type -q fisher' || fail "Fisher installation did not become visible to Fish"
+    status_fix "Fisher" "installed $(fish -c 'fisher --version' 2>/dev/null || printf '%s' "$version")"
+  else
+    status_pass "Fisher" "$(fish -c 'fisher --version' 2>/dev/null || printf installed)"
+  fi
+
+  if [[ "$RESOLVED_DOTFILES" != "true" ]]; then
+    status_skip "Fisher plugins" "dotfiles disabled"
+    return 0
+  fi
+  local legacy_theme="$HOME/.config/fish/themes/Dracula Official.theme"
+  if [[ -L "$legacy_theme" && "$(readlink "$legacy_theme")" == "$BOOTSTRAP_ROOT/fish/themes/Dracula Official.theme" ]]; then
+    run_or_dry rm "$legacy_theme"
+  fi
+  if dry_run_active; then
+    dry_run_log "fish -c 'fisher update'"
+    status_fix "Fisher plugins" "would reconcile fish_plugins"
+    return 0
+  fi
+  fish -c 'fisher update' || fail "Fisher could not reconcile ~/.config/fish/fish_plugins"
+  status_pass "Fisher plugins" "reconciled from fish_plugins"
+}
+
+
 # =============================================================================
 # SECTION 8: PERSONAL HANDOFF
 # =============================================================================
@@ -1587,6 +1639,7 @@ ensure_foundation() {
   ensure_mise_post_bootstrap
   validate_foundation
   run_personal_layer
+  ensure_fisher
   ensure_shell_activation
 }
 
@@ -1615,6 +1668,7 @@ update_foundation() {
   ensure_mise_post_bootstrap
   validate_foundation
   run_personal_layer
+  ensure_fisher
   ensure_shell_activation
 }
 
@@ -1999,6 +2053,7 @@ main() {
     personal)
       validate_foundation
       run_personal_layer
+      ensure_fisher
       ;;
     *)
       fail "Unsupported mode: $MODE"

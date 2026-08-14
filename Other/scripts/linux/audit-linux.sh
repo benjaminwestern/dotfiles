@@ -158,6 +158,14 @@ fisher_state() {
   fish -c 'fisher --version' 2>/dev/null || printf installed
 }
 
+fisher_plugins_state() {
+  local manifest="$HOME/.config/fish/fish_plugins" expected actual
+  [[ -f "$manifest" ]] || { printf 'manifest missing'; return; }
+  expected="$(sed '/^[[:space:]]*\(#\|$\)/d' "$manifest" | tr '[:upper:]' '[:lower:]' | sort -u)"
+  actual="$(fish -c 'fisher list' 2>/dev/null | tr '[:upper:]' '[:lower:]' | sort -u)"
+  [[ "$actual" == "$expected" ]] && printf current || printf drifted
+}
+
 configured_browser_desktop() {
   command_exists flatpak || return 0
   if flatpak info --system com.google.Chrome >/dev/null 2>&1; then printf com.google.Chrome.desktop
@@ -278,8 +286,19 @@ build_drift() {
 
   local expected_shell_name
   expected_shell_name="$(expected_value PREFERRED_SHELL)"
-  if [[ "$expected_shell_name" == fish && "$(fisher_state)" == 'not installed' ]]; then
-    add_drift tool Fisher missing installed
+  if [[ "$expected_shell_name" == fish ]]; then
+    local current_fisher_state current_fisher_plugins
+    current_fisher_state="$(fisher_state)"
+    if [[ "$current_fisher_state" == 'not installed'* ]]; then
+      add_drift tool Fisher missing installed
+    elif [[ "$(expected_value ENABLE_DOTFILES)" == true ]]; then
+      current_fisher_plugins="$(fisher_plugins_state)"
+      [[ "$current_fisher_plugins" == current ]] || add_drift config Fisher-plugins "$current_fisher_plugins" current
+    fi
+    if [[ "$PACKAGE_MANAGER" == pacman ]]; then
+      package_installed cachyos-fish-config && add_drift package cachyos-fish-config installed absent
+      package_installed fish-pure-prompt && add_drift package fish-pure-prompt installed absent
+    fi
   fi
 
   expected="$(expected_value LINUX_DEFAULT_APPS)"

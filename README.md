@@ -62,6 +62,8 @@ Ben's CLI packages, Brewfile apps/fonts, mise tools, and dotfiles are
 independent options. Device name, Git author name/email, `~/code`, the optional
 Downloads-to-iCloud link, and each macOS preference group are also chosen
 independently. The signed-in macOS username is detected and never renamed.
+When Fish is selected, the bootstrap ensures Fisher is installed and reconciles
+the shared `fish_plugins` manifest after deploying dotfiles.
 New adopters receive a generated, user-owned `~/.gitconfig`; an existing config
 is either replaced by explicit consent or preserved with a local identity
 include. Ben's existing tracked symlink remains supported.
@@ -93,6 +95,8 @@ applications use mise's system-wide Flatpak manager. `home` and `work` install
 Ben's full tool and dotfile catalogues, create `~/code`, enable SSH, configure
 Fish and Fisher, and make Chrome/Chromium the browser and PDF handler. On
 Linux ARM64, Chromium is used because Google's Flatpak is x86_64-only.
+Fisher reconciles the same `fish_plugins` manifest used on macOS. CachyOS's
+Pure prompt packages are removed so the distro cannot override that setup.
 
 The interactive Gum plan can edit every preset stage. For a non-interactive
 run, provide the device name and Git identity on the command line or in the
