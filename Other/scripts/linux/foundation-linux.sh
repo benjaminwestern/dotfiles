@@ -903,25 +903,31 @@ ensure_shell_activation() {
 
 ensure_default_shell() {
   if [[ "$RESOLVED_SHELL_DEFAULT" != true ]]; then status_skip "Default shell" "disabled by plan"; return 0; fi
-  local shell_path current
+  local shell_path current user
+  user="$(id -un)"
   shell_path="$(command -v "$RESOLVED_SHELL" 2>/dev/null || true)"
   [[ -n "$shell_path" ]] || { status_skip "Default shell" "$RESOLVED_SHELL is not installed"; return 0; }
-  current="$(getent passwd "$(id -un)" | cut -d: -f7)"
+  current="$(getent passwd "$user" | cut -d: -f7)"
   if [[ "$current" == "$shell_path" ]]; then status_pass "Default shell" "$shell_path"; return 0; fi
   if [[ "$RESOLVED_SHELL" == fish && "$shell_path" == /usr/bin/fish ]]; then
     note "mise will register Fish and change the login shell; sudo/chsh may ask for your password."
     if dry_run_active && ! command_exists mise; then dry_run_log "mise bootstrap user apply --yes"
     elif dry_run_active; then bootstrap_repo_mise bootstrap user apply --dry-run
-    else bootstrap_repo_mise bootstrap user apply --yes; fi
+    elif ! bootstrap_repo_mise bootstrap user apply --yes \
+      || [[ "$(getent passwd "$user" | cut -d: -f7)" != "$shell_path" ]]; then
+      note "mise could not change the login shell; retrying with elevated chsh."
+      run_elevated_or_dry chsh -s "$shell_path" "$user"
+    fi
     if dry_run_active; then status_fix "Default shell" "mise would change $current -> $shell_path"
-    else status_fix "Default shell" "mise changed $current -> $shell_path"; fi
+    elif [[ "$(getent passwd "$user" | cut -d: -f7)" == "$shell_path" ]]; then status_fix "Default shell" "changed $current -> $shell_path"
+    else status_fail "Default shell" "still $current after mise and elevated chsh attempts"; fi
     return 0
   fi
   if ! grep -Fxq "$shell_path" /etc/shells 2>/dev/null; then
     run_elevated_or_dry sh -c "printf '%s\\n' '$shell_path' >> /etc/shells"
   fi
   note "Changing the login shell may ask for the account password."
-  run_or_dry chsh -s "$shell_path"
+  run_or_dry chsh -s "$shell_path" "$user"
   if dry_run_active; then status_fix "Default shell" "would change $current -> $shell_path"
   else status_fix "Default shell" "changed $current -> $shell_path"; fi
 }
