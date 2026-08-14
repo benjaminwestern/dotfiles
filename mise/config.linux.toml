@@ -1,6 +1,6 @@
 # Linux-only dotfiles
-# [dotfiles]
-# "~/.config/hypr/hyprland.conf" = "~/.dotfiles/hypr/hyprland.conf"
+[dotfiles]
+"~/.config/hypr" = "~/.dotfiles/hypr"
 
 [env]
 # The vfox gcloud installer disables Google's Python bootstrap but current
