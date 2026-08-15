@@ -437,6 +437,7 @@ linux_application_catalogue() {
     aarch64|arm64) printf '%s\n' org.chromium.Chromium ;;
   esac
   printf '%s\n' app.zen_browser.zen
+  printf '%s\n' md.obsidian.Obsidian
 }
 
 linux_application_package_specs() {
