@@ -251,6 +251,7 @@ Linux bootstrap plan
   Shell:              $RESOLVED_SHELL (set-default=$RESOLVED_SHELL_DEFAULT)
   Ben's CLI packages: $RESOLVED_PACKAGES
   Native apps:        $RESOLVED_APPLICATIONS
+  Smart-card service: $RESOLVED_PACKAGES (follows CLI packages)
   Ben's mise tools:   $RESOLVED_MISE_TOOLS
   Ben's dotfiles:     $RESOLVED_DOTFILES
   Create ~/code:      $RESOLVED_CODE_DIRECTORY
@@ -849,9 +850,16 @@ ensure_fisher() {
   fi
 
   [[ "$RESOLVED_DOTFILES" == true ]] || { status_skip "Fisher plugins" "dotfiles disabled"; return 0; }
-  local legacy_theme="$HOME/.config/fish/themes/Dracula Official.theme"
+  local legacy_theme="$HOME/.config/fish/themes/Dracula Official.theme" manifest
   if [[ -L "$legacy_theme" && "$(readlink "$legacy_theme")" == "$BOOTSTRAP_ROOT/fish/themes/Dracula Official.theme" ]]; then
     run_or_dry rm "$legacy_theme"
+    if dry_run_active; then status_fix "Legacy Fisher theme" "would remove obsolete symlink"
+    else status_fix "Legacy Fisher theme" "removed obsolete symlink"; fi
+  fi
+  manifest="$BOOTSTRAP_ROOT/fish/fish_plugins"
+  if [[ "$MODE" != update ]] && fisher_plugins_current "$manifest"; then
+    status_pass "Fisher plugins" "current with fish_plugins"
+    return 0
   fi
   if dry_run_active; then
     dry_run_log "fish -c 'fisher update'"
@@ -859,7 +867,7 @@ ensure_fisher() {
     return 0
   fi
   fish -c 'fisher update' || fail "Fisher could not reconcile ~/.config/fish/fish_plugins"
-  status_pass "Fisher plugins" "reconciled from fish_plugins"
+  status_fix "Fisher plugins" "reconciled from fish_plugins"
 }
 
 ensure_hostname() {
@@ -887,13 +895,30 @@ ensure_remote_access() {
     if dry_run_active; then bootstrap_mise bootstrap packages apply --dry-run "$server_spec"
     else bootstrap_mise bootstrap packages apply --yes "$server_spec"; fi
   fi
-  if ! command_exists systemctl; then status_skip "Remote access" "systemd unavailable; SSH server installed but not enabled"; return 0; fi
+  if ! command_exists systemctl || [[ ! -d /run/systemd/system ]]; then status_skip "Remote access" "systemd unavailable; SSH server installed but not enabled"; return 0; fi
   if systemctl is-enabled "$service" >/dev/null 2>&1 && systemctl is-active "$service" >/dev/null 2>&1; then
     status_pass "Remote access" "$service enabled and active"
   else
     run_elevated_or_dry systemctl enable --now "$service"
     if dry_run_active; then status_fix "Remote access" "would enable and start $service"
     else status_fix "Remote access" "enabled and started $service"; fi
+  fi
+}
+
+ensure_smartcard_service() {
+  if [[ "$RESOLVED_PACKAGES" != true ]]; then status_skip "Smart card service" "packages disabled by plan"; return 0; fi
+  if [[ "${BOOTSTRAP_WSL_VERSION:-}" == 1 ]]; then status_skip "Smart card service" "WSL 1 has no device-service support"; return 0; fi
+  if ! command_exists systemctl || [[ ! -d /run/systemd/system ]]; then status_skip "Smart card service" "systemd unavailable"; return 0; fi
+  local package service=pcscd.socket
+  [[ "$PACKAGE_MANAGER" == apt ]] && package=pcscd || package=pcsclite
+  if ! package_installed "$package"; then status_skip "Smart card service" "$package is not installed"; return 0; fi
+  systemctl cat "$service" >/dev/null 2>&1 || service=pcscd.service
+  if systemctl is-enabled "$service" >/dev/null 2>&1 && systemctl is-active "$service" >/dev/null 2>&1; then
+    status_pass "Smart card service" "$service enabled and active"
+  else
+    run_elevated_or_dry systemctl enable --now "$service"
+    if dry_run_active; then status_fix "Smart card service" "would enable and start $service"
+    else status_fix "Smart card service" "enabled and started $service"; fi
   fi
 }
 
@@ -1137,6 +1162,7 @@ main() {
   ensure_zscaler
   ensure_hostname
   ensure_remote_access
+  ensure_smartcard_service
   ensure_default_apps
   ensure_default_shell
   ensure_shell_activation

@@ -51,7 +51,12 @@ kubectl = "latest"
 "apt:graphviz" = "latest"
 "apt:make" = "latest"
 "apt:nmap" = "latest"
+"apt:wireguard-tools" = "latest"
+"apt:network-manager-gnome" = "latest"
 "apt:yubikey-manager" = "latest"
+"apt:python3-pyscard" = "latest"
+"apt:libccid" = "latest"
+"apt:pcscd" = "latest"
 "apt:gnupg" = "latest"
 "apt:pinentry-curses" = "latest"
 "apt:7zip" = "latest"
@@ -94,6 +99,8 @@ kubectl = "latest"
 "pacman:gnupg" = "latest"             # GPG for OpenPGP applet + ssh-agent
 "pacman:pinentry" = "latest"          # GPG passphrase entry
 "pacman:nmap" = "latest"        # brew:nmap
+"pacman:wireguard-tools" = "latest" # WireGuard CLI managed by NetworkManager
+"pacman:nm-connection-editor" = "latest" # NetworkManager GUI with WireGuard support
 "pacman:7zip" = "latest"        # brew:p7zip
 "pacman:automake" = "latest"    # brew:automake
 "pacman:gcc" = "latest"         # brew:gcc
@@ -107,7 +114,7 @@ kubectl = "latest"
 "pacman:podman-compose" = "latest" # brew:podman-compose
 "pacman:ghostty" = "latest"     # brew:ghostty (GUI terminal; config managed via [dotfiles])
 
-# Helpers already present on Omarchy/Arch installs
+# Baseline helpers for pacman-family systems
 "pacman:base-devel" = "latest"
 "pacman:curl" = "latest"
 "pacman:unzip" = "latest"

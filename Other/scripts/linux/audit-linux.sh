@@ -142,9 +142,20 @@ git_config_mode() {
 login_shell() { getent passwd "$(id -un)" | cut -d: -f7; }
 
 ssh_service_state() {
-  command_exists systemctl || { printf unavailable; return; }
+  command_exists systemctl && [[ -d /run/systemd/system ]] || { printf unavailable; return; }
   local service
   [[ "$PACKAGE_MANAGER" == apt ]] && service=ssh.service || service=sshd.service
+  if systemctl is-enabled "$service" >/dev/null 2>&1 && systemctl is-active "$service" >/dev/null 2>&1; then printf enabled-active
+  elif systemctl is-enabled "$service" >/dev/null 2>&1; then printf enabled-inactive
+  elif systemctl is-active "$service" >/dev/null 2>&1; then printf active-not-enabled
+  else printf disabled
+  fi
+}
+
+pcscd_service_state() {
+  command_exists systemctl && [[ -d /run/systemd/system ]] || { printf unavailable; return; }
+  local service=pcscd.socket
+  systemctl cat "$service" >/dev/null 2>&1 || service=pcscd.service
   if systemctl is-enabled "$service" >/dev/null 2>&1 && systemctl is-active "$service" >/dev/null 2>&1; then printf enabled-active
   elif systemctl is-enabled "$service" >/dev/null 2>&1; then printf enabled-inactive
   elif systemctl is-active "$service" >/dev/null 2>&1; then printf active-not-enabled
@@ -159,11 +170,9 @@ fisher_state() {
 }
 
 fisher_plugins_state() {
-  local manifest="$HOME/.config/fish/fish_plugins" expected actual
+  local manifest="$HOME/.config/fish/fish_plugins"
   [[ -f "$manifest" ]] || { printf 'manifest missing'; return; }
-  expected="$(sed '/^[[:space:]]*\(#\|$\)/d' "$manifest" | tr '[:upper:]' '[:lower:]' | sort -u)"
-  actual="$(fish -c 'fisher list' 2>/dev/null | tr '[:upper:]' '[:lower:]' | sort -u)"
-  [[ "$actual" == "$expected" ]] && printf current || printf drifted
+  fisher_plugins_current "$manifest" && printf current || printf drifted
 }
 
 configured_browser_desktop() {
@@ -323,7 +332,10 @@ build_drift() {
   fi
 
   expected="$(expected_value ENABLE_REMOTE_ACCESS)"
-  if [[ "$expected" == true && "${BOOTSTRAP_WSL_VERSION:-}" != 1 ]]; then current="$(ssh_service_state)"; [[ "$current" == enabled-active ]] || add_drift service SSH "$current" enabled-active; fi
+  if [[ "$expected" == true && "${BOOTSTRAP_WSL_VERSION:-}" != 1 ]]; then current="$(ssh_service_state)"; [[ "$current" == enabled-active || "$current" == unavailable ]] || add_drift service SSH "$current" enabled-active; fi
+
+  expected="$(expected_value ENABLE_PACKAGES)"
+  if [[ "$expected" == true && "${BOOTSTRAP_WSL_VERSION:-}" != 1 ]]; then current="$(pcscd_service_state)"; [[ "$current" == enabled-active || "$current" == unavailable ]] || add_drift service PCSC "$current" enabled-active; fi
 }
 
 print_header() {
@@ -358,7 +370,7 @@ print_human() {
   fi
   if want_section services; then
     printf '\n── Services and desktop defaults ──\n\n'
-    printf '  %-28s %s\n' 'SSH service' "$(ssh_service_state)" 'HTTP handler' "$(xdg_default_handler x-scheme-handler/http)" 'PDF handler' "$(xdg_default_handler application/pdf)" 'Zscaler block' "$(grep -Fq "$ZSCALER_ENV_BEGIN" "$HOME/.config/mise/.env" 2>/dev/null && printf present || printf absent)"
+    printf '  %-28s %s\n' 'SSH service' "$(ssh_service_state)" 'PC/SC service' "$(pcscd_service_state)" 'HTTP handler' "$(xdg_default_handler x-scheme-handler/http)" 'PDF handler' "$(xdg_default_handler application/pdf)" 'Zscaler block' "$(grep -Fq "$ZSCALER_ENV_BEGIN" "$HOME/.config/mise/.env" 2>/dev/null && printf present || printf absent)"
   fi
   if [[ "$AUDIT_CONTEXT" != general ]]; then
     printf '\n── Bootstrap drift ──\n\n'
@@ -391,6 +403,7 @@ print_json() {
   printf '"profile":%s,' "$(if [[ -n "$AUDIT_PROFILE" ]]; then printf '"%s"' "$(json_escape "$AUDIT_PROFILE")"; else printf null; fi)"
   printf '"system":{"distribution":"%s","id":"%s","package_manager":"%s","architecture":"%s","account":"%s","hostname":"%s","login_shell":"%s"},' "$(json_escape "$DISTRO_NAME")" "$(json_escape "$DISTRO_ID")" "$PACKAGE_MANAGER" "$(json_escape "$(uname -m)")" "$(json_escape "$(id -un)")" "$(json_escape "$(hostname -s 2>/dev/null || true)")" "$(json_escape "$(login_shell)")"
   printf '"git":{"mode":"%s","name":"%s","email":"%s"},' "$(git_config_mode)" "$(json_escape "$(git config --global --includes --get user.name 2>/dev/null || true)")" "$(json_escape "$(git config --global --includes --get user.email 2>/dev/null || true)")"
+  printf '"services":{"ssh":"%s","pcsc":"%s"},' "$(ssh_service_state)" "$(pcscd_service_state)"
   printf '"packages":'; json_rows PACKAGE_ROWS $'kind\npackage\nstate'; printf ','
   printf '"dotfiles":'; json_rows DOTFILE_ROWS $'target\nstate\ndetail'; printf ','
   printf '"shell_activation":'; json_rows SHELL_ROWS $'target\npath\nmode\nstate'; printf ','

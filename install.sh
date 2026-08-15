@@ -142,7 +142,7 @@ Examples:
         --git-name "Ada Lovelace" --git-email ada@example.com --non-interactive
 
 Linux:
-  Supports apt distributions (Debian, Ubuntu, Mint, Raspberry Pi OS) and
+  Supports apt distributions (Debian, Ubuntu, Mint, 64-bit Raspberry Pi OS) and
   pacman distributions (Arch, CachyOS, Manjaro, EndeavourOS). The same
   work/home/minimal presets are editable, and the signed-in account is never
   renamed. Native packages and Flatpak apps are reconciled through mise;

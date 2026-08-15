@@ -92,18 +92,21 @@ curl -fsSL https://raw.githubusercontent.com/benjaminwestern/dotfiles/main/insta
 The loader installs standalone mise and mise-managed Gum itself. System
 packages remain declarative through mise's `apt` or `pacman` manager; desktop
 applications use mise's system-wide Flatpak manager. `home` and `work` install
-Ben's full tool and dotfile catalogues, create `~/code`, enable SSH, configure
-Fish and Fisher, and make Chrome/Chromium the browser and PDF handler. On
-Linux ARM64, Chromium is used because Google's Flatpak is x86_64-only.
+Ben's full tool and dotfile catalogues, create `~/code`, enable SSH and the
+package-linked PC/SC service, configure Fish and Fisher, and make
+Chrome/Chromium the browser and PDF handler. On Linux ARM64, Chromium is used
+because Google's Flatpak is x86_64-only.
 Fisher reconciles the same `fish_plugins` manifest used on macOS. CachyOS's
 Pure prompt packages are removed so the distro cannot override that setup.
 
-The interactive Gum plan can edit every preset stage. For a non-interactive
-run, provide the device name and Git identity on the command line or in the
-documented environment variables. Administrator and login-shell prompts stay
-visible; secrets are never command-line inputs. See
+The interactive Gum plan can edit each independently selectable setting. For a
+non-interactive run, provide the device name and Git identity on the command
+line or in the documented environment variables. Administrator and login-shell
+prompts stay visible; secrets are never command-line inputs. See
 [`Other/bootstrap/BOOTSTRAP.md`](Other/bootstrap/BOOTSTRAP.md) for the complete
-ordering, recovery, and validation contract.
+cross-platform ordering, recovery, and validation contract. The exact CachyOS
+post-install ledger is in
+[`Other/bootstrap/CACHYOS-POST-INSTALL.md`](Other/bootstrap/CACHYOS-POST-INSTALL.md).
 
 ### Windows
 

@@ -118,7 +118,7 @@ mise bootstrap mise-shell-activate status --missing
 
 ## Linux bootstrap
 
-Ubuntu, Debian, Mint, Raspberry Pi OS, Arch, CachyOS, Manjaro, and
+Ubuntu, Debian, Mint, 64-bit Raspberry Pi OS, Arch, CachyOS, Manjaro, and
 EndeavourOS use the same public loader. Do not pre-install mise or manually
 replay its package commands: the loader installs standalone mise, installs Gum
 through mise, detects `apt` versus `pacman`, and then presents the editable
@@ -138,10 +138,12 @@ curl -fsSL https://raw.githubusercontent.com/benjaminwestern/dotfiles/main/insta
 The Linux `home` preset reconciles native packages with mise's system-package
 manager, system-wide Flatpak applications with mise's Flatpak manager, the
 shared versioned toolset, Ben's dotfiles, `~/code`, Git identity, hostname,
-SSH service, Fish/Fisher, TPM, and browser/PDF defaults. `work` adds Zscaler
-auto-detection. `minimal` leaves Ben's catalogues disabled and collects only
-the adopter-owned identity and naming values. Every stage can be toggled in
-the Gum plan or with the same `--enable-*`/`--disable-*` overrides as macOS.
+SSH and PC/SC services, Fish/Fisher, TPM, and browser/PDF defaults. PC/SC
+activation follows native package selection because it supports the declared
+YubiKey stack. `work` adds Zscaler auto-detection. `minimal` leaves Ben's
+catalogues disabled and collects only the adopter-owned identity and naming
+values. Each independently selectable setting can be changed in the Gum plan
+or with the same `--enable-*`/`--disable-*` overrides as macOS.
 
 Administrator authentication can appear when native packages, system
 Flatpaks, hostname, SSH, or login-shell state changes. The script deliberately
@@ -150,7 +152,7 @@ home toolset on a small ARM64 VM can take several minutes because `resvg` and
 `tlrc` compile from their official Rust crates when no upstream ARM64 archive
 exists.
 
-Desktop applications are architecture-aware: VS Code is installed everywhere,
+Desktop applications target x86_64 and ARM64: VS Code is installed on both,
 Google Chrome is selected on x86_64, and Chromium is selected on ARM64. The
 selected browser becomes the HTTP/HTTPS/HTML and PDF handler. Flatpak is
 system-wide because that is the ownership model of mise's Flatpak backend.
@@ -169,22 +171,27 @@ omissions as drift. The profile audit compares with a clean preset. The saved
 plan audit compares with the exact previous customisation. A converged dry run
 reports zero fixes.
 
-### Omarchy and other existing desktops
+### Existing desktop installations
 
-The bootstrap now installs VS Code through system Flatpak, including on ARM64.
+The bootstrap installs VS Code through system Flatpak, including on ARM64.
 Existing non-skeleton shell files and directories are preserved; untouched
 `/etc/skel` shell files are safe to replace with the selected dotfile links.
 Distribution desktop customisation outside the declared bootstrap surfaces is
-left alone.
+left alone. The exception is `~/.config/hypr`, which is a whole-directory
+managed target on Linux. Preserve it explicitly with `--preserve
+~/.config/hypr` when adopting the bootstrap without its CachyOS Hyprland setup.
 
 ### Platform-specific mise config
 
 `~/.config/mise` is a directory symlink to `~/.dotfiles/mise`. It contains:
 
 - `config.toml` — shared config (tools, env, aliases, tasks, dotfiles)
-- `config.linux.toml` — apt/pacman packages, Flatpak apps, Linux tools, and login shell
+- `config.linux.toml` — apt/pacman packages, Linux tools, dotfiles, and login shell
 - `config.macos.toml` — brew packages and macOS login shell
 - `miserc.toml` — enables `auto_env = true` so mise loads the right platform file
+
+The architecture-aware Linux Flatpak catalogue lives in
+`Other/scripts/linux/lib/common.sh`.
 
 `auto_env` is required because mise does not auto-load `mise.{linux,macos}.toml`
 by default. The `miserc.toml` turns it on early, before config discovery finishes.
@@ -325,8 +332,9 @@ existing distribution. On a nested VM that does not expose Hyper-V, rerun with
 no managed VM, full Linux kernel, full system-call compatibility, or systemd;
 the script therefore keeps the portable CLI, Mise, Fish, dotfile, identity,
 hostname, code-directory, and audit stages while skipping Flatpak applications,
-YubiKey device services, desktop MIME defaults, duplicate Linux SSH, SQLFluff,
-and mitmproxy. The last two remain Mise-owned on WSL 2 and ordinary Linux but
+WireGuard, NetworkManager GUI, YubiKey device packages and services, desktop
+MIME defaults, duplicate Linux SSH, SQLFluff, and mitmproxy. The last two remain
+Mise-owned on WSL 2 and ordinary Linux but
 are excluded on WSL 1 because its filesystem copy path repeatedly returns
 `ENOMEM` while uv constructs their environments. WSL 2 keeps the complete
 Linux profile. The WSL orchestrator itself runs without interactive shell
@@ -450,21 +458,22 @@ The bootstrap task clones `tmux-plugins/tpm` over HTTPS. It always uses
 `GIT_CONFIG_GLOBAL=/dev/null` so an existing or bootstrap-managed GitHub rewrite
 cannot redirect that prerequisite clone.
 
-### 9. `.env` is not created automatically
+### 9. `.env` is machine-private
 
-`mise/.example.env` is tracked; `mise/.env` is gitignored. Copy and edit it per machine:
-
-```bash
-cp ~/.dotfiles/mise/.example.env ~/.config/mise/.env
-```
+The bootstrap creates `~/.config/mise/.env` with mode `600` when it is absent.
+The file is gitignored and must be populated per machine with any private values
+needed by the declared tools.
 
 ### 10. Some dotfiles are platform-only
 
-`~/.aerospace.toml`, `~/.config/ghostty/config`, and `~/Brewfile` are declared for macOS. On Arch they show as `applied` symlinks even though the tools themselves may not be installed.
+`~/.aerospace.toml` and `~/Brewfile` are macOS-only. Ghostty configuration is
+shared, while `~/.config/hypr` is Linux-only.
 
 ### 11. `mise doctor` PATH warning
 
-`~/.local/share/omarchy/bin` may take precedence over mise shims in `PATH`. This is a warning, not an error, but be aware if tools resolve unexpectedly.
+Use `type -a <tool>` and `command -v <tool>` when `mise doctor` reports PATH
+ordering problems. Mise shims should precede distribution or user-local copies
+of the same managed tool.
 
 ### 12. SSH key generation is manual
 
@@ -479,20 +488,10 @@ Then add the public key to GitHub at https://github.com/settings/keys.
 
 ### 13. Scroll direction defaults to Apple-style natural scrolling
 
-The Hyprland input config in `~/.config/hypr/input.conf` enables natural scrolling for both mice and trackpads:
-
-```ini
-input {
-  natural_scroll = true
-
-  touchpad {
-    natural_scroll = true
-    # ...
-  }
-}
-```
-
-This makes content follow your finger, matching macOS / Apple trackpad behavior. To revert to traditional scrolling, set both values to `false` and run `hyprctl reload`.
+The canonical Lua settings are in `hypr/config/inputs.lua` and summarized in
+`hypr/README.md`. Natural scrolling is enabled for mice and touchpads. To
+restore traditional scrolling, set both `natural_scroll` values to `false` and
+run `hyprctl reload full-reset`.
 
 ### 14. Manual font installs
 
@@ -506,88 +505,6 @@ unzip -q psudofont.zip
 cp psudoFont_Liga_Mono_V.2.2.0/*.ttf ~/.local/share/fonts/psudofont-liga-mono/
 fc-cache -fv ~/.local/share/fonts/psudofont-liga-mono
 ```
-
-## Purging Omarchy default apps
-
-Omarchy installs a mix of **pacman packages** and **web-app/TUI wrappers** that all show up in the `Super+Space` Walker launcher via `.desktop` files.
-
-| App source | Desktop file location | Removal |
-|---|---|---|
-| Pacman packages | `/usr/share/applications/*.desktop` | `sudo pacman -Rns <package>` or `omarchy pkg drop <package>` |
-| Web app / TUI wrappers | `~/.local/share/applications/*.desktop` | `rm ~/.local/share/applications/<name>.desktop` |
-
-Find what owns a system `.desktop` entry:
-
-```bash
-pacman -Qo /usr/share/applications/typora.desktop
-```
-
-List everything that appears in `Super+Space`:
-
-```bash
-find /usr/share/applications ~/.local/share/applications -name "*.desktop" -type f
-```
-
-### Web app wrappers installed by Omarchy
-
-Omarchy creates these in `~/.local/share/applications/` with icons in `~/.local/share/applications/icons/`:
-
-```bash
-rm ~/.local/share/applications/{HEY,Basecamp,ChatGPT,Fizzy,WhatsApp,YouTube,X,Discord,GitHub,Zoom,Google\ Contacts,Google\ Maps,Google\ Messages,Google\ Photos}.desktop
-rm ~/.local/share/applications/icons/{HEY,Basecamp,ChatGPT,Fizzy,WhatsApp,YouTube,X,Discord,GitHub,Zoom,Google\ Contacts,Google\ Maps,Google\ Messages,Google\ Photos}.png
-```
-
-HEY is also registered as the default `mailto:` handler. Remove that registration:
-
-```bash
-xdg-mime default xdg-open.desktop x-scheme-handler/mailto
-```
-
-Or edit `~/.config/mimeapps.list` and delete the `mailto=HEY.desktop` line.
-
-### TUI wrappers
-
-The Docker entry launches `lazydocker` inside a terminal tile. It is created by `omarchy-tui-install`. Remove the wrapper and, if desired, the underlying packages:
-
-```bash
-rm ~/.local/share/applications/Docker.desktop
-rm ~/.local/share/applications/icons/Docker.png
-sudo pacman -Rns docker docker-buildx docker-compose lazydocker
-```
-
-### Keybindings in Hyprland
-
-Some apps also have keyboard shortcuts in `~/.config/hypr/bindings.conf`, e.g.:
-
-```ini
-bindd = SUPER SHIFT, A, ChatGPT, exec, omarchy-launch-webapp "https://chatgpt.com"
-bindd = SUPER SHIFT, D, Docker, exec, omarchy-launch-tui lazydocker
-bindd = SUPER SHIFT, E, Email, exec, omarchy-launch-webapp "https://app.hey.com"
-bindd = SUPER SHIFT, C, Calendar, exec, omarchy-launch-webapp "https://app.hey.com/calendar/weeks/"
-```
-
-Delete the matching lines and reload:
-
-```bash
-hyprctl reload
-hyprctl configerrors
-```
-
-### Refresh the launcher
-
-After removing `.desktop` files, restart Walker so the changes appear in `Super+Space`:
-
-```bash
-omarchy restart walker
-```
-
-Or run:
-
-```bash
-omarchy-launch-walker
-```
-
-and press `Escape` to close it.
 
 ## Validation checklist
 
@@ -624,7 +541,7 @@ Check the device with `lsusb` and the libfprint device list at <https://fprint.f
 
 ### Bootstrap packages
 
-Add these to `mise/config.linux.toml` under `[bootstrap.packages]`:
+The home/work pacman catalogue already includes:
 
 ```toml
 "pacman:usbutils" = "latest"    # lsusb
@@ -632,10 +549,10 @@ Add these to `mise/config.linux.toml` under `[bootstrap.packages]`:
 "pacman:libfprint" = "latest"   # fingerprint driver library
 ```
 
-Then install them:
+Reconcile them through the normal bootstrap:
 
 ```bash
-mise bootstrap packages install -y
+~/.dotfiles/install.sh ensure
 ```
 
 ### Enroll fingers
@@ -682,13 +599,20 @@ su - $(whoami)
 
 Fingerprint runs first; password fallback still works if you cancel or the scan fails.
 
-## YubiKey (Arch / macOS)
+## YubiKey (Linux / macOS)
 
 ### Bootstrap packages
 
-Add these to `mise/config.linux.toml` under `[bootstrap.packages]`:
+The home/work apt and pacman catalogues include their platform equivalents:
 
 ```toml
+"apt:yubikey-manager" = "latest"
+"apt:python3-pyscard" = "latest"
+"apt:libccid" = "latest"
+"apt:pcscd" = "latest"
+"apt:gnupg" = "latest"
+"apt:pinentry-curses" = "latest"
+
 "pacman:yubikey-manager" = "latest"   # ykman CLI for YubiKey management
 "pacman:python-pyscard" = "latest"    # smart card Python bindings
 "pacman:ccid" = "latest"              # smart card driver for YubiKey
@@ -697,15 +621,16 @@ Add these to `mise/config.linux.toml` under `[bootstrap.packages]`:
 "pacman:pinentry" = "latest"          # GPG passphrase entry
 ```
 
-Then install them:
+Reconcile them through the normal bootstrap:
 
 ```bash
-mise bootstrap packages install -y
+~/.dotfiles/install.sh ensure
 ```
 
-### YubiKey tools on Arch
+### YubiKey tools on Linux
 
-Use `ykman` as the reliable full YubiKey manager on Arch. The CLI detects the key correctly and covers OpenPGP, PIV, FIDO2, and OATH:
+Use `ykman` as the full Linux YubiKey manager. The CLI covers OpenPGP, PIV,
+FIDO2, and OATH:
 
 ```bash
 ykman list
@@ -716,81 +641,24 @@ ykman fido info
 ykman oath accounts list
 ```
 
-For a supported GUI, use **Yubico Authenticator**. Install the source-built AUR package, not `yubico-authenticator-bin`; the `-bin` package pulls in `zenity`, which is intentionally not part of this setup.
+For a supported GUI, use **Yubico Authenticator**. On x86_64, the Linux
+application catalogue installs Yubico's recommended system Flatpak from
+Flathub. Flathub does not currently publish an ARM64 ref:
 
 ```bash
-omarchy pkg aur add yubico-authenticator
+flatpak run com.yubico.yubioath
 ```
 
-If `zenity` was installed while testing the `-bin` package, remove it:
+The bootstrap also enables PC/SC socket activation for OpenPGP, PIV, OATH, and
+other smart-card access:
 
 ```bash
-omarchy pkg drop zenity
+sudo systemctl enable --now pcscd.socket
 ```
 
-Keep `pcscd` enabled for OpenPGP/PIV/smartcard access:
-
-```bash
-sudo systemctl enable --now pcscd
-```
-
-Because this dotfiles setup puts mise shims before `/usr/bin`, Yubico Authenticator's helper can accidentally launch with mise Python. Use a launcher wrapper that forces system Python:
-
-```bash
-cat > ~/.local/bin/yubico-authenticator-launcher <<'EOF'
-#!/bin/bash
-export PATH="/usr/bin:$PATH"
-exec /usr/bin/yubico-authenticator
-EOF
-chmod +x ~/.local/bin/yubico-authenticator-launcher
-```
-
-Override the desktop entry so `Super+Space` launches the wrapper:
-
-```ini
-[Desktop Entry]
-Name=Yubico Authenticator
-GenericName=Yubico Authenticator
-Exec=/home/benjaminwestern/.local/bin/yubico-authenticator-launcher
-Icon=com.yubico.yubioath
-Type=Application
-Categories=Utility;
-Keywords=Yubico;Authenticator;
-```
-
-Save that as `~/.local/share/applications/com.yubico.yubioath.desktop`.
-
-### Omarchy / Hyprland integration for Yubico Authenticator
-
-On Omarchy, Hyprland config lives under `~/.config/hypr/` and should not be managed by this dotfiles repo. The default files can always be restored from Omarchy's shipped config:
-
-```bash
-cp ~/.local/share/omarchy/config/hypr/hyprland.conf ~/.config/hypr/hyprland.conf
-cp ~/.local/share/omarchy/config/hypr/bindings.conf ~/.config/hypr/bindings.conf
-```
-
-To add a quick keybind for Yubico Authenticator, edit `~/.config/hypr/bindings.conf` (restore the Omarchy file first if you overwrote it):
-
-```ini
-bindd = SUPER ALT, Y, Yubico Authenticator, exec, uwsm-app -- /home/benjaminwestern/.local/bin/yubico-authenticator-launcher
-```
-
-Then restart Walker and reload Hyprland:
-
-```bash
-omarchy restart walker
-hyprctl reload
-```
-
-Current HP setup notes:
-
-- Removed the broken/deprecated `yubikey-manager-qt` package.
-- Do not use `yubico-authenticator-bin`; it pulled in `zenity`, which was removed.
-- Installed `yubico-authenticator` from AUR source build, plus its AUR dependency `python-zxing-cpp`.
-- Added `~/.local/bin/yubico-authenticator-launcher` so the app helper uses system Python instead of mise Python.
-- Overrode `~/.local/share/applications/com.yubico.yubioath.desktop` so Walker launches the wrapper.
-- Added `SUPER ALT + Y` in `~/.config/hypr/bindings.conf` to launch the wrapper.
-- Verified `ykman list` sees `YubiKey 5C NFC (5.7.1)` and Yubico Authenticator opens correctly.
+The former `yubikey-manager-qt` GUI reached end of life on February 19, 2026.
+Yubico Authenticator replaces it and avoids the obsolete AUR package, Python
+wrapper, and custom desktop-entry workaround.
 
 ### macOS YubiKey tools
 
@@ -807,76 +675,6 @@ cask "yubico-authenticator"
 ```
 
 Use `ykman` for full CLI management and **Yubico Authenticator** for the supported GUI.
-
-## Trackpad configuration (Hyprland)
-
-The local `~/.config/hypr/input.conf` overrides Omarchy's default touchpad behavior. The current setup uses macOS-style physical clicks and 3-finger gestures:
-
-```ini
-input {
-  natural_scroll = true
-
-  touchpad {
-    natural_scroll = true
-
-    # Disable tap-to-click; require physical clicks
-    tap-to-click = false
-
-    # Single physical click = left click; two-finger click = right click
-    clickfinger_behavior = true
-
-    # Disable tap-and-drag and drag lock
-    tap-and-drag = false
-    drag_lock = false
-
-    scroll_factor = 0.4
-  }
-}
-
-# macOS-style 3-finger trackpad gestures
-gesture = 3, horizontal, workspace
-gesture = 3, up, fullscreen
-gesture = 3, down, fullscreen, 0
-```
-
-- 3-finger swipe left/right → switch workspaces
-- 3-finger swipe up → fullscreen active window
-- 3-finger swipe down → un-fullscreen active window
-
-To pop a window out as floating and pinned above others, use Omarchy's `SUPER + O` binding or `hyprctl dispatch togglefloating && hyprctl dispatch pin`.
-
-## Waybar configuration
-
-`~/.config/waybar/config.jsonc` overrides Omarchy's default Waybar config. The current tweaks are:
-
-### Battery percentage always visible
-
-Battery shows `{capacity}%` in every state (charging, discharging, plugged, full) instead of only an icon when unplugged:
-
-```json
-"battery": {
-  "format": "{capacity}% {icon}",
-  "format-discharging": "{capacity}% {icon}",
-  "format-charging": "{capacity}% {icon}",
-  "format-plugged": "{capacity}% 🔌",
-  "format-full": "{capacity}% 🔋"
-}
-```
-
-### Plain system tray
-
-The default Omarchy `group/tray-expander` drawer (a clickable arrow that reveals tray icons) is unreliable — clicks do not open it. Replaced with a plain `tray` module in `modules-right` so tray icons are always visible:
-
-```json
-"modules-right": [
-  "tray",
-  "bluetooth",
-  "network",
-  "pulseaudio",
-  "cpu",
-  "battery"
-]
-```
 
 ## Recovering from a partial bootstrap
 

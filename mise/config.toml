@@ -197,7 +197,6 @@ if [ ! -d "$HOME/.tmux/plugins/tpm/.git" ]; then
   GIT_CONFIG_GLOBAL=/dev/null git clone https://github.com/tmux-plugins/tpm "$HOME/.tmux/plugins/tpm"
 fi
 GIT_CONFIG_GLOBAL=/dev/null "$HOME/.tmux/plugins/tpm/bin/install_plugins"
-mkdir -p "$HOME/.local/share/applications"
 """
 
 [tasks.set-gcp-project]

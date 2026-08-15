@@ -385,6 +385,10 @@ or `chsh` authentication is only requested by an apply run when a privileged
 surface actually needs reconciliation. The password is never saved or passed
 as a bootstrap option.
 
+For the explicit CachyOS profile matrix, package and application catalogues,
+ordered action ledger, services, removals, and non-actions, see
+[`../bootstrap/CACHYOS-POST-INSTALL.md`](../bootstrap/CACHYOS-POST-INSTALL.md).
+
 ### Windows
 
 Use the root loader for normal setup and audit work. Use the repo-local `.cmd`

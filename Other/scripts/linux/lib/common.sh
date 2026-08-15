@@ -399,6 +399,26 @@ source_available() {
   return 1
 }
 
+fisher_plugins_current() {
+  local manifest="$1" expected actual
+  command_exists fish && [[ -f "$manifest" ]] || return 1
+  expected="$(sed '/^[[:space:]]*\(#\|$\)/d' "$manifest" | tr '[:upper:]' '[:lower:]' | sort -u)"
+  actual="$(fish -c 'fisher list' 2>/dev/null | tr '[:upper:]' '[:lower:]' | sort -u || true)"
+  [[ "$actual" == "$expected" ]] || return 1
+  fish -c '
+    for plugin in (fisher list)
+      set --local files_var _fisher_(string escape --style=var -- $plugin)_files
+      set --query $files_var; or exit 1
+      set --local plugin_present false
+      for file in $$files_var
+        set file (string replace --regex "^~" "$HOME" $file)
+        test -e "$file"; and set plugin_present true
+      end
+      test "$plugin_present" = true; or exit 1
+    end
+  ' >/dev/null 2>&1
+}
+
 linux_package_catalogue() {
   local config="$BOOTSTRAP_ROOT/mise/config.linux.toml"
   [[ -f "$config" ]] || return 0
@@ -415,7 +435,7 @@ linux_package_catalogue() {
       # catalogue, but do not ask dpkg to configure packages whose maintainer
       # scripts require those facilities. WSL 2 and ordinary Linux hosts retain
       # the complete package set.
-      grep -Ev '^(flatpak|yubikey-manager)$' || true
+      grep -Ev '^(flatpak|wireguard-tools|network-manager-gnome|nm-connection-editor|yubikey-manager|python3-pyscard|python-pyscard|libccid|ccid|pcscd|pcsclite)$' || true
     else
       cat
     fi
@@ -431,13 +451,16 @@ linux_baseline_package_specs() {
 
 linux_application_catalogue() {
   [[ "${BOOTSTRAP_WSL_VERSION:-}" != 1 ]] || return 0
+  local architecture
+  architecture="$(uname -m)"
   printf '%s\n' com.visualstudio.code
-  case "$(uname -m)" in
+  case "$architecture" in
     x86_64|amd64) printf '%s\n' com.google.Chrome ;;
     aarch64|arm64) printf '%s\n' org.chromium.Chromium ;;
   esac
   printf '%s\n' app.zen_browser.zen
   printf '%s\n' md.obsidian.Obsidian
+  case "$architecture" in x86_64|amd64) printf '%s\n' com.yubico.yubioath ;; esac
 }
 
 linux_application_package_specs() {
