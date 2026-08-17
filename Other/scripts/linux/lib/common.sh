@@ -491,12 +491,14 @@ linux_application_catalogue() {
   esac
   printf '%s\n' app.zen_browser.zen
   printf '%s\n' md.obsidian.Obsidian
+  [[ "$PACKAGE_MANAGER" != apt ]] || printf '%s\n' com.github.IsmaelMartinez.teams_for_linux
   case "$architecture" in x86_64|amd64) printf '%s\n' com.yubico.yubioath ;; esac
 }
 
 linux_aur_application_catalogue() {
   [[ "${BOOTSTRAP_WSL_VERSION:-}" != 1 && "$PACKAGE_MANAGER" == pacman ]] || return 0
   printf '%s\n' opencode-desktop-bin
+  printf '%s\n' teams-for-linux
 }
 
 linux_application_package_specs() {

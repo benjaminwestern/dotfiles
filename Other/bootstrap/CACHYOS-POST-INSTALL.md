@@ -185,13 +185,17 @@ Only one of Chrome or Chromium is selected for a given architecture. Flathub
 does not currently publish an ARM64 Yubico Authenticator ref, so that GUI is
 selected only on x86_64; the native YubiKey CLI and PC/SC stack remain selected.
 
-On pacman-family systems, the application stage can also install this maintained
-AUR package. It uses an existing `paru`, or installs `paru` from the
-distribution repository when available. Missing AUR applications require an
-interactive run and explicit PKGBUILD review:
+On pacman-family systems, the application stage can also install these packages.
+`paru` prefers packages from the distribution repository and falls back to the
+AUR, so CachyOS installs its signed `teams-for-linux` package while other
+Arch-family systems can use the maintained AUR package. The bootstrap uses an
+existing `paru`, or installs `paru` from the distribution repository when
+available. Missing AUR applications require an interactive run and explicit
+PKGBUILD review:
 
 ```text
 opencode-desktop-bin        OpenCode Desktop
+teams-for-linux             Unofficial Microsoft Teams client
 ```
 
 ## Home And Work Mise Tools
