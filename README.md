@@ -91,11 +91,13 @@ curl -fsSL https://raw.githubusercontent.com/benjaminwestern/dotfiles/main/insta
 
 The loader installs standalone mise and mise-managed Gum itself. System
 packages remain declarative through mise's `apt` or `pacman` manager; desktop
-applications use mise's system-wide Flatpak manager. `home` and `work` install
+applications use mise's system-wide Flatpak manager plus `paru` for declared
+AUR apps on pacman-family systems. Missing AUR apps always require interactive
+PKGBUILD review before installation. `home` and `work` install
 Ben's full tool and dotfile catalogues, create `~/code`, enable SSH and the
 package-linked PC/SC service, configure Fish and Fisher, and make
-Chrome/Chromium the browser and PDF handler. On Linux ARM64, Chromium is used
-because Google's Flatpak is x86_64-only.
+Zen the browser and Chrome/Chromium the PDF handler. On Linux ARM64, Chromium
+is used for PDFs because Google's Flatpak is x86_64-only.
 Fisher reconciles the same `fish_plugins` manifest used on macOS. CachyOS's
 Pure prompt packages are removed so the distro cannot override that setup.
 
@@ -214,8 +216,9 @@ afterward.
 - Every macOS profile receives Homebrew, standalone mise, and mise-managed Gum.
 - Ben's command-line catalogues are optional mise `[bootstrap.packages]`
   stages: Homebrew on macOS and native `apt`/`pacman` packages on Linux. macOS
-  keeps a separate Brewfile apps/fonts catalogue; Linux applications are
-  declared as system Flatpaks through mise.
+  keeps a separate Brewfile apps/fonts catalogue; Linux applications use
+  system Flatpaks through mise plus a small declared AUR catalogue through
+  `paru` on pacman-family systems, with interactive PKGBUILD review required.
 - The repo-local `mise.toml` installs the contributor toolchain for the README
   asset pipeline.
 - The managed home config at `mise/config.toml` defines runtimes, tasks, shell

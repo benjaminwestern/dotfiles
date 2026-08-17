@@ -9,6 +9,11 @@ gh/hosts.yml
 # releases may create this while Fisher initializes; never track it as config.
 fish/fish_variables
 
+# Noctalia generates application theme outputs from the tracked source palette.
+noctalia/noctalia.css
+noctalia/noctalia.conf
+noctalia/noctalia.theme
+
 # macos ignores 
 **/.DS_Store
 .AppleDouble

@@ -53,7 +53,7 @@ curl -fsSL https://raw.githubusercontent.com/benjaminwestern/dotfiles/main/insta
 | --- | --- | --- | --- |
 | Preferred shell | Fish | Fish | Bash |
 | Native package catalogue | On | On | Off |
-| Flatpak application catalogue | On | On | Off |
+| Application catalogue | On | On | Off |
 | Mise tool catalogue | On | On | Off |
 | Managed dotfiles | On | On | Off |
 | Create `~/code` | On | On | On |
@@ -83,8 +83,8 @@ The Linux foundation executes these actions in order:
 7. Ensure the persistent checkout exists at `~/.dotfiles`.
 8. Link or seed `~/.config/mise` and create private `mise/.env` state.
 9. In `update` mode, upgrade the selected native package catalogue.
-10. Reconcile the selected native package catalogue.
-11. Add system Flathub and reconcile the selected Flatpak applications.
+10. Reconcile the selected native package catalogue and greetd keyring PAM hooks.
+11. Add system Flathub and reconcile the selected Flatpak and AUR applications.
 12. Create `~/code` and optionally manage the Downloads symlink.
 13. Apply selected dotfiles and Git identity.
 14. Install Tmux Plugin Manager.
@@ -122,6 +122,7 @@ The pacman catalogue in `mise/config.linux.toml` is:
 ```text
 bash
 git
+gnome-keyring
 tree
 tmux
 fish
@@ -151,6 +152,8 @@ imagemagick
 podman
 podman-compose
 ghostty
+noctalia
+satty
 base-devel
 curl
 unzip
@@ -181,6 +184,15 @@ com.yubico.yubioath         Yubico Authenticator on x86_64
 Only one of Chrome or Chromium is selected for a given architecture. Flathub
 does not currently publish an ARM64 Yubico Authenticator ref, so that GUI is
 selected only on x86_64; the native YubiKey CLI and PC/SC stack remain selected.
+
+On pacman-family systems, the application stage can also install this maintained
+AUR package. It uses an existing `paru`, or installs `paru` from the
+distribution repository when available. Missing AUR applications require an
+interactive run and explicit PKGBUILD review:
+
+```text
+opencode-desktop-bin        OpenCode Desktop
+```
 
 ## Home And Work Mise Tools
 
@@ -305,7 +317,8 @@ Mise applies dotfiles in force mode unless a target is passed through
 | Login shell | Set to Fish by default |
 | SSH | Install OpenSSH and enable `sshd.service` |
 | Smart cards | Enable `pcscd.socket`, falling back to `pcscd.service` |
-| Browser defaults | Assign HTTP, HTTPS, HTML, and PDF to Chrome/Chromium |
+| Git credentials | Store machine-local HTTPS credentials in GNOME Keyring and unlock it through greetd PAM |
+| Browser defaults | Assign HTTP, HTTPS, HTML, and XHTML to Zen; PDF to Chrome/Chromium |
 | Flatpak | Add system Flathub and install system applications |
 | Fish | Install Fisher and reconcile `fish_plugins` |
 | Tmux | Clone TPM; `mise run bootstrap` installs declared plugins |
@@ -323,7 +336,7 @@ The bootstrap intentionally does not:
 
 ```text
 generate or register SSH keys
-enroll fingerprints or edit PAM
+enroll fingerprints or edit PAM outside the managed greetd keyring hooks
 configure a firewall
 create or start a Podman machine
 create a WireGuard profile
@@ -333,8 +346,8 @@ remove arbitrary undeclared applications
 reboot the machine
 ```
 
-Fingerprint enrollment, PAM changes, SSH credentials, WireGuard profiles, and
-YubiKey personalization remain explicit operator actions.
+Fingerprint enrollment, other PAM changes, SSH credentials, WireGuard profiles,
+and YubiKey personalization remain explicit operator actions.
 
 ## Validation
 
@@ -348,7 +361,8 @@ After a CachyOS run, use:
 ```
 
 The audit reports native packages, Flatpaks, tool and dotfile state, SSH,
-PC/SC, and desktop defaults. A converged dry run should report zero fixes.
+PC/SC, greetd keyring PAM, and desktop defaults. A converged dry run should
+report zero fixes.
 
 ## Implementation Sources
 

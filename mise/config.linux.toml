@@ -1,6 +1,7 @@
 # Linux-only dotfiles
 [dotfiles]
 "~/.config/hypr" = "~/.dotfiles/hypr"
+"~/.config/noctalia" = "~/.dotfiles/noctalia"
 
 [env]
 # The vfox gcloud installer disables Google's Python bootstrap but current
@@ -84,6 +85,7 @@ kubectl = "latest"
 # Arch / CachyOS / Manjaro (pacman)
 "pacman:bash" = "latest"        # brew:bash
 "pacman:git" = "latest"         # brew:git
+"pacman:gnome-keyring" = "latest" # Secret Service backend for Git credentials
 "pacman:tree" = "latest"        # brew:tree
 "pacman:tmux" = "latest"        # brew:tmux
 "pacman:fish" = "latest"        # brew:fish
@@ -113,6 +115,8 @@ kubectl = "latest"
 "pacman:podman" = "latest"      # brew:podman
 "pacman:podman-compose" = "latest" # brew:podman-compose
 "pacman:ghostty" = "latest"     # brew:ghostty (GUI terminal; config managed via [dotfiles])
+"pacman:noctalia" = "latest"    # Wayland desktop shell used by the Hyprland profile
+"pacman:satty" = "latest"       # Screenshot annotation command used by Noctalia
 
 # Baseline helpers for pacman-family systems
 "pacman:base-devel" = "latest"

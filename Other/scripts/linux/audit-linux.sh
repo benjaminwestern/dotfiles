@@ -87,6 +87,13 @@ audit_packages() {
     fi
     PACKAGE_ROWS+=("application"$'\t'"$package"$'\t'"$state")
   done < <(linux_application_catalogue)
+  while IFS= read -r package; do
+    [[ -n "$package" ]] || continue
+    if package_installed "$package"; then state=installed
+    else state=missing
+    fi
+    PACKAGE_ROWS+=("application"$'\t'"$package"$'\t'"$state")
+  done < <(linux_aur_application_catalogue)
 }
 
 audit_dotfiles() {
@@ -163,6 +170,14 @@ pcscd_service_state() {
   fi
 }
 
+greetd_keyring_pam_state() {
+  if [[ "$PACKAGE_MANAGER" != pacman ]] || ! package_installed greetd; then printf not-applicable
+  elif ! package_installed gnome-keyring; then printf gnome-keyring-missing
+  elif greetd_gnome_keyring_pam_configured; then printf configured
+  else printf drifted
+  fi
+}
+
 fisher_state() {
   command_exists fish || { printf 'not installed (Fish missing)'; return; }
   fish -c 'type -q fisher' >/dev/null 2>&1 || { printf 'not installed'; return; }
@@ -173,13 +188,6 @@ fisher_plugins_state() {
   local manifest="$HOME/.config/fish/fish_plugins"
   [[ -f "$manifest" ]] || { printf 'manifest missing'; return; }
   fisher_plugins_current "$manifest" && printf current || printf drifted
-}
-
-configured_browser_desktop() {
-  command_exists flatpak || return 0
-  if flatpak info --system com.google.Chrome >/dev/null 2>&1; then printf com.google.Chrome.desktop
-  elif flatpak info --system org.chromium.Chromium >/dev/null 2>&1; then printf org.chromium.Chromium.desktop
-  fi
 }
 
 xdg_default_handler() {
@@ -312,16 +320,21 @@ build_drift() {
 
   expected="$(expected_value LINUX_DEFAULT_APPS)"
   if [[ "$expected" == true && "${BOOTSTRAP_WSL_VERSION:-}" != 1 ]]; then
-    local desired_desktop current_http current_pdf
+    local desired_desktop desired_pdf_desktop current_pdf mime current_handler
     desired_desktop="$(configured_browser_desktop)"
-    current_http="$(xdg_default_handler x-scheme-handler/http)"
+    desired_pdf_desktop="$(configured_pdf_desktop)"
     current_pdf="$(xdg_default_handler application/pdf)"
     if [[ -z "$desired_desktop" ]]; then
-      add_drift application browser missing Chrome-or-Chromium
+      add_drift application browser missing Zen-Browser
     else
-      [[ "$current_http" == "$desired_desktop" ]] || add_drift config HTTP-handler "${current_http:-unset}" "$desired_desktop"
-      [[ "$current_pdf" == "$desired_desktop" ]] || add_drift config PDF-handler "${current_pdf:-unset}" "$desired_desktop"
+      for mime in x-scheme-handler/http x-scheme-handler/https x-scheme-handler/chrome text/html application/xhtml+xml; do
+        current_handler="$(xdg_default_handler "$mime")"
+        [[ "$current_handler" == "$desired_desktop" ]] \
+          || add_drift config "$mime-handler" "${current_handler:-unset}" "$desired_desktop"
+      done
     fi
+    [[ -z "$desired_pdf_desktop" || "$current_pdf" == "$desired_pdf_desktop" ]] \
+      || add_drift config PDF-handler "${current_pdf:-unset}" "$desired_pdf_desktop"
   fi
 
   expected="$(expected_value ENABLE_SHELL_DEFAULT)"
@@ -335,7 +348,10 @@ build_drift() {
   if [[ "$expected" == true && "${BOOTSTRAP_WSL_VERSION:-}" != 1 ]]; then current="$(ssh_service_state)"; [[ "$current" == enabled-active || "$current" == unavailable ]] || add_drift service SSH "$current" enabled-active; fi
 
   expected="$(expected_value ENABLE_PACKAGES)"
-  if [[ "$expected" == true && "${BOOTSTRAP_WSL_VERSION:-}" != 1 ]]; then current="$(pcscd_service_state)"; [[ "$current" == enabled-active || "$current" == unavailable ]] || add_drift service PCSC "$current" enabled-active; fi
+  if [[ "$expected" == true && "${BOOTSTRAP_WSL_VERSION:-}" != 1 ]]; then
+    current="$(pcscd_service_state)"; [[ "$current" == enabled-active || "$current" == unavailable ]] || add_drift service PCSC "$current" enabled-active
+    current="$(greetd_keyring_pam_state)"; [[ "$current" == configured || "$current" == not-applicable ]] || add_drift config greetd-keyring-PAM "$current" configured
+  fi
 }
 
 print_header() {
@@ -370,7 +386,7 @@ print_human() {
   fi
   if want_section services; then
     printf '\n── Services and desktop defaults ──\n\n'
-    printf '  %-28s %s\n' 'SSH service' "$(ssh_service_state)" 'PC/SC service' "$(pcscd_service_state)" 'HTTP handler' "$(xdg_default_handler x-scheme-handler/http)" 'PDF handler' "$(xdg_default_handler application/pdf)" 'Zscaler block' "$(grep -Fq "$ZSCALER_ENV_BEGIN" "$HOME/.config/mise/.env" 2>/dev/null && printf present || printf absent)"
+    printf '  %-28s %s\n' 'SSH service' "$(ssh_service_state)" 'PC/SC service' "$(pcscd_service_state)" 'Greetd keyring PAM' "$(greetd_keyring_pam_state)" 'HTTP handler' "$(xdg_default_handler x-scheme-handler/http)" 'PDF handler' "$(xdg_default_handler application/pdf)" 'Zscaler block' "$(grep -Fq "$ZSCALER_ENV_BEGIN" "$HOME/.config/mise/.env" 2>/dev/null && printf present || printf absent)"
   fi
   if [[ "$AUDIT_CONTEXT" != general ]]; then
     printf '\n── Bootstrap drift ──\n\n'
@@ -403,7 +419,7 @@ print_json() {
   printf '"profile":%s,' "$(if [[ -n "$AUDIT_PROFILE" ]]; then printf '"%s"' "$(json_escape "$AUDIT_PROFILE")"; else printf null; fi)"
   printf '"system":{"distribution":"%s","id":"%s","package_manager":"%s","architecture":"%s","account":"%s","hostname":"%s","login_shell":"%s"},' "$(json_escape "$DISTRO_NAME")" "$(json_escape "$DISTRO_ID")" "$PACKAGE_MANAGER" "$(json_escape "$(uname -m)")" "$(json_escape "$(id -un)")" "$(json_escape "$(hostname -s 2>/dev/null || true)")" "$(json_escape "$(login_shell)")"
   printf '"git":{"mode":"%s","name":"%s","email":"%s"},' "$(git_config_mode)" "$(json_escape "$(git config --global --includes --get user.name 2>/dev/null || true)")" "$(json_escape "$(git config --global --includes --get user.email 2>/dev/null || true)")"
-  printf '"services":{"ssh":"%s","pcsc":"%s"},' "$(ssh_service_state)" "$(pcscd_service_state)"
+  printf '"services":{"ssh":"%s","pcsc":"%s","greetd_keyring_pam":"%s"},' "$(ssh_service_state)" "$(pcscd_service_state)" "$(greetd_keyring_pam_state)"
   printf '"packages":'; json_rows PACKAGE_ROWS $'kind\npackage\nstate'; printf ','
   printf '"dotfiles":'; json_rows DOTFILE_ROWS $'target\nstate\ndetail'; printf ','
   printf '"shell_activation":'; json_rows SHELL_ROWS $'target\npath\nmode\nstate'; printf ','

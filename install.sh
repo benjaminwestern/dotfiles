@@ -145,7 +145,8 @@ Linux:
   Supports apt distributions (Debian, Ubuntu, Mint, 64-bit Raspberry Pi OS) and
   pacman distributions (Arch, CachyOS, Manjaro, EndeavourOS). The same
   work/home/minimal presets are editable, and the signed-in account is never
-  renamed. Native packages and Flatpak apps are reconciled through mise;
+  renamed. Native packages and Flatpak apps are reconciled through mise, with
+  supported AUR desktop packages handled by paru after interactive review;
   standalone mise and Gum require no manual prerequisite commands. Use
   audit --general, audit --profile NAME, or audit --expect-state.
 

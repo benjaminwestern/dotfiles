@@ -128,6 +128,25 @@ package_available() {
   esac
 }
 
+greetd_gnome_keyring_pam_configured() {
+  local pam_file="${1:-/etc/pam.d/greetd}"
+  [[ -r "$pam_file" ]] || return 1
+  awk '
+    $1 == "auth" && $2 == "include" && $3 == "system-local-login" { auth_anchor = NR }
+    $1 == "auth" && $2 == "optional" && $3 == "pam_gnome_keyring.so" && NF == 3 {
+      auth_count++; auth_line = NR
+    }
+    $1 == "session" && $2 == "include" && $3 == "system-local-login" { session_anchor = NR }
+    $1 == "session" && $2 == "optional" && $3 == "pam_gnome_keyring.so" && $4 == "auto_start" && NF == 4 {
+      session_count++; session_line = NR
+    }
+    END {
+      exit !(auth_anchor && session_anchor && auth_count == 1 && session_count == 1 &&
+             auth_line > auth_anchor && session_line > session_anchor)
+    }
+  ' "$pam_file"
+}
+
 # Flatpak desktop entries live outside the traditional XDG search path. A
 # graphical login normally imports /etc/profile.d/flatpak.sh, but bootstrap and
 # audit commands are commonly run over SSH where that profile hook is absent.
@@ -145,6 +164,18 @@ refresh_flatpak_data_dirs() {
     esac
   done < <(flatpak --installations 2>/dev/null || true)
   export XDG_DATA_DIRS="$data_dirs"
+}
+
+configured_browser_desktop() {
+  command_exists flatpak || return 0
+  flatpak info --system app.zen_browser.zen >/dev/null 2>&1 && printf app.zen_browser.zen.desktop
+}
+
+configured_pdf_desktop() {
+  command_exists flatpak || return 0
+  if flatpak info --system com.google.Chrome >/dev/null 2>&1; then printf com.google.Chrome.desktop
+  elif flatpak info --system org.chromium.Chromium >/dev/null 2>&1; then printf org.chromium.Chromium.desktop
+  fi
 }
 
 stock_skeleton_file() {
@@ -461,6 +492,11 @@ linux_application_catalogue() {
   printf '%s\n' app.zen_browser.zen
   printf '%s\n' md.obsidian.Obsidian
   case "$architecture" in x86_64|amd64) printf '%s\n' com.yubico.yubioath ;; esac
+}
+
+linux_aur_application_catalogue() {
+  [[ "${BOOTSTRAP_WSL_VERSION:-}" != 1 && "$PACKAGE_MANAGER" == pacman ]] || return 0
+  printf '%s\n' opencode-desktop-bin
 }
 
 linux_application_package_specs() {

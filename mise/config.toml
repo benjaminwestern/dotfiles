@@ -130,6 +130,7 @@ hk = "latest"
 fnox = "latest"
 communique = "latest"
 usage = "latest"
+codex = "latest"
 
 [shell_alias]
 docker = "podman"

@@ -136,7 +136,9 @@ curl -fsSL https://raw.githubusercontent.com/benjaminwestern/dotfiles/main/insta
 ```
 
 The Linux `home` preset reconciles native packages with mise's system-package
-manager, system-wide Flatpak applications with mise's Flatpak manager, the
+manager, system-wide Flatpak applications with mise's Flatpak manager, declared
+AUR applications with interactive `paru` PKGBUILD review on pacman-family
+systems, the
 shared versioned toolset, Ben's dotfiles, `~/code`, Git identity, hostname,
 SSH and PC/SC services, Fish/Fisher, TPM, and browser/PDF defaults. PC/SC
 activation follows native package selection because it supports the declared
@@ -154,8 +156,9 @@ exists.
 
 Desktop applications target x86_64 and ARM64: VS Code is installed on both,
 Google Chrome is selected on x86_64, and Chromium is selected on ARM64. The
-selected browser becomes the HTTP/HTTPS/HTML and PDF handler. Flatpak is
-system-wide because that is the ownership model of mise's Flatpak backend.
+cross-platform Zen Flatpak becomes the HTTP/HTTPS/HTML handler, while Chrome or
+Chromium handles PDFs. Flatpak is system-wide because that is the ownership
+model of mise's Flatpak backend.
 
 After convergence, run all three audit perspectives and the idempotence check:
 

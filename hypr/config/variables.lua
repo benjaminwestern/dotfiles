@@ -1,6 +1,6 @@
 -- Hyprland default apps
 
-TERMINAL     = "ghostty"
+TERMINAL     = "env GDK_BACKEND=x11 ghostty"
 FILE_MANAGER = "dolphin"
 BROWSER      = "flatpak run app.zen_browser.zen"
 EDITOR       = "gnome-text-editor --new-window"

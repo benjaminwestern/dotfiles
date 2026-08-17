@@ -439,10 +439,64 @@ ensure_catalogue() {
   fi
 }
 
+ensure_greetd_gnome_keyring_pam() {
+  local pam_file=/etc/pam.d/greetd
+  if [[ "$RESOLVED_PACKAGES" != true ]]; then
+    status_skip "GNOME Keyring PAM" "native packages disabled by plan"
+    return 0
+  fi
+  if [[ "$PACKAGE_MANAGER" != pacman ]] || ! package_installed greetd || [[ ! -f "$pam_file" ]]; then
+    status_skip "GNOME Keyring PAM" "greetd is not active on this platform"
+    return 0
+  fi
+  if ! package_installed gnome-keyring; then
+    if dry_run_active && [[ "$RESOLVED_PACKAGES" == true ]]; then
+      status_fix "GNOME Keyring PAM" "would configure after package installation"
+    else
+      status_skip "GNOME Keyring PAM" "gnome-keyring is not installed"
+    fi
+    return 0
+  fi
+  if greetd_gnome_keyring_pam_configured "$pam_file"; then
+    status_pass "GNOME Keyring PAM" "greetd unlocks the login keyring"
+    return 0
+  fi
+  if grep -q 'pam_gnome_keyring[.]so' "$pam_file"; then
+    status_fail "GNOME Keyring PAM" "conflicting rules require manual review in $pam_file"
+    return 0
+  fi
+  if dry_run_active; then
+    dry_run_log "install GNOME Keyring auth/session hooks in $pam_file"
+    status_fix "GNOME Keyring PAM" "would configure automatic login-keyring unlock"
+    return 0
+  fi
+
+  local candidate
+  candidate="$(mktemp)"
+  awk '
+    { print }
+    $1 == "auth" && $2 == "include" && $3 == "system-local-login" {
+      print "auth       optional     pam_gnome_keyring.so"
+    }
+    $1 == "session" && $2 == "include" && $3 == "system-local-login" {
+      print "session    optional     pam_gnome_keyring.so auto_start"
+    }
+  ' "$pam_file" > "$candidate"
+  if ! greetd_gnome_keyring_pam_configured "$candidate"; then
+    rm -f "$candidate"
+    status_fail "GNOME Keyring PAM" "could not build a safe greetd PAM configuration"
+    return 0
+  fi
+  elevate install -o root -g root -m 0644 "$candidate" "$pam_file"
+  rm -f "$candidate"
+  status_fix "GNOME Keyring PAM" "configured automatic login-keyring unlock"
+}
+
 ensure_applications() {
   if [[ "$RESOLVED_APPLICATIONS" != true ]]; then status_skip "Linux applications" "disabled by plan"; return 0; fi
-  local specs=() missing=() spec application
+  local specs=() missing=() aur_specs=() aur_missing=() spec application package
   while IFS= read -r spec; do [[ -n "$spec" ]] && specs+=("$spec"); done < <(linux_application_package_specs)
+  while IFS= read -r package; do [[ -n "$package" ]] && aur_specs+=("$package"); done < <(linux_aur_application_catalogue)
 
   if command_exists flatpak; then
     for spec in "${specs[@]}"; do
@@ -451,36 +505,66 @@ ensure_applications() {
     done
     if [[ ${#missing[@]} -eq 0 ]]; then
       status_pass "Linux applications" "all ${#specs[@]} declared Flatpak app(s) installed"
-      return 0
     fi
   else
     missing=("${specs[@]}")
   fi
 
-  if dry_run_active && ! command_exists mise; then
+  if [[ ${#missing[@]} -gt 0 ]] && dry_run_active && ! command_exists mise; then
     dry_run_log "mise bootstrap packages apply --yes $PACKAGE_MANAGER:flatpak"
     dry_run_log "flatpak remote-add --system --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo"
     dry_run_log "sudo mise -C $HOME bootstrap packages apply --yes ${missing[*]}"
     status_fix "Linux applications" "would install via mise's Flatpak manager"
+  elif [[ ${#missing[@]} -gt 0 ]]; then
+    if ! command_exists flatpak; then
+      wait_for_package_manager
+      if dry_run_active; then bootstrap_mise bootstrap packages apply --dry-run "$PACKAGE_MANAGER:flatpak"
+      else bootstrap_mise bootstrap packages apply --yes "$PACKAGE_MANAGER:flatpak"; fi
+    fi
+    if dry_run_active; then
+      dry_run_log "flatpak remote-add --system --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo"
+      dry_run_log "sudo $(command -v mise) -C $HOME bootstrap packages apply --yes ${missing[*]}"
+      status_fix "Linux applications" "mise would install ${#missing[@]} missing Flatpak app(s)"
+    else
+      elevate flatpak remote-add --system --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+      # mise's Flatpak manager deliberately owns the system installation. Run
+      # this narrow explicit-package invocation as root so polkit does not reject
+      # the non-interactive system-helper request on Ubuntu desktops.
+      elevate "$(command -v mise)" -C "$HOME" bootstrap packages apply --yes "${missing[@]}"
+      status_pass "Linux applications" "mise installed ${#missing[@]} missing Flatpak app(s)"
+    fi
+  fi
+
+  for package in "${aur_specs[@]}"; do
+    package_installed "$package" || aur_missing+=("$package")
+  done
+  [[ ${#aur_specs[@]} -gt 0 ]] || return 0
+  if [[ ${#aur_missing[@]} -eq 0 ]]; then
+    status_pass "AUR applications" "all ${#aur_specs[@]} declared app(s) installed"
     return 0
   fi
 
-  if ! command_exists flatpak; then
+  if ! command_exists paru; then
+    if ! package_available paru; then
+      status_fail "AUR applications" "install and review paru before enabling the AUR catalogue"
+      return 0
+    fi
     wait_for_package_manager
-    if dry_run_active; then bootstrap_mise bootstrap packages apply --dry-run "$PACKAGE_MANAGER:flatpak"
-    else bootstrap_mise bootstrap packages apply --yes "$PACKAGE_MANAGER:flatpak"; fi
+    if dry_run_active; then
+      dry_run_log "sudo pacman -S --needed --noconfirm paru"
+    else
+      elevate pacman -S --needed --noconfirm paru
+    fi
   fi
   if dry_run_active; then
-    dry_run_log "flatpak remote-add --system --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo"
-    dry_run_log "sudo $(command -v mise) -C $HOME bootstrap packages apply --yes ${missing[*]}"
-    status_fix "Linux applications" "mise would install ${#missing[@]} missing Flatpak app(s)"
+    dry_run_log "paru -S --needed --review ${aur_missing[*]}"
+    status_fix "AUR applications" "would require interactive PKGBUILD review for ${#aur_missing[@]} app(s)"
+  elif [[ "$NON_INTERACTIVE" == 1 ]] || ! (: </dev/tty) 2>/dev/null; then
+    status_fail "AUR applications" "interactive PKGBUILD review required; rerun from a terminal"
   else
-    elevate flatpak remote-add --system --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-    # mise's Flatpak manager deliberately owns the system installation. Run
-    # this narrow explicit-package invocation as root so polkit does not reject
-    # the non-interactive system-helper request on Ubuntu desktops.
-    elevate "$(command -v mise)" -C "$HOME" bootstrap packages apply --yes "${missing[@]}"
-    status_pass "Linux applications" "mise installed ${#missing[@]} missing Flatpak app(s)"
+    note "Review the AUR PKGBUILD and package changes before approving installation."
+    paru -S --needed --review "${aur_missing[@]}" </dev/tty
+    status_pass "AUR applications" "paru installed ${#aur_missing[@]} missing app(s)"
   fi
 }
 
@@ -1016,43 +1100,30 @@ ensure_default_shell() {
   else status_fix "Default shell" "changed $current -> $shell_path"; fi
 }
 
-desktop_id_for_command() {
-  local command_name="$1" candidate
-  case "$command_name" in
-    google-chrome|google-chrome-stable) printf google-chrome.desktop ;;
-    chromium|chromium-browser) printf chromium.desktop ;;
-    code) printf code.desktop ;;
-    *)
-      candidate="$(find /usr/share/applications "$HOME/.local/share/applications" -maxdepth 1 -type f -iname "*${command_name}*.desktop" 2>/dev/null | head -1 || true)"
-      [[ -n "$candidate" ]] && basename "$candidate"
-      ;;
-  esac
-}
-
 ensure_default_apps() {
   if [[ "$RESOLVED_LINUX_DEFAULT_APPS" != true ]]; then status_skip "Linux default apps" "disabled by plan"; return 0; fi
   command_exists xdg-mime || { status_skip "Linux default apps" "xdg-mime unavailable"; return 0; }
   refresh_flatpak_data_dirs
-  local browser='' desktop=''
-  if command_exists flatpak; then
-    if flatpak info --system com.google.Chrome >/dev/null 2>&1; then desktop=com.google.Chrome.desktop
-    elif flatpak info --system org.chromium.Chromium >/dev/null 2>&1; then desktop=org.chromium.Chromium.desktop
+  local browser_desktop pdf_desktop
+  browser_desktop="$(configured_browser_desktop)"
+  pdf_desktop="$(configured_pdf_desktop)"
+  [[ -n "$browser_desktop" ]] || { status_skip "Linux default apps" "Zen Browser not installed"; return 0; }
+  local mime current changed=0
+  for mime in x-scheme-handler/http x-scheme-handler/https x-scheme-handler/chrome text/html application/xhtml+xml; do
+    current="$(xdg-mime query default "$mime" 2>/dev/null || true)"
+    [[ "$current" == "$browser_desktop" ]] && continue
+    run_or_dry xdg-mime default "$browser_desktop" "$mime"; changed=$((changed + 1))
+  done
+  if [[ -n "$pdf_desktop" ]]; then
+    current="$(xdg-mime query default application/pdf 2>/dev/null || true)"
+    if [[ "$current" != "$pdf_desktop" ]]; then
+      run_or_dry xdg-mime default "$pdf_desktop" application/pdf
+      changed=$((changed + 1))
     fi
   fi
-  if [[ -n "$desktop" ]]; then browser="${desktop%.desktop}"; fi
-  for browser in google-chrome google-chrome-stable chromium chromium-browser; do command_exists "$browser" && break; browser=''; done
-  [[ -n "$browser" || -n "$desktop" ]] || { status_skip "Linux default apps" "Google Chrome/Chromium not installed"; return 0; }
-  [[ -n "$desktop" ]] || desktop="$(desktop_id_for_command "$browser")"
-  [[ -n "$desktop" ]] || { status_skip "Linux default apps" "desktop entry not found for $browser"; return 0; }
-  local mime current changed=0
-  for mime in x-scheme-handler/http x-scheme-handler/https text/html application/pdf; do
-    current="$(xdg-mime query default "$mime" 2>/dev/null || true)"
-    [[ "$current" == "$desktop" ]] && continue
-    run_or_dry xdg-mime default "$desktop" "$mime"; changed=$((changed + 1))
-  done
-  if [[ "$changed" -eq 0 ]]; then status_pass "Linux default apps" "$desktop owns browser + PDF"
-  elif dry_run_active; then status_fix "Linux default apps" "would update ${changed} MIME handler(s) to $desktop"
-  else status_fix "Linux default apps" "updated ${changed} MIME handler(s) to $desktop"; fi
+  if [[ "$changed" -eq 0 ]]; then status_pass "Linux default apps" "Zen owns web content; ${pdf_desktop:-current handler} owns PDF"
+  elif dry_run_active; then status_fix "Linux default apps" "would update $changed MIME handler(s)"
+  else status_fix "Linux default apps" "updated $changed MIME handler(s)"; fi
 }
 
 detect_zscaler() {
@@ -1150,6 +1221,7 @@ main() {
     else bootstrap_repo_mise bootstrap packages upgrade --manager "$PACKAGE_MANAGER" --yes; fi
   fi
   ensure_catalogue
+  ensure_greetd_gnome_keyring_pam
   ensure_applications
   ensure_code_directory
   ensure_downloads_link
