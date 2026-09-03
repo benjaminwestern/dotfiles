@@ -91,16 +91,17 @@ go = "latest"
 # Node / npm
 node = "latest"
 bun = "latest"
-"npm:opencode-ai" = { version = "latest", minimum_release_age = "0s", npm_args = "--ignore-scripts=false", depends = ["node"] }
-"npm:@opencode-ai/cli" = { version = "next", minimum_release_age = "0s", allow_builds = ["@opencode-ai/cli"], depends = ["node"] }
+"npm:opencode-ai" = { version = "latest", minimum_release_age = "0s", allow_builds = ["opencode-ai"], depends = ["node"] }
+"npm:@opencode-ai/cli" = { version = "beta", minimum_release_age = "0s", allow_builds = ["@opencode-ai/cli"], depends = ["node"] }
 "npm:@earendil-works/pi-coding-agent" = { version = "latest", minimum_release_age = "0s", depends = ["node"] }
 "npm:@playwright/cli" = { version = "latest", depends = ["node"] }
 "npm:@dataform/cli" = { version = "latest", depends = ["node"] }
 "npm:wrangler" = { version = "latest", depends = ["node"] }
-"npm:@googleworkspace/cli" = { version = "latest", depends = ["node"] }
+"npm:@googleworkspace/cli" = { version = "latest", allow_builds = ["@googleworkspace/cli"], depends = ["node"] }
 "npm:markit-ai" = { version = "latest", depends = ["node"] }
 "npm:@kitlangton/ghui" = { version = "latest", depends = ["node"], allow_low_downloads = true }
-"npm:hunkdiff" = { version = "latest", depends = ["node"] }
+# This static, script-free release was manually published without provenance.
+"npm:hunkdiff" = { version = "latest", depends = ["node"], trust_policy_excludes = ["@pierre/theme@2.0.0"] }
 "npm:@kitlangton/motel" = { version = "latest", depends = ["node"], allow_low_downloads = true, trust_policy_excludes = ["@effect/*", "effect"] }
 
 # Python ecosystem
