@@ -1,8 +1,5 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": [
-    "file:///Users/benjaminwestern/.config/opencode/plugins/mise.ts"
-  ],
   "share": "disabled",
   "provider": {},
   "tools": {
