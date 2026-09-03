@@ -104,6 +104,7 @@ kubectl = "latest"
 "pacman:wireguard-tools" = "latest" # WireGuard CLI managed by NetworkManager
 "pacman:nm-connection-editor" = "latest" # NetworkManager GUI with WireGuard support
 "pacman:7zip" = "latest"        # brew:p7zip
+"pacman:peazip" = "latest"      # GUI archive manager with 7-Zip support
 "pacman:automake" = "latest"    # brew:automake
 "pacman:gcc" = "latest"         # brew:gcc
 "pacman:pkgconf" = "latest"     # brew:pkgconf
@@ -117,6 +118,7 @@ kubectl = "latest"
 "pacman:ghostty" = "latest"     # brew:ghostty (GUI terminal; config managed via [dotfiles])
 "pacman:noctalia" = "latest"    # Wayland desktop shell used by the Hyprland profile
 "pacman:satty" = "latest"       # Screenshot annotation command used by Noctalia
+"pacman:fuse2" = "latest"       # FUSE 2 runtime required by AppImages such as OpenCode Desktop Beta
 
 # Baseline helpers for pacman-family systems
 "pacman:base-devel" = "latest"

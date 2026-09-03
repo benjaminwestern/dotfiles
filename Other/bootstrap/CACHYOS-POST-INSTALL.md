@@ -154,6 +154,7 @@ podman-compose
 ghostty
 noctalia
 satty
+fuse2
 base-devel
 curl
 unzip
@@ -287,6 +288,7 @@ Home and work profiles manage these targets:
 ~/.bash_profile
 ~/.bashrc
 ~/.config/fish
+~/.config/fnox/config.toml
 ~/.config/gh/config.yml
 ~/.config/ghostty/config
 ~/.config/git/ignore

@@ -33,3 +33,5 @@ keybind = ctrl+t=new_tab
 
 # Terminal Settings
 copy-on-select = clipboard
+# Keep Shift+mouse for native terminal selection, even when a TUI captures the mouse.
+mouse-shift-capture = never

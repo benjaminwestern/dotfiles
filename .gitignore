@@ -101,3 +101,11 @@ pi/client-credentials.json*
 pi/mcp-inventory-cache.json
 pi/sessions/
 pi/*.bak
+
+# Python bytecode and local tool caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

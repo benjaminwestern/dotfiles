@@ -13,5 +13,7 @@ from `~/.config/hypr`.
 ## Gestures
 
 - Three-finger horizontal swipe switches workspaces.
-- Three-finger swipe up enters fullscreen.
-- Three-finger swipe down exits fullscreen.
+- Three-finger swipe up opens the special workspace (`Super+S`).
+- Three-finger swipe down hides the special workspace.
+- Four-finger swipe up enters fullscreen.
+- Four-finger swipe down exits fullscreen.

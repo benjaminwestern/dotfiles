@@ -1,3 +1,6 @@
+# Ona CLI SSH Integration
+Include "ona/config"
+# End of Ona CLI SSH Integration
 Host bitbucket.org
    HostName bitbucket.org
    IdentityFile ~/.ssh/id_rsa

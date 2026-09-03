@@ -13,6 +13,11 @@ if test -d "$HOME/.local/bin"
     fish_add_path --global "$HOME/.local/bin"
 end
 
+# Activate mise before initialising tools installed by mise.
+if command -q mise
+    mise activate fish | source
+end
+
 # WSL launched from Windows inherits the native Windows working directory.
 # Start an ordinary login in Linux home so mise does not mistake the native
 # Windows ~/.config/mise tree for a project configuration.
@@ -23,8 +28,7 @@ if test -r /proc/sys/kernel/osrelease; and string match -qi '*microsoft*' (cat /
 end
 
 # Tmux auto-launch (macOS always; Linux opt-in via DOTFILES_TMUX_AUTO=1 in
-# ~/.config/mise/.env). The .env is read directly because mise activates
-# after this file loads, so its variables are not yet in the shell here.
+# ~/.config/mise/.env). Read the file directly as a fallback when mise is absent.
 set -l tmux_auto off
 if test (uname) = Darwin
     set tmux_auto on

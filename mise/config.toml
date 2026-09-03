@@ -14,6 +14,9 @@ minimum_release_age_excludes = [
     "pitchfork",
 ]
 
+[settings.npm]
+package_manager = "aube"
+
 [env]
 _.file = "~/.config/mise/.env"
 EDITOR = "nvim"
@@ -27,9 +30,10 @@ PITCHFORK_WEB_PORT = "19876"
 # respective config.{linux,macos,windows}.toml files.
 "~/.bash_profile/dotfiles" = { source = "~/.dotfiles/bash/.bash_profile", template = "tera" }
 "~/.bashrc/dotfiles" = { source = "~/.dotfiles/bash/.bashrc", template = "tera" }
-# Fish must keep a real config.fish so native shell activation can own its block.
+# Fish keeps a real config.fish and activates mise before tool-specific hooks.
 "~/.config/fish" = { source = "~/.dotfiles/fish", mode = "symlink-each", exclude = ["config.fish"] }
 "~/.config/fish/config.fish/dotfiles" = { source = "~/.dotfiles/fish/config.fish", template = "tera" }
+"~/.config/fnox/config.toml" = "~/.dotfiles/fnox/config.toml"
 "~/.config/gh/config.yml" = "~/.dotfiles/gh/config.yml"
 "~/.config/ghostty/config" = "~/.dotfiles/ghostty/config"
 "~/.config/git/ignore" = "~/.dotfiles/git/ignore"
@@ -56,7 +60,6 @@ zprofile = "shims"
 zshrc = "activate"
 bash_profile = "shims"
 bashrc = "activate"
-fish = "activate"
 
 [tools]
 # Go

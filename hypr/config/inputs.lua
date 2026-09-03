@@ -21,5 +21,23 @@ hl.config({
 })
 
 hl.gesture({ fingers = 3, direction = "horizontal", action = "workspace" })
-hl.gesture({ fingers = 3, direction = "up",         action = "fullscreen" })
-hl.gesture({ fingers = 3, direction = "down",       action = "fullscreen", mode = "0" })
+hl.gesture({
+    fingers = 3,
+    direction = "up",
+    action = function()
+        if not hl.get_active_special_workspace() then
+            hl.dispatch(hl.dsp.workspace.toggle_special())
+        end
+    end,
+})
+hl.gesture({
+    fingers = 3,
+    direction = "down",
+    action = function()
+        if hl.get_active_special_workspace() then
+            hl.dispatch(hl.dsp.workspace.toggle_special())
+        end
+    end,
+})
+hl.gesture({ fingers = 4, direction = "up",         action = "fullscreen" })
+hl.gesture({ fingers = 4, direction = "down",       action = "fullscreen", mode = "0" })

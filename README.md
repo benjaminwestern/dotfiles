@@ -199,6 +199,7 @@ assets so each layer stays easy to reason about.
 | Area | What it contains | Primary reference |
 | --- | --- | --- |
 | Repo root groups | Config source directories symlinked into `$HOME` by mise `[dotfiles]` | `mise/config.toml`, `mise/config.*.toml` |
+| `fnox/` | Global encrypted FNOX secrets and providers, with the private age identity resolved from 1Password | `~/.config/fnox/config.toml` |
 | `Other/scripts/` | Repo-local operator entrypoints split into `macos/`, `linux/`, and `windows/` | [Other/scripts/README.md](Other/scripts/README.md) |
 | `Other/repository/` | Maintainer-only repository tooling, including README asset generation | `Other/repository/` |
 | `assets/` | D2 sources and rendered SVGs used by the READMEs | `assets/*.d2` |

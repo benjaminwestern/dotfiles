@@ -497,6 +497,8 @@ linux_application_catalogue() {
 
 linux_aur_application_catalogue() {
   [[ "${BOOTSTRAP_WSL_VERSION:-}" != 1 && "$PACKAGE_MANAGER" == pacman ]] || return 0
+  printf '%s\n' 1password
+  printf '%s\n' 1password-cli
   printf '%s\n' opencode-desktop-bin
   printf '%s\n' teams-for-linux
 }
