@@ -54,3 +54,11 @@ Host usb-zero
 Match Host pi4-*
   User benjaminwestern
   IdentityFile ~/.ssh/id_rsa
+
+# 1Password SSH agent: use the platform's Unix socket when it exists.
+# Windows OpenSSH uses 1Password's fixed named pipe and needs no entry here.
+Match exec "test -S $HOME/.1password/agent.sock"
+  IdentityAgent ~/.1password/agent.sock
+
+Match exec "test -S \"$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock\""
+  IdentityAgent "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
