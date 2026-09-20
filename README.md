@@ -278,6 +278,8 @@ before you reach for manual edits.
 - Restart your shell or terminal after shell-default changes.
 - If mise activation drifts, rerun `./install.sh ensure`; the declarative shell
   activation stage repairs Bash, Zsh, and Fish without hand-editing startup files.
+- If `python` opens the Microsoft Store on Windows, disable the `python.exe` and
+  `python3.exe` App Execution Aliases, reopen the shell, and rerun `install.cmd ensure`.
 - Manual macOS recovery commands live in
   [Other/scripts/README.md](Other/scripts/README.md) for diagnosis after an
   interrupted installer; they are not prerequisites for the normal loader.

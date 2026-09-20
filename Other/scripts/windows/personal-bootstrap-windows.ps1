@@ -41,9 +41,16 @@ $ErrorActionPreference = 'Stop'
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $ScriptDir 'lib\common.ps1')
+. (Join-Path $ScriptDir 'lib\signing-helpers-windows.ps1')
 
 # Honour both the -DryRun switch and the DRY_RUN env var (set by install.cmd).
 if ($DryRun -or $env:DRY_RUN -eq '1') { $global:DRY_RUN = $true }
+
+$RequiresSigning = @(
+  (Get-ExecutionPolicy -Scope CurrentUser),
+  (Get-ExecutionPolicy -Scope Process),
+  (Get-ExecutionPolicy)
+) -contains 'AllSigned'
 
 $DotfilesDir = if ($env:DOTFILES_DIR) { $env:DOTFILES_DIR } else { Join-Path $HOME '.dotfiles' }
 $SourceDir = $DotfilesDir
@@ -457,7 +464,8 @@ function Apply-ProfileExtras {
   .NOTES
       Checks: Whether $PROFILE path is set.
       Gates: ENABLE_PROFILE_EXTRAS env var (default: true).
-      Side effects: Appends or updates a managed block in $PROFILE.
+      Side effects: Appends or updates a managed block in $PROFILE and signs it
+                    when AllSigned is active.
       Idempotency: Write-ManagedBlock replaces existing block content.
   #>
   $enabled = if ($env:ENABLE_PROFILE_EXTRAS) { $env:ENABLE_PROFILE_EXTRAS } else { 'true' }
@@ -532,10 +540,15 @@ $endMarker
     -EndMarker $endMarker `
     -BlockContent $blockContent
 
+  if ($RequiresSigning) {
+    Invoke-OrDry -Label 'Sign-Profile' -Command { Sign-Profile }
+  }
+
   if (Test-DryRun) {
     Write-StatusFix 'Profile extras' -Action 'would update managed block'
   } else {
-    Write-StatusFix 'Profile extras' -Action 'managed block updated'
+    $detail = if ($RequiresSigning) { 'managed block updated and signed' } else { 'managed block updated' }
+    Write-StatusFix 'Profile extras' -Action $detail
   }
 }
 

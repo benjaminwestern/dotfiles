@@ -505,6 +505,14 @@ then re-enter the same idempotent loader and choose the same plan.
 These are the questions that usually come up once you understand the normal
 flow but want to know why Windows looks more defensive than macOS.
 
+### How do I install psudoFont Liga Mono on Windows?
+
+Run the user-scoped installer, then restart terminal applications:
+
+```powershell
+& "$HOME\.dotfiles\Other\scripts\windows\install-psudofont.ps1"
+```
+
 ### Can I launch the Windows `.cmd` entrypoints from PowerShell or Windows PowerShell 5.1?
 
 Yes. PowerShell can invoke the `.cmd` wrappers directly by path, for example

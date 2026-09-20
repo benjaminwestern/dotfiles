@@ -2,6 +2,9 @@
 mise/config.local.toml
 mise/conf.d/*.local.toml
 
+# Obsidian workspace state is machine-local.
+.obsidian/
+
 # GitHub CLI authentication is machine-local and may contain OAuth tokens.
 gh/hosts.yml
 
@@ -14,7 +17,7 @@ noctalia/noctalia.css
 noctalia/noctalia.conf
 noctalia/noctalia.theme
 
-# macos ignores 
+# macos ignores
 **/.DS_Store
 .AppleDouble
 .LSOverride
