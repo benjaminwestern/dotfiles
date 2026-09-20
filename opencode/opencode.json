@@ -1,26 +1,43 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "disabled",
-  "tools": {
-    "bash": true,
-    "edit": true,
-    "write": true,
-    "read": true,
-    "grep": true,
-    "glob": true,
-    "list": true,
-    "patch": true,
-    "todowrite": true,
-    "todoread": true,
-    "webfetch": true,
-    "websearch": true
-  },
-  "permission": {
-    "edit": "allow",
-    "bash": "allow",
-    "webfetch": "allow",
-    "websearch": "allow"
-  },
+  "permissions": [
+    {
+      "action": "edit",
+      "resource": "*",
+      "effect": "allow"
+    },
+    {
+      "action": "shell",
+      "resource": "*",
+      "effect": "allow"
+    },
+    {
+      "action": "webfetch",
+      "resource": "*",
+      "effect": "allow"
+    },
+    {
+      "action": "websearch",
+      "resource": "*",
+      "effect": "allow"
+    },
+    {
+      "action": "engram_*",
+      "resource": "*",
+      "effect": "allow"
+    },
+    {
+      "action": "terraform_*",
+      "resource": "*",
+      "effect": "allow"
+    },
+    {
+      "action": "google-developer-knowledge_*",
+      "resource": "*",
+      "effect": "allow"
+    }
+  ],
   "providers": {
     "openai": {
       "models": {
@@ -39,35 +56,38 @@
     "-engram.lifecycle.v1"
   ],
   "mcp": {
-    "google-developer-knowledge": {
-      "type": "remote",
-      "url": "https://developerknowledge.googleapis.com/mcp",
-      "headers": {
-        "X-Goog-Api-Key": "{env:GOOGLE_MCP_DEV_SERVER_API_KEY}"
+    "servers": {
+      "google-developer-knowledge": {
+        "type": "remote",
+        "url": "https://developerknowledge.googleapis.com/mcp",
+        "headers": {
+          "X-Goog-Api-Key": "{env:GOOGLE_MCP_DEV_SERVER_API_KEY}"
+        },
+        "oauth": false,
+        "disabled": false
       },
-      "enabled": true
-    },
-    "terraform": {
-      "type": "local",
-      "command": [
-        "terraform-mcp-server"
-      ],
-      "enabled": true
-    },
-    "engram": {
-      "command": [
-        "mise",
-        "exec",
-        "github:Gentleman-Programming/engram@2.0.0-rc.10",
-        "--",
-        "engram",
-        "mcp",
-        "--tools=agent"
-      ],
-      "enabled": true,
-      "type": "local",
-      "environment": {
-        "ENGRAM_CLOUD_AUTOSYNC": "0"
+      "terraform": {
+        "type": "local",
+        "command": [
+          "terraform-mcp-server"
+        ],
+        "disabled": false
+      },
+      "engram": {
+        "type": "local",
+        "command": [
+          "mise",
+          "exec",
+          "github:Gentleman-Programming/engram@2.0.0-rc.10",
+          "--",
+          "engram",
+          "mcp",
+          "--tools=agent"
+        ],
+        "environment": {
+          "ENGRAM_CLOUD_AUTOSYNC": "0"
+        },
+        "disabled": false
       }
     }
   }
