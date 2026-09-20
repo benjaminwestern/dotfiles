@@ -58,3 +58,6 @@ settings_show_advanced = true
 
 [system.monitor]
 gpu_poll_seconds = 2
+
+[hooks]
+started = "noctalia msg session lock"

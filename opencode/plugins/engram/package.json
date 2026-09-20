@@ -1,0 +1,6 @@
+{
+  "name": "@local/opencode-engram",
+  "private": true,
+  "type": "module",
+  "exports": "./index.ts"
+}

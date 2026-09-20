@@ -1,0 +1,6 @@
+{
+  "name": "@local/opencode-mise",
+  "private": true,
+  "type": "module",
+  "exports": "./index.ts"
+}

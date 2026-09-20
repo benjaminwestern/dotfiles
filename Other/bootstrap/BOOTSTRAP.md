@@ -445,40 +445,30 @@ conflicts include:
 
 Direct recovery uses `mise bootstrap dotfiles apply --force --yes`.
 
-### 7. `~/.pi` was a stale directory symlink
-
-In the old layout `~/.pi` symlinked to `~/.dotfiles/Configs/pi/.pi`. The new layout manages individual files under `~/.pi/agent/`. Remove the old symlink and recreate the parent directory:
-
-```bash
-rm ~/.pi
-mkdir -p ~/.pi/agent
-mise bootstrap dotfiles apply --force --yes
-```
-
-### 8. TPM clone fails without `GIT_CONFIG_GLOBAL=/dev/null`
+### 7. TPM clone fails without `GIT_CONFIG_GLOBAL=/dev/null`
 
 The bootstrap task clones `tmux-plugins/tpm` over HTTPS. It always uses
 `GIT_CONFIG_GLOBAL=/dev/null` so an existing or bootstrap-managed GitHub rewrite
 cannot redirect that prerequisite clone.
 
-### 9. `.env` is machine-private
+### 8. `.env` is machine-private
 
 The bootstrap creates `~/.config/mise/.env` with mode `600` when it is absent.
 The file is gitignored and must be populated per machine with any private values
 needed by the declared tools.
 
-### 10. Some dotfiles are platform-only
+### 9. Some dotfiles are platform-only
 
 `~/.aerospace.toml` and `~/Brewfile` are macOS-only. Ghostty configuration is
 shared, while `~/.config/hypr` is Linux-only.
 
-### 11. `mise doctor` PATH warning
+### 10. `mise doctor` PATH warning
 
 Use `type -a <tool>` and `command -v <tool>` when `mise doctor` reports PATH
 ordering problems. Mise shims should precede distribution or user-local copies
 of the same managed tool.
 
-### 12. SSH key generation is manual
+### 11. SSH key generation is manual
 
 `mise run bootstrap` no longer creates an SSH key. Generate one yourself when you need git push/pull access:
 
@@ -489,14 +479,14 @@ cat ~/.ssh/id_ed25519.pub
 
 Then add the public key to GitHub at https://github.com/settings/keys.
 
-### 13. Scroll direction defaults to Apple-style natural scrolling
+### 12. Scroll direction defaults to Apple-style natural scrolling
 
 The canonical Lua settings are in `hypr/config/inputs.lua` and summarized in
 `hypr/README.md`. Natural scrolling is enabled for mice and touchpads. To
 restore traditional scrolling, set both `natural_scroll` values to `false` and
 run `hyprctl reload full-reset`.
 
-### 14. Manual font installs
+### 13. Manual font installs
 
 Some fonts are not packaged and must be installed from upstream releases. Example: `psudoFont Liga Mono` from <https://github.com/psudo-dev/psudofont-liga-mono>:
 

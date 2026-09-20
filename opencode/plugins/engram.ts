@@ -1,11 +1,11 @@
 /** OpenCode V1 compatibility shim; V2 loads the configured package directory. */
 
-import plugin from "./mise/index.ts"
+import plugin from "./engram/index.ts"
 
-export const MiseEnvironment = plugin.server
+export const Engram = plugin.server
 
 export default {
-  id: "mise.environment.v1",
+  id: "engram.lifecycle.v1",
   setup() {},
   server: plugin.server,
 }

@@ -7,11 +7,11 @@ fetch_remote_versions_timeout = "60s"
 http_timeout = "60s"
 minimum_release_age_excludes = [
     "npm:opencode-ai",
-    "npm:@opencode-ai/cli",
-    "npm:@earendil-works/pi-coding-agent",
+    "npm:@opencode/cli",
     "hk",
     "fnox",
     "pitchfork",
+    "codex",
 ]
 
 [settings.npm]
@@ -23,6 +23,8 @@ EDITOR = "nvim"
 OPENCODE_ENABLE_EXPERIMENTAL_MODELS = "true"
 OPENCODE_ENABLE_EXA = "1"
 PITCHFORK_WEB_PORT = "19876"
+ENGRAM_CLOUD_AUTOSYNC = "0"
+ENGRAM_NO_UPDATE_CHECK = "1"
 
 [dotfiles]
 # Source paths use the flat repo layout (each group at repo root)
@@ -40,16 +42,15 @@ PITCHFORK_WEB_PORT = "19876"
 "~/.config/mise" = "~/.dotfiles/mise"
 "~/.config/nvim" = "~/.dotfiles/nvim"
 "~/.config/opencode/opencode.json" = "~/.dotfiles/opencode/opencode.json"
+"~/.config/opencode/AGENTS.md" = "~/.dotfiles/engram/AGENTS.md"
 "~/.config/opencode/plugins" = "~/.dotfiles/opencode/plugins"
+"~/.codex/AGENTS.md" = "~/.dotfiles/engram/AGENTS.md"
+"~/.local/bin/engram-context.py" = "~/.dotfiles/engram/engram-context.py"
+"~/.local/bin/engram-backup.py" = "~/.dotfiles/engram/engram-backup.py"
 "~/.config/pitchfork/Caddyfile" = "~/.dotfiles/pitchfork/Caddyfile"
 "~/.config/pitchfork/config.toml" = "~/.dotfiles/pitchfork/config.toml"
 "~/.config/worktrunk/config.toml" = "~/.dotfiles/worktrunk/config.toml"
 "~/.hushlogin" = "~/.dotfiles/bash/.hushlogin"
-"~/.pi/agent/APPEND_SYSTEM.md" = "~/.dotfiles/pi/APPEND_SYSTEM.md"
-"~/.pi/agent/extensions" = "~/.dotfiles/pi/extensions"
-"~/.pi/agent/mcp.json" = "~/.dotfiles/pi/mcp.json"
-"~/.pi/agent/model-system" = "~/.dotfiles/pi/model-system"
-"~/.pi/agent/settings.json" = "~/.dotfiles/pi/settings.json"
 "~/.ssh/config" = "~/.dotfiles/ssh/config"
 "~/.tmux.conf" = "~/.dotfiles/tmux/.tmux.conf"
 "~/.zprofile/dotfiles" = { source = "~/.dotfiles/zsh/.zprofile", template = "tera" }
@@ -62,6 +63,8 @@ bash_profile = "shims"
 bashrc = "activate"
 
 [tools]
+# Shared local memory. Retest hierarchy before changing this pinned release.
+"github:Gentleman-Programming/engram" = { version = "2.0.0-rc.10" }
 # Go
 go = "latest"
 "go:golang.org/x/tools/gopls" = { version = "latest", depends = ["go"] }
@@ -92,8 +95,7 @@ go = "latest"
 node = "latest"
 bun = "latest"
 "npm:opencode-ai" = { version = "latest", minimum_release_age = "0s", allow_builds = ["opencode-ai"], depends = ["node"] }
-"npm:@opencode-ai/cli" = { version = "beta", minimum_release_age = "0s", allow_builds = ["@opencode-ai/cli"], depends = ["node"] }
-"npm:@earendil-works/pi-coding-agent" = { version = "latest", minimum_release_age = "0s", depends = ["node"] }
+"npm:@opencode/cli" = { version = "2", minimum_release_age = "0s", allow_builds = ["@opencode/cli"], allow_low_downloads = true, depends = ["node"] }
 "npm:@playwright/cli" = { version = "latest", depends = ["node"] }
 "npm:@dataform/cli" = { version = "latest", depends = ["node"] }
 "npm:wrangler" = { version = "latest", depends = ["node"] }
@@ -134,7 +136,7 @@ hk = "latest"
 fnox = "latest"
 communique = "latest"
 usage = "latest"
-codex = "latest"
+codex = { version = "latest", minimum_release_age = "0s" }
 
 [shell_alias]
 docker = "podman"

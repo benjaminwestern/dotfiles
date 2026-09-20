@@ -1,7 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "disabled",
-  "provider": {},
   "tools": {
     "bash": true,
     "edit": true,
@@ -22,6 +21,22 @@
     "webfetch": "allow",
     "websearch": "allow"
   },
+  "providers": {
+    "openai": {
+      "models": {
+        "daybreak-blue": {
+          "modelID": "gpt-daybreak-blue-latest",
+          "name": "Daybreak Blue"
+        }
+      }
+    }
+  },
+  "plugins": [
+    "./plugins/mise",
+    "./plugins/engram",
+    "-mise.environment.v1",
+    "-engram.lifecycle.v1"
+  ],
   "mcp": {
     "google-developer-knowledge": {
       "type": "remote",
@@ -33,8 +48,26 @@
     },
     "terraform": {
       "type": "local",
-      "command": ["terraform-mcp-server"],
+      "command": [
+        "terraform-mcp-server"
+      ],
       "enabled": true
+    },
+    "engram": {
+      "command": [
+        "mise",
+        "exec",
+        "github:Gentleman-Programming/engram@2.0.0-rc.10",
+        "--",
+        "engram",
+        "mcp",
+        "--tools=agent"
+      ],
+      "enabled": true,
+      "type": "local",
+      "environment": {
+        "ENGRAM_CLOUD_AUTOSYNC": "0"
+      }
     }
   }
 }

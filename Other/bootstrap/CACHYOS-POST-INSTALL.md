@@ -223,8 +223,7 @@ github:tree-sitter/tree-sitter
 node
 bun
 npm:opencode-ai
-npm:@opencode-ai/cli
-npm:@earendil-works/pi-coding-agent
+npm:@opencode/cli
 npm:@playwright/cli
 npm:@dataform/cli
 npm:wrangler
@@ -301,11 +300,6 @@ Home and work profiles manage these targets:
 ~/.config/pitchfork/config.toml
 ~/.config/worktrunk/config.toml
 ~/.hushlogin
-~/.pi/agent/APPEND_SYSTEM.md
-~/.pi/agent/extensions
-~/.pi/agent/mcp.json
-~/.pi/agent/model-system
-~/.pi/agent/settings.json
 ~/.ssh/config
 ~/.tmux.conf
 ~/.zprofile

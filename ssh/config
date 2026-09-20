@@ -29,6 +29,12 @@ Host mac-mini
   IdentitiesOnly yes
   RequestTTY yes
 
+Host cachy
+  HostName 192.168.20.3
+  User benjaminwestern
+  IdentityFile ~/.ssh/id_ed25519
+  IdentitiesOnly yes
+
 Host pi5
   HostName pi5.local
   User benjaminwestern

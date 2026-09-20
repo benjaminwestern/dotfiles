@@ -36,6 +36,7 @@ CLOUDSDK_PYTHON = "{{ env.HOME }}/.local/share/mise/shims/python3"
 "brew:make" = "latest"
 "brew:btop" = "latest"
 "brew:nmap" = "latest"
+"brew-cask:moonlight" = "latest" # Client for the CachyOS Sunshine host
 "brew:ykman" = "latest"              # YubiKey Manager CLI
 "brew:gnupg" = "latest"              # GPG for OpenPGP applet + ssh-agent
 "brew:pinentry-mac" = "latest"       # macOS GPG passphrase entry

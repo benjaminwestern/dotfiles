@@ -94,14 +94,6 @@ ssh/id_*
 
 ssh/known_hosts*
 
-# Pi auth/session/cache/OAuth secret state is machine-local, not dotfile-managed.
-pi/auth.json
-pi/oauth.json
-pi/client-credentials.json*
-pi/mcp-inventory-cache.json
-pi/sessions/
-pi/*.bak
-
 # Python bytecode and local tool caches
 __pycache__/
 *.py[cod]

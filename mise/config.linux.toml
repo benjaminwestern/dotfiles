@@ -116,6 +116,7 @@ kubectl = "latest"
 "pacman:podman" = "latest"      # brew:podman
 "pacman:podman-compose" = "latest" # brew:podman-compose
 "pacman:ghostty" = "latest"     # brew:ghostty (GUI terminal; config managed via [dotfiles])
+"pacman:sunshine" = "latest"    # Low-latency desktop streaming host for Moonlight
 "pacman:noctalia" = "latest"    # Wayland desktop shell used by the Hyprland profile
 "pacman:satty" = "latest"       # Screenshot annotation command used by Noctalia
 "pacman:fuse2" = "latest"       # FUSE 2 runtime required by AppImages such as OpenCode Desktop Beta
