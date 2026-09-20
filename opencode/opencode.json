@@ -26,7 +26,8 @@
       "models": {
         "daybreak-blue": {
           "modelID": "gpt-daybreak-blue-latest",
-          "name": "Daybreak Blue"
+          "name": "Daybreak Blue",
+          "disabled": false
         }
       }
     }
