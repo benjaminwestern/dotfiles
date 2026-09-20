@@ -54,10 +54,9 @@ engram stats --all
 engram cloud status
 python ~/.local/bin/engram-context.py <directory>
 codex mcp get engram --json
-opencode mcp list
+opencode2 mcp list
 opencode2 plugin list
 python ~/.dotfiles/engram/test-context.py
-python ~/.dotfiles/engram/test-mcp.py
 bun ~/.dotfiles/engram/test-opencode-plugin.ts
 ```
 
@@ -82,13 +81,12 @@ For an upgrade:
 1. Install and test the candidate version separately.
 2. Update the version in `mise/config.toml`, `opencode/opencode.json`, the
    OpenCode plugin and `configure-clients.py` together.
-3. Rerun native setup for each active client.
-4. Run `python3 ~/.dotfiles/engram/configure-clients.py`.
-5. Restart the local service and verify MCP and plugin status in an ordinary
+3. Run `python3 ~/.dotfiles/engram/configure-clients.py`.
+4. Restart the local service and verify MCP and plugin status in an ordinary
    disposable session.
 
-Native setup may overwrite local launcher settings or enable optional remote
-features. Inspect generated changes before accepting them.
+The helper owns the local Codex and OpenCode MCP launch settings. Native Engram
+setup is not required and may write legacy or non-canonical client settings.
 
 ## Private imports
 
