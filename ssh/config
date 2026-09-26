@@ -22,15 +22,19 @@ Host family-tunnel
   LocalForward localhost:3389 10.0.0.53:3389
   IdentityFile ~/.ssh/id_rsa
 
-Host mac-mini
-  HostName mac-mini.local
+Host macbook-air macbook-air.home.arpa
+  HostName macbook-air.home.arpa
+  User benjaminwestern
+
+Host mac-mini mac-mini.home.arpa
+  HostName mac-mini.home.arpa
   User benjaminwestern
   IdentityFile ~/.ssh/id_rsa
   IdentitiesOnly yes
   RequestTTY yes
 
-Host cachy
-  HostName 192.168.20.3
+Host cachy cachy.home.arpa
+  HostName cachy.home.arpa
   User benjaminwestern
   IdentityFile ~/.ssh/id_ed25519
   IdentitiesOnly yes
